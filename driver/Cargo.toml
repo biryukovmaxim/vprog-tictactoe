@@ -1,0 +1,11 @@
+[package]
+edition = "2024"
+name    = "vprog-tictactoe-driver"
+publish = false
+version = "0.1.0"
+
+[[bin]]
+name = "ttflow"
+path = "src/main.rs"
+
+[dependencies]

@@ -1,0 +1,11 @@
+[package]
+edition = "2024"
+name    = "vprog-tictactoe-guest"
+publish = false
+version = "0.1.0"
+
+# Lib-first skeleton: the crate doubles as the shared wire library for host crates and the web
+# encoder. The RISC0 bin target, toolchain pin and vprogs path pins land with the guest milestone.
+[lib]
+name = "vprog_tictactoe_guest"
+path = "src/lib.rs"

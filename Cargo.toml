@@ -1,0 +1,11 @@
+[workspace]
+exclude  = ["guest"]
+members  = ["driver", "node"]
+resolver = "3"
+
+# Crate layout:
+#   node/    - `ttd` daemon: vprogs runner driver + DA (frontend data) server
+#   driver/  - `ttflow` scripted scenario driver + flow tests
+#   guest/   - RISC0 guest crate, excluded above: own Cargo.lock and toolchain,
+#              path-pins vprogs crates. Also serves as the shared wire library
+#              for host crates and the web encoder.

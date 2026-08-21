@@ -1,0 +1,23 @@
+# Rust
+/target
+**/target
+Cargo.lock.bak
+
+# Internal docs (specs, plans, session notes)
+docs/internal/
+
+# Frontend
+web/node_modules/
+web/dist/
+
+# Tooling artifacts
+/.ctx
+/.build-graph-cache.json
+target/build-graph/
+
+# IDE
+.idea/
+
+# Environment
+.env
+.env.*
