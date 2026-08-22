@@ -11,7 +11,6 @@
 //! [65]      lock_tag            (current lock, may differ from initial)
 //! [66..]    lock_body           (length and shape implied by tag)
 //! ```
-//!
 
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned, little_endian::U64 as Le64,

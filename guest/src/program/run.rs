@@ -7,7 +7,6 @@ use vprogs_zk_abi::{
     withdrawal::{DepositSink, ExitSink},
 };
 use vprogs_zk_backend_risc0_runtime_processor::{
-    auth_context::{AuthContext, MultisigUnlocker},
     deposit_policy::DepositPolicy,
     signer_trait::{Signer, SignerResolveContext},
 };
@@ -15,6 +14,7 @@ use vprogs_zk_backend_risc0_runtime_processor::{
 use crate::{
     program::action::{self, ApplyContext, apply_action},
     runtime::{
+        auth_context::{AuthContext, MultisigUnlocker},
         ix::{DecodedIx, decode_ix},
         lock::LockEnum,
         signer::{

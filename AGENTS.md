@@ -60,10 +60,14 @@ Run the relevant recipes before every commit; `just check` (which includes `fmt-
   pin against the clone on branch `guest-batteries`; a git or crates.io pin replaces it later
   without code changes here).
 - The guest's battery is vprogs' runtime-processor **lib**: lock/signer traits *and variant impls*,
-  auth, auth context, tx-input parsing, lifecycle, the deposit-policy trait (+ example impl), and
-  the sig-message digest. The dedicated batteries crate extraction in vprogs is deliberately
-  delayed; until it lands, the lib is the battery.
-- App-owned, never vendored from vprogs: the `LockEnum`/`SignerEnum` dispatchers over battery
+  auth, the unlocker types, the generic `ApplyContext` (parameterized by the app's auth context;
+  the runtime sets the type parameter via the `ApplyContext` alias in `runtime.rs`), tx-input
+  parsing, lifecycle, the deposit-policy trait (+ example impl), and the sig-message digest. The
+  dedicated batteries crate extraction in vprogs is deliberately delayed; until it lands, the lib
+  is the battery.
+- App-owned, never vendored from vprogs: the `AuthContext` bag of unlocker buckets
+  (`runtime/auth_context.rs`; the app decides which auth kinds it admits), the
+  `LockEnum`/`SignerEnum` dispatchers over battery
   variant impls (`runtime/lock.rs`, `runtime/signer.rs`), `lock_codec` (multisig validation
   delegates to the battery decoder), kinds, domains, resource-id derivations, resource_ext, the
   concrete deposit-policy impl (`CovenantDepositPolicy` over the battery trait, in

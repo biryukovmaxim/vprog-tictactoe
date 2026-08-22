@@ -7,10 +7,12 @@
 use alloc::vec::Vec;
 
 use vprogs_core_codec::{Error, Reader, Result as CodecResult};
+use vprogs_zk_backend_risc0_runtime_processor::lock_trait::Lock;
 pub use vprogs_zk_backend_risc0_runtime_processor::lock_variants::{
     MultisigLockView, SchnorrLockView, UnlockedLockView,
 };
-use vprogs_zk_backend_risc0_runtime_processor::{auth_context::AuthContext, lock_trait::Lock};
+
+use super::auth_context::AuthContext;
 
 /// All known lock variants.
 #[derive(Copy, Clone)]

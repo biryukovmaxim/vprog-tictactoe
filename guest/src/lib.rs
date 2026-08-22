@@ -1,11 +1,12 @@
 //! The tic-tac-toe guest program for vprogs.
 //!
 //! Two-module layout over the vprogs batteries:
-//! - [`runtime`]: this app's runtime choices: lock/signer variants and dispatchers, kinds, domains,
-//!   resource-id derivations, the env-provided genesis key, and the ix wire format with this
-//!   program's actions. The app-agnostic machinery (lock/signer traits, auth, auth context,
-//!   tx-input parsing, lifecycle, sig-message digest) is imported from vprogs' runtime-processor
-//!   lib on branch `guest-batteries` and re-exported there.
+//! - [`runtime`]: this app's runtime choices: lock/signer variants and dispatchers, the auth
+//!   context bag of unlocker buckets it admits, kinds, domains, resource-id derivations, the
+//!   env-provided genesis key, and the ix wire format with this program's actions. The app-agnostic
+//!   machinery (lock/signer traits, auth, the generic apply context this runtime instantiates over
+//!   its auth context, tx-input parsing, lifecycle, sig-message digest) is imported from vprogs'
+//!   runtime-processor lib on branch `guest-batteries` and re-exported there.
 //! - [`program`]: this program's logic: accounts (config, deposit, transfer, withdraw) and the
 //!   staked tic-tac-toe game (landed next), plus the deposit policy.
 //!
