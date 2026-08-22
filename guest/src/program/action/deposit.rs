@@ -4,19 +4,15 @@
 use vprogs_zk_abi::{Error as AbiError, Result as AbiResult};
 use vprogs_zk_backend_risc0_api::delegate_entry_spk_hash;
 use vprogs_zk_backend_risc0_runtime_processor::{
-    lifecycle::Lifecycle, tx_inputs::parse_output_at_index_v1,
+    deposit_policy::{DepositBody, DepositPolicy, DepositSubject},
+    lifecycle::Lifecycle,
+    tx_inputs::parse_output_at_index_v1,
 };
 
 use super::{ApplyContext, validate_user_create, view_config_at};
-use crate::{
-    program::{
-        deposit_policy::{CreditTarget, DepositBody, DepositPolicy, DepositSubject},
-        resource_ext::ResourceExt,
-    },
-    runtime::lock::LockEnum,
-};
+use crate::{program::resource_ext::ResourceExt, runtime::lock::LockEnum};
 
-pub(super) fn apply_deposit<'a, P: DepositPolicy>(
+pub(super) fn apply_deposit<'a, P: DepositPolicy<Lock<'a> = LockEnum<'a>>>(
     user_idx: u8,
     config_idx: u8,
     output_idx: u32,
@@ -44,8 +40,7 @@ pub(super) fn apply_deposit<'a, P: DepositPolicy>(
     }
 
     // Resolve credit target via policy (which user, create-or-credit).
-    let target_decision: CreditTarget =
-        policy.credit_target(&body).map_err(|m| AbiError::Decode(m.into()))?;
+    let target_decision = policy.credit_target(&body).map_err(|m| AbiError::Decode(m.into()))?;
     let idx = target_decision.user_idx as usize;
     // The policy may return an out-of-range idx.
     if idx >= cx.resources.len() {
@@ -63,20 +58,22 @@ pub(super) fn apply_deposit<'a, P: DepositPolicy>(
     }
     let credit_kind = match cx.lifecycle(idx) {
         // Brand-new slot: create it if the policy allows, binding its address to `initial_lock`.
-        Lifecycle::New => {
-            if !target_decision.may_create {
+        Lifecycle::New => match target_decision.create_with {
+            Some(_) => {
+                let ilh = validate_user_create(
+                    cx.resources[idx].id(),
+                    initial_lock,
+                    deposit_value,
+                    policy.min_create_balance(),
+                )?;
+                CreditKind::Create(ilh)
+            }
+            None => {
                 return Err(AbiError::Decode(
                     "deposit: user does not exist (policy forbids create)".into(),
                 ));
             }
-            let ilh = validate_user_create(
-                cx.resources[idx].id(),
-                initial_lock,
-                deposit_value,
-                policy.min_create_balance(),
-            )?;
-            CreditKind::Create(ilh)
-        }
+        },
         // Live user (committed, or created by an earlier action in this same tx): confirm kind,
         // read balance, bind initial_lock_hash, then accumulate.
         Lifecycle::Live => {

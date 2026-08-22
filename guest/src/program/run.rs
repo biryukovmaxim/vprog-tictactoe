@@ -8,16 +8,15 @@ use vprogs_zk_abi::{
 };
 use vprogs_zk_backend_risc0_runtime_processor::{
     auth_context::{AuthContext, MultisigUnlocker},
+    deposit_policy::DepositPolicy,
     signer_trait::{Signer, SignerResolveContext},
 };
 
 use crate::{
-    program::{
-        action::{self, ApplyContext, apply_action},
-        deposit_policy::DepositPolicy,
-    },
+    program::action::{self, ApplyContext, apply_action},
     runtime::{
         ix::{DecodedIx, decode_ix},
+        lock::LockEnum,
         signer::{
             GenesisSchnorrSigPtrSigner, MultisigPrevTxV1WitnessSigner, MultisigSchnorrSigPtrSigner,
             PrevTxV1WitnessSigner, SchnorrSigPtrSigner, SignerEnum,
@@ -35,7 +34,7 @@ use crate::{
 /// `main.rs` without touching this file.
 ///
 /// [`TransactionHandler`]: vprogs_zk_abi::transaction_processor::TransactionHandler
-pub fn run<'a, P: DepositPolicy>(
+pub fn run<'a, P: DepositPolicy<Lock<'a> = LockEnum<'a>>>(
     tx: &Transaction<'a>,
     resources: &mut [Resource<'a>],
     exits: &mut ExitSink,
@@ -114,11 +113,12 @@ pub(crate) fn append_multisig_contrib(
     resource_idx: u8,
     contrib: MultisigUnlocker,
 ) {
-    if let Some((last_idx, last)) = bucket.last_mut() {
-        if *last_idx == resource_idx {
+    match bucket.last_mut() {
+        Some((last_idx, last)) if *last_idx == resource_idx => {
             last.pubkeys.extend(contrib.pubkeys);
             return;
         }
+        _ => {}
     }
     bucket.push((resource_idx, contrib));
 }

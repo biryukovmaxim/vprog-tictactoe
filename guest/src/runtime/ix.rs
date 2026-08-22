@@ -64,10 +64,8 @@ where
     let mut prev_resource_idx: Option<u8> = None;
     let signers = bytes.many("ix.signers", |buf: &mut &'a [u8]| {
         let entry = decode_signer(buf, n_resources)?;
-        if let Some(p) = prev_resource_idx {
-            if entry.0 < p {
-                return Err(Error::Decode("ix.signer: resource_idx not ascending"));
-            }
+        if prev_resource_idx.is_some_and(|p| entry.0 < p) {
+            return Err(Error::Decode("ix.signer: resource_idx not ascending"));
         }
         prev_resource_idx = Some(entry.0);
         Ok(entry)
@@ -187,7 +185,7 @@ mod tests {
 
     #[test]
     fn decode_signers_rejects_unknown_kind() {
-        let mut ix = signer_section(&[(0, 0xEE, vec![0u8; 5])]);
+        let mut ix = signer_section(&[(0, 0xEE, alloc::vec![0u8; 5])]);
         ix.extend_from_slice(&empty_actions_section());
         assert!(decode_ix(&ix, 1, reject_action).is_err());
     }

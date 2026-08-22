@@ -15,13 +15,14 @@ use vprogs_zk_abi::{
     transaction_processor::{Resource, Transaction},
     withdrawal::{DepositSink, ExitSink, StandardSpk},
 };
-use vprogs_zk_backend_risc0_runtime_processor::{auth_context::AuthContext, lifecycle::Lifecycle};
+use vprogs_zk_backend_risc0_runtime_processor::{
+    auth_context::AuthContext, deposit_policy::DepositPolicy, lifecycle::Lifecycle,
+};
 use withdraw::apply_withdraw;
 
 use crate::{
     program::{
         config::ConfigView,
-        deposit_policy::DepositPolicy,
         resource_ext::ResourceExt,
         resource_id::{config_resource_id, derive_user_resource},
     },
@@ -188,15 +189,6 @@ pub fn decode_action<'a>(buf: &mut &'a [u8], n_resources: usize) -> CodecResult<
     Ok(ActionView { action_tag, body })
 }
 
-/// Everything an apply fn may need, bundled once so dispatch and apply signatures stay stable as
-/// capabilities grow.
-///
-/// Plain typed fields, passed by `&mut`; no dynamic dispatch, no extractor magic.
-///
-/// `'a` is the transaction/resource data lifetime; every buffer borrow lives here. `'cx` is the
-/// shorter borrow lifetime for the mutable references (`resources`, `exits`, `deposit`) and for
-/// `auth_ctx`, which is computed inside `run` and does not outlive it. The two lifetimes are
-/// independent: `'cx: 'a` is not required.
 pub struct ApplyContext<'a, 'cx> {
     /// Decoded transaction; its `rest_preimage` is the L1 source of truth for deposit output
     /// values.
@@ -255,7 +247,7 @@ impl<'a, 'cx> ApplyContext<'a, 'cx> {
 
 /// Applies a single decoded action against the context. Generic over the deposit policy `P`; all
 /// non-deposit arms ignore it.
-pub fn apply_action<'a, P: DepositPolicy>(
+pub fn apply_action<'a, P: DepositPolicy<Lock<'a> = LockEnum<'a>>>(
     action: &ActionView<'a>,
     cx: &mut ApplyContext<'a, '_>,
     policy: &P,

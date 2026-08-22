@@ -1,10 +1,8 @@
-//! This program's deposit policy: the rules an L1-backed deposit obeys.
-//!
-//! `DepositPolicy` is the seam `apply_deposit` stays generic over: it fixes what L1
-//! `script_public_key` a funding output must pay and which user resource a deposit credits,
-//! while the apply fn supplies the mechanism (output parsing, dedup, create-vs-credit). The
-//! concrete impl is wired in `main.rs`. The types speak this program's [`LockEnum`]; the
-//! battery's own deposit-policy module is not used.
+//! This program's deposit policy: an impl of the battery's `DepositPolicy`
+//! trait (the trait and its `DepositBody` / `DepositSubject` / `CreditTarget`
+//! types live in vprogs' runtime-processor lib). The trait's associated
+//! `Lock<'a>` is pinned to this program's `LockEnum`, so the policy speaks the
+//! app's lock natively and no conversion happens at the apply boundary.
 //!
 //! Deposit-address binding: a funding output must pay
 //! `P2SH(delegate_entry_script(config.covenant_id))`, the covenant-spendable delegate-entry
@@ -14,6 +12,9 @@
 
 use vprogs_zk_abi::withdrawal::{ScriptBytes, StandardSpk};
 use vprogs_zk_backend_risc0_api::delegate_entry_spk_hash;
+use vprogs_zk_backend_risc0_runtime_processor::deposit_policy::{
+    CreateSpec, CreditTarget, DepositBody, DepositPolicy, DepositSubject,
+};
 
 use crate::runtime::lock::LockEnum;
 
@@ -21,67 +22,6 @@ use crate::runtime::lock::LockEnum;
 /// created: a `Deposit` whose funding output, or a `Transfer` whose moved amount, falls below
 /// this is rejected rather than opening an underfunded account. There is no zero-balance birth.
 pub const MIN_CREATE_BALANCE: u64 = 1_000;
-
-/// Decoded deposit action fields, re-exposed so `DepositPolicy` methods can key on them
-/// without taking a full `ActionBody` reference.
-pub struct DepositBody<'a> {
-    /// Resource-list index of the user to credit or create.
-    pub user_idx: u8,
-    /// Index into the current tx's output list of the funding output.
-    pub output_idx: u32,
-    /// Initial lock carried by the deposit action. Its `id_hash()` derives the user's resource
-    /// address.
-    pub initial_lock: LockEnum<'a>,
-}
-
-/// Borrowed inputs `deposit_spk` may key off. Kept as a struct (not raw args) so adding context
-/// later doesn't churn the trait signature.
-pub struct DepositSubject<'a> {
-    /// Decoded deposit action fields.
-    pub body: &'a DepositBody<'a>,
-    /// Config-committed covenant a deposit must pay (read from the config
-    /// resource). The deposit address is `P2SH(delegate_entry_script(covenant_id))`.
-    pub covenant_id: &'a [u8; 32],
-}
-
-/// Resolution of `DepositPolicy::credit_target`.
-pub struct CreditTarget {
-    /// Resource-list index of the user to credit.
-    pub user_idx: u8,
-    /// If `true`, the deposit may CREATE the user when the slot is `New`; if `false`, the user
-    /// must already exist. A created user always gets the action's `initial_lock` (its
-    /// `id_hash()` derives the resource address), so the policy decides only *whether* creation
-    /// may happen, never with which lock.
-    pub may_create: bool,
-}
-
-/// This program's rules a deposit obeys.
-///
-/// A `DepositPolicy` answers two questions for one deposit action: what L1 `script_public_key`
-/// must the funding output pay (via `deposit_spk`), and which user resource does this deposit
-/// credit and may it create that user (via `credit_target`).
-///
-/// No `dyn`: the runtime is monomorphized over the concrete impl chosen in `main.rs`. Methods
-/// take `&self` so an impl may carry config (e.g. a treasury key) without globals.
-pub trait DepositPolicy {
-    /// The on-chain `script_public_key` bytes a deposit's funding output must pay.
-    ///
-    /// Returned as owned [`ScriptBytes`] (built through a typed `StandardSpk`, so it is one of
-    /// the recognised standard scripts and the byte length is fixed by kind). Owned rather than
-    /// borrowed because a policy may *derive* the script from `who`.
-    fn deposit_spk(&self, who: &DepositSubject<'_>) -> ScriptBytes;
-
-    /// Returns the resource index to credit and whether the action may CREATE that user (vs
-    /// credit-existing-only), or `Err` to reject the deposit (surfaced as `AbiError::Decode`).
-    ///
-    /// The user-resource identity seed is fixed to `initial_lock.id_hash()`. A policy may choose
-    /// which user to credit or whether to allow creation, but deriving a non-lock-based identity
-    /// requires editing `apply_deposit`, not just this trait.
-    fn credit_target(&self, body: &DepositBody<'_>) -> Result<CreditTarget, &'static str>;
-
-    /// Minimum funding a new user must be born with; see [`MIN_CREATE_BALANCE`].
-    fn min_create_balance(&self) -> u64;
-}
 
 /// This program's deposit policy: a single covenant-bound deposit address shared by all
 /// depositors; deposits credit the user named positionally by the action, creating them from
@@ -92,17 +32,25 @@ pub trait DepositPolicy {
 pub struct CovenantDepositPolicy;
 
 impl DepositPolicy for CovenantDepositPolicy {
-    fn deposit_spk(&self, who: &DepositSubject<'_>) -> ScriptBytes {
+    type Lock<'a> = LockEnum<'a>;
+
+    fn deposit_spk<'a>(&self, who: &DepositSubject<'_, Self::Lock<'a>>) -> ScriptBytes {
         // The deposit address is the P2SH of the covenant's delegate-entry script, the
         // covenant-spendable script the permission sweep already recognises. A per-user impl
         // would instead derive from `who.body`.
         StandardSpk::ScriptHash(&delegate_entry_spk_hash(who.covenant_id)).to_script_bytes()
     }
 
-    fn credit_target(&self, body: &DepositBody<'_>) -> Result<CreditTarget, &'static str> {
+    fn credit_target<'a>(
+        &self,
+        body: &DepositBody<Self::Lock<'a>>,
+    ) -> Result<CreditTarget<Self::Lock<'a>>, &'static str> {
         // Credit the action's `user_idx`; create-or-credit using the carried initial lock
         // (identity == initial_lock_hash, so a new user MUST supply its lock).
-        Ok(CreditTarget { user_idx: body.user_idx, may_create: true })
+        Ok(CreditTarget {
+            user_idx: body.user_idx,
+            create_with: Some(CreateSpec { initial_lock: body.initial_lock }),
+        })
     }
 
     fn min_create_balance(&self) -> u64 {
@@ -112,6 +60,8 @@ impl DepositPolicy for CovenantDepositPolicy {
 
 #[cfg(test)]
 mod tests {
+    use vprogs_zk_backend_risc0_runtime_processor::deposit_policy::{DepositBody, DepositSubject};
+
     use super::*;
     use crate::runtime::lock::UnlockedLockView;
 
