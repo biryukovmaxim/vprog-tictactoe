@@ -5,8 +5,10 @@ play a multi-round match, and the verifiable program settles the pot to the winn
 back on a draw). Reuses the vprogs framework and Kaspa stack for everything except the program's
 own actions, accounts and game rules.
 
-> **Status: scaffold.** Tooling, repo rules and empty crate skeletons (`node/`, `driver/`,
-> `guest/`, all edition 2024); no program logic has landed yet.
+> **Status: guest crate landed.** The guest's account-model baseline builds and tests clean
+> (`just check`, `just test`): resource wire formats, lock/signer set, ix decoding, and the
+> config/deposit/transfer/withdraw actions, consuming vprogs' runtime-processor lib as the
+> battery. Game logic, node, driver and web have not landed yet.
 > The checklist below is the source of truth for what works.
 
 ## Architecture (planned)
@@ -20,14 +22,19 @@ own actions, accounts and game rules.
 │               frontend renders (games, accounts, trust ladder)   │
 ├──────────────────────────────────────────────────────────────────┤
 │ guest/        RISC0 guest program:                               │
-│               runtime/  framework (ported from vprogs            │
-│                         runtime-processor: resource IDs, locks,  │
-│                         lifecycle, ix wire format)               │
-│               program/  tic-tac-toe: accounts + game resources,  │
-│                         entry/exit/transfer + game actions       │
+│               runtime/  this app's runtime choices: lock/signer  │
+│                         dispatchers over battery variant impls,  │
+│                         env-provided genesis key, ix framing     │
+│               program/  tic-tac-toe: kinds, domains, resource-   │
+│                         id derivations (config/user/game),       │
+│                         account + game resources (user carries   │
+│                         game counters), actions (wire + apply)   │
 ├──────────────────────────────────────────────────────────────────┤
 │ ../vprogs    everything else, used as-is via path dependency:    │
-│              zk-abi, batch/aggregator guests, runner, L1 bridge  │
+│              runtime-processor lib as the reusable battery       │
+│              (lock/signer traits + variant impls, auth,          │
+│              lifecycle, tx parsing, deposit policy; branch       │
+│              guest-batteries), zk-abi, runner, L1 bridge         │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -44,10 +51,14 @@ own actions, accounts and game rules.
 
 ## Status
 
-- [ ] Guest crate: `runtime/` framework port
-- [ ] Guest crate: `program/` accounts (config Init, deposit, transfer, withdraw)
-- [ ] Guest crate: `program/` game (create, join, turn; settlement and split)
+- [x] Guest crate: structure + batteries wiring (runtime-processor lib via path dep)
+- [x] Guest crate: `program/` accounts (config Init, deposit, transfer, withdraw)
+- [ ] Guest crate: `program/` game (create, join, turn; settlement and split; per-creator
+      sequential game ids from the user's `games_started` counter)
 - [ ] Guest tests: rules engine, wire round-trips, dev-mode flow tests
+- [ ] Guest ELF build (Docker, riscv32im target; flows the genesis env)
+- [ ] vprogs feature: app-level custom journal data via closures (prerequisite for indexes)
+- [ ] Node DA: indexer logic to find open games (rides on the vprogs feature above)
 - [ ] Node `ttd`: runner driver + DA server
 - [ ] Driver `ttflow`: scripted scenarios
 - [ ] Web frontend: wallet, board, trust ladder (optimistic → L2 → settled → confirmed)

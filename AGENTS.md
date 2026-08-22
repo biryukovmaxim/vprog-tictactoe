@@ -54,12 +54,21 @@ Run the relevant recipes before every commit; `just fmt-check` and `just check` 
 
 ## vprogs dependency
 
-- vprogs is consumed as an external dependency through Cargo manifests only (currently a local path pin; a git or
-  crates.io pin replaces it later without code changes here).
-- Never vendor or commit vprogs code into this repo. The single sanctioned exception: the guest crate's
-  `runtime/` modules, ported file-by-file from vprogs' runtime-processor with provenance noted, pending the vprogs
-  split PR that will replace them with reusable crates.
-- Never stage vprogs-side artifacts (target dirs, ELFs, lockfiles) or reference them outside Cargo manifests.
+- vprogs is consumed as an external dependency through Cargo manifests only (currently a local path
+  pin against the clone on branch `guest-batteries`; a git or crates.io pin replaces it later
+  without code changes here).
+- The guest's battery is vprogs' runtime-processor **lib**: lock/signer traits *and variant impls*,
+  auth, auth context, tx-input parsing, lifecycle, the deposit-policy trait (+ example impl), and
+  the sig-message digest. The dedicated batteries crate extraction in vprogs is deliberately
+  delayed; until it lands, the lib is the battery.
+- App-owned, never vendored from vprogs: the `LockEnum`/`SignerEnum` dispatchers over battery
+  variant impls (`runtime/lock.rs`, `runtime/signer.rs`), `lock_codec` (multisig validation
+  delegates to the battery decoder), kinds, domains, resource-id derivations, resource_ext, the ix
+  wire framing (generic over the program's `FnMut` action decoder), resources/actions, and the
+  genesis key. The genesis pubkey is build-time env (`VPROG_TICTACTOE_GENESIS_PUBKEY`, 64 hex
+  chars; unset falls back to the BIP-340 test vector 0 for dev/CI).
+- Never stage vprogs-side artifacts (target dirs, ELFs, lockfiles) or reference them outside Cargo
+  manifests.
 
 ## Optional: prior-session context via ctx
 
