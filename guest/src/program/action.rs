@@ -71,6 +71,8 @@ pub enum ActionBody<'a> {
     Update {
         config_idx: u8,
         new_min_withdrawal_amount: u64,
+        /// New turn TTL, in milliseconds of chain time.
+        new_turn_ttl: u64,
         /// Carried for wire-shape symmetry with `Init`. `apply_update` rejects
         /// any change here: covenant_id is immutable after `Init`.
         new_covenant_id: [u8; 32],
@@ -79,6 +81,8 @@ pub enum ActionBody<'a> {
     Init {
         config_idx: u8,
         new_min_withdrawal_amount: u64,
+        /// Turn TTL the config opens with, in milliseconds of chain time.
+        new_turn_ttl: u64,
         /// The covenant a deposit's funding output must pay (as P2SH of its
         /// delegate-entry script). Written into config state once at `Init`;
         /// immutable thereafter.
@@ -136,16 +140,30 @@ pub fn decode_action<'a>(buf: &mut &'a [u8], n_resources: usize) -> CodecResult<
             let config_idx = read_resource_idx(buf, "action.update.config_idx", n_resources)?;
             let new_min_withdrawal_amount =
                 buf.le_u64("action.update.new_min_withdrawal_amount")?;
+            let new_turn_ttl = buf.le_u64("action.update.new_turn_ttl")?;
             let new_covenant_id = *buf.array::<32>("action.update.new_covenant_id")?;
             let new_lock = decode_lock(buf)?;
-            ActionBody::Update { config_idx, new_min_withdrawal_amount, new_covenant_id, new_lock }
+            ActionBody::Update {
+                config_idx,
+                new_min_withdrawal_amount,
+                new_turn_ttl,
+                new_covenant_id,
+                new_lock,
+            }
         }
         ACTION_TAG_INIT => {
             let config_idx = read_resource_idx(buf, "action.init.config_idx", n_resources)?;
             let new_min_withdrawal_amount = buf.le_u64("action.init.new_min_withdrawal_amount")?;
+            let new_turn_ttl = buf.le_u64("action.init.new_turn_ttl")?;
             let new_covenant_id = *buf.array::<32>("action.init.new_covenant_id")?;
             let new_lock = decode_lock(buf)?;
-            ActionBody::Init { config_idx, new_min_withdrawal_amount, new_covenant_id, new_lock }
+            ActionBody::Init {
+                config_idx,
+                new_min_withdrawal_amount,
+                new_turn_ttl,
+                new_covenant_id,
+                new_lock,
+            }
         }
         ACTION_TAG_TRANSFER => {
             let source_idx = read_resource_idx(buf, "action.transfer.source_idx", n_resources)?;
@@ -198,15 +216,31 @@ pub fn apply_action<'a, P: DepositPolicy<Lock<'a> = LockEnum<'a>>>(
         ActionBody::Update {
             config_idx: updater_idx,
             new_min_withdrawal_amount,
+            new_turn_ttl,
             new_covenant_id,
             new_lock,
-        } => apply_update(*updater_idx, *new_min_withdrawal_amount, new_covenant_id, new_lock, cx),
+        } => apply_update(
+            *updater_idx,
+            *new_min_withdrawal_amount,
+            *new_turn_ttl,
+            new_covenant_id,
+            new_lock,
+            cx,
+        ),
         ActionBody::Init {
             config_idx: updater_idx,
             new_min_withdrawal_amount,
+            new_turn_ttl,
             new_covenant_id,
             new_lock,
-        } => apply_init(*updater_idx, *new_min_withdrawal_amount, new_covenant_id, new_lock, cx),
+        } => apply_init(
+            *updater_idx,
+            *new_min_withdrawal_amount,
+            *new_turn_ttl,
+            new_covenant_id,
+            new_lock,
+            cx,
+        ),
         ActionBody::Transfer { source_idx, dest_idx, amount, dest_init } => {
             apply_transfer(*source_idx, *dest_idx, *amount, dest_init, cx, policy)
         }
@@ -279,12 +313,13 @@ mod tests {
     // `runtime::ix`; the tests here exercise the program's action decoder.
 
     /// Builds an `Update` action body:
-    /// `updater_idx u8 || new_min u64 || covenant_id[32] || schnorr_lock(pk)`.
-    fn update_action(updater_idx: u8, new_min: u64, pk: [u8; 32]) -> Vec<u8> {
+    /// `updater_idx u8 || new_min u64 || new_turn_ttl u64 || covenant_id[32] || schnorr_lock(pk)`.
+    fn update_action(updater_idx: u8, new_min: u64, new_turn_ttl: u64, pk: [u8; 32]) -> Vec<u8> {
         let mut body = Vec::new();
         body.push(ACTION_TAG_UPDATE);
         body.push(updater_idx);
         body.extend_from_slice(&new_min.to_le_bytes());
+        body.extend_from_slice(&new_turn_ttl.to_le_bytes());
         body.extend_from_slice(&[0xD7u8; 32]); // covenant_id
         body.push(SchnorrLockView::TAG);
         body.extend_from_slice(&pk);
@@ -296,7 +331,7 @@ mod tests {
         // ix = empty signers || one Update action with Schnorr lock || empty tail
         let mut ix = 0u32.to_le_bytes().to_vec(); // n_signers = 0
         ix.extend_from_slice(&1u32.to_le_bytes()); // n_actions = 1
-        ix.extend_from_slice(&update_action(0, 12345, [0xAAu8; 32]));
+        ix.extend_from_slice(&update_action(0, 12345, 60_000, [0xAAu8; 32]));
 
         let decoded = decode_ix(&ix, 1, decode_action).unwrap();
         assert!(decoded.signers.is_empty());
@@ -305,11 +340,13 @@ mod tests {
             ActionBody::Update {
                 config_idx: updater_idx,
                 new_min_withdrawal_amount,
+                new_turn_ttl,
                 new_covenant_id,
                 new_lock,
             } => {
                 assert_eq!(*updater_idx, 0);
                 assert_eq!(*new_min_withdrawal_amount, 12345);
+                assert_eq!(*new_turn_ttl, 60_000);
                 assert_eq!(new_covenant_id, &[0xD7u8; 32]);
                 assert_eq!(new_lock.tag(), SchnorrLockView::TAG);
             }
@@ -322,7 +359,7 @@ mod tests {
         // updater_idx = 2, but only 2 resources declared (valid range: 0..=1).
         let mut ix = 0u32.to_le_bytes().to_vec();
         ix.extend_from_slice(&1u32.to_le_bytes());
-        ix.extend_from_slice(&update_action(2, 12345, [0xAAu8; 32]));
+        ix.extend_from_slice(&update_action(2, 12345, 60_000, [0xAAu8; 32]));
 
         assert!(decode_ix(&ix, 2, decode_action).is_err());
     }
@@ -332,7 +369,7 @@ mod tests {
         // updater_idx = 1 with n_resources = 2 is valid.
         let mut ix = 0u32.to_le_bytes().to_vec();
         ix.extend_from_slice(&1u32.to_le_bytes());
-        ix.extend_from_slice(&update_action(1, 12345, [0xAAu8; 32]));
+        ix.extend_from_slice(&update_action(1, 12345, 60_000, [0xAAu8; 32]));
 
         let decoded = decode_ix(&ix, 2, decode_action).unwrap();
         match &decoded.actions[0].body {
@@ -352,7 +389,7 @@ mod tests {
         for idx in 0..3u8 {
             let mut ix = 0u32.to_le_bytes().to_vec();
             ix.extend_from_slice(&1u32.to_le_bytes());
-            ix.extend_from_slice(&update_action(idx, 999, [0xBBu8; 32]));
+            ix.extend_from_slice(&update_action(idx, 999, 60_000, [0xBBu8; 32]));
 
             let decoded = decode_ix(&ix, 3, decode_action).unwrap();
             match &decoded.actions[0].body {
@@ -372,8 +409,8 @@ mod tests {
     fn decode_two_actions_target_different_resources() {
         let mut ix = 0u32.to_le_bytes().to_vec();
         ix.extend_from_slice(&2u32.to_le_bytes()); // n_actions = 2
-        ix.extend_from_slice(&update_action(0, 100, [0x11u8; 32]));
-        ix.extend_from_slice(&update_action(2, 200, [0x22u8; 32]));
+        ix.extend_from_slice(&update_action(0, 100, 60_000, [0x11u8; 32]));
+        ix.extend_from_slice(&update_action(2, 200, 60_000, [0x22u8; 32]));
 
         let decoded = decode_ix(&ix, 3, decode_action).unwrap();
         assert_eq!(decoded.actions.len(), 2);
@@ -395,8 +432,8 @@ mod tests {
     fn decode_rejects_when_one_action_idx_out_of_range() {
         let mut ix = 0u32.to_le_bytes().to_vec();
         ix.extend_from_slice(&2u32.to_le_bytes());
-        ix.extend_from_slice(&update_action(1, 100, [0x33u8; 32])); // valid
-        ix.extend_from_slice(&update_action(5, 200, [0x44u8; 32])); // out of range
+        ix.extend_from_slice(&update_action(1, 100, 60_000, [0x33u8; 32])); // valid
+        ix.extend_from_slice(&update_action(5, 200, 60_000, [0x44u8; 32])); // out of range
 
         assert!(decode_ix(&ix, 3, decode_action).is_err());
     }
@@ -409,9 +446,9 @@ mod tests {
     fn decode_accepts_descending_action_idxs() {
         let mut ix = 0u32.to_le_bytes().to_vec();
         ix.extend_from_slice(&3u32.to_le_bytes());
-        ix.extend_from_slice(&update_action(2, 1, [0x55u8; 32]));
-        ix.extend_from_slice(&update_action(1, 2, [0x66u8; 32]));
-        ix.extend_from_slice(&update_action(0, 3, [0x77u8; 32]));
+        ix.extend_from_slice(&update_action(2, 1, 60_000, [0x55u8; 32]));
+        ix.extend_from_slice(&update_action(1, 2, 60_000, [0x66u8; 32]));
+        ix.extend_from_slice(&update_action(0, 3, 60_000, [0x77u8; 32]));
 
         let decoded = decode_ix(&ix, 3, decode_action).unwrap();
         let idxs: Vec<u8> = decoded

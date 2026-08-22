@@ -25,6 +25,7 @@ pub trait ResourceExt<'a> {
     fn init_config(
         &mut self,
         min_withdrawal_amount: u64,
+        turn_ttl: u64,
         covenant_id: &[u8; 32],
         lock: &LockEnum<'_>,
     ) -> Result<(), &'static str>;
@@ -84,6 +85,7 @@ impl<'a> ResourceExt<'a> for Resource<'a> {
     fn init_config(
         &mut self,
         min_withdrawal_amount: u64,
+        turn_ttl: u64,
         covenant_id: &[u8; 32],
         lock: &LockEnum<'_>,
     ) -> Result<(), &'static str> {
@@ -92,7 +94,7 @@ impl<'a> ResourceExt<'a> for Resource<'a> {
         }
         let total = config_total_len(lock);
         self.resize(total);
-        write_config(self.data_mut(), min_withdrawal_amount, covenant_id, lock)
+        write_config(self.data_mut(), min_withdrawal_amount, turn_ttl, covenant_id, lock)
     }
 
     fn init_user(
@@ -116,13 +118,13 @@ impl<'a> ResourceExt<'a> for Resource<'a> {
         }
         // Snapshot fixed-header fields before resize (which would invalidate
         // the existing data slice).
-        let (min_withdrawal_amount, covenant_id) = {
+        let (min_withdrawal_amount, turn_ttl, covenant_id) = {
             let view = ConfigView::from_bytes(self.data())?;
-            (view.min_withdrawal_amount(), *view.covenant_id())
+            (view.min_withdrawal_amount(), view.turn_ttl(), *view.covenant_id())
         };
         let new_total = CONFIG_HEADER_LEN + new_lock.wire_body_len();
         self.resize(new_total);
-        write_config(self.data_mut(), min_withdrawal_amount, &covenant_id, new_lock)
+        write_config(self.data_mut(), min_withdrawal_amount, turn_ttl, &covenant_id, new_lock)
     }
 
     fn set_user_lock(&mut self, new_lock: &LockEnum<'_>) -> Result<(), &'static str> {

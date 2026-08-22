@@ -16,6 +16,7 @@ use crate::{
 pub(super) fn apply_update<'a>(
     updater_idx: u8,
     new_min_withdrawal_amount: u64,
+    new_turn_ttl: u64,
     new_covenant_id: &[u8; 32],
     new_lock: &LockEnum<'a>,
     cx: &mut ApplyContext<'a, '_>,
@@ -47,12 +48,13 @@ pub(super) fn apply_update<'a>(
         return Err(AbiError::Decode("update: lock not satisfied".into()));
     }
 
-    write_new_state(target, new_min_withdrawal_amount, new_covenant_id, new_lock)
+    write_new_state(target, new_min_withdrawal_amount, new_turn_ttl, new_covenant_id, new_lock)
 }
 
 pub(super) fn apply_init<'a>(
     updater_idx: u8,
     new_min_withdrawal_amount: u64,
+    new_turn_ttl: u64,
     new_covenant_id: &[u8; 32],
     new_lock: &LockEnum<'a>,
     cx: &mut ApplyContext<'a, '_>,
@@ -73,7 +75,13 @@ pub(super) fn apply_init<'a>(
         return Err(AbiError::Decode("init: not authorized by genesis pubkey".into()));
     }
 
-    write_new_state(&mut cx.resources[idx], new_min_withdrawal_amount, new_covenant_id, new_lock)?;
+    write_new_state(
+        &mut cx.resources[idx],
+        new_min_withdrawal_amount,
+        new_turn_ttl,
+        new_covenant_id,
+        new_lock,
+    )?;
     // Advance the slot `New -> Live` so a later same-tx action reads it as live (and a second
     // `Init` is rejected as a double-create), mirroring the user-creation paths.
     cx.mark_created(idx).map_err(|m| AbiError::Decode(m.into()))
@@ -85,6 +93,7 @@ pub(super) fn apply_init<'a>(
 fn write_new_state<'a>(
     target: &mut Resource<'a>,
     new_min_withdrawal_amount: u64,
+    new_turn_ttl: u64,
     new_covenant_id: &[u8; 32],
     new_lock: &LockEnum<'a>,
 ) -> AbiResult<()> {
@@ -93,7 +102,13 @@ fn write_new_state<'a>(
     if target.data().is_empty() || target.data().len() != new_len {
         target.resize(new_len);
     }
-    write_config(target.data_mut(), new_min_withdrawal_amount, new_covenant_id, new_lock)
-        .map_err(|m| AbiError::Decode(m.into()))?;
+    write_config(
+        target.data_mut(),
+        new_min_withdrawal_amount,
+        new_turn_ttl,
+        new_covenant_id,
+        new_lock,
+    )
+    .map_err(|m| AbiError::Decode(m.into()))?;
     Ok(())
 }
