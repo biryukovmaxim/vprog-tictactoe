@@ -1,15 +1,3 @@
-//! This program's deposit policy: an impl of the battery's `DepositPolicy`
-//! trait (the trait and its `DepositBody` / `DepositSubject` / `CreditTarget`
-//! types live in vprogs' runtime-processor lib). The trait's associated
-//! `Lock<'a>` is pinned to this program's `LockEnum`, so the policy speaks the
-//! app's lock natively and no conversion happens at the apply boundary.
-//!
-//! Deposit-address binding: a funding output must pay
-//! `P2SH(delegate_entry_script(config.covenant_id))`, the covenant-spendable delegate-entry
-//! script the permission-script sweep recognises. `covenant_id` is sourced from the config
-//! resource (committed L2 state, set once at `Init`) rather than baked into the guest, so the
-//! zkVM image id is invariant to it.
-
 use vprogs_zk_abi::withdrawal::{ScriptBytes, StandardSpk};
 use vprogs_zk_backend_risc0_api::delegate_entry_spk_hash;
 use vprogs_zk_backend_risc0_runtime_processor::deposit_policy::{
@@ -23,12 +11,7 @@ use crate::runtime::lock::LockEnum;
 /// this is rejected rather than opening an underfunded account. There is no zero-balance birth.
 pub const MIN_CREATE_BALANCE: u64 = 1_000;
 
-/// This program's deposit policy: a single covenant-bound deposit address shared by all
-/// depositors; deposits credit the user named positionally by the action, creating them from
-/// the action-carried `initial_lock` when the slot is new.
-///
-/// Holds no state: the covenant arrives via `DepositSubject::covenant_id` (read from config in
-/// `apply_deposit`), so the address is not part of the guest image.
+/// This program's deposit policy
 pub struct CovenantDepositPolicy;
 
 impl DepositPolicy for CovenantDepositPolicy {

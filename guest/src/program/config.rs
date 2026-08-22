@@ -35,7 +35,8 @@ use crate::{
 
 /// Fixed-header byte length:
 /// `kind (u8) || min_withdrawal_amount (u64 LE) || covenant_id ([u8; 32]) || lock_tag (u8)`.
-pub const CONFIG_HEADER_LEN: usize = 1 + 8 + 32 + 1; // todo use core::offset
+/// Derived from `ConfigRaw` so the sum can never drift from the struct.
+pub const CONFIG_HEADER_LEN: usize = core::mem::offset_of!(ConfigRaw, lock_tag) + 1;
 
 /// Zerocopy DST: kind discriminator + fixed header + tag-driven variable body.
 #[repr(C)]

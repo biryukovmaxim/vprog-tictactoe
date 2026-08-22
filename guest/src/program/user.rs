@@ -12,21 +12,6 @@
 //! [66..]    lock_body           (length and shape implied by tag)
 //! ```
 //!
-//! `initial_lock_hash` is the SHA-256 id-hash of the initial lock at user-init
-//! time (`Lock::id_hash`; see the battery's `lock_trait`). It is permanent: rotating
-//! the active lock via `UpdateUserLock` rewrites `lock_tag` + `lock_body` but
-//! leaves `initial_lock_hash` untouched. This is what binds the resource to
-//! its derived address: `derive_user_resource(initial_lock_hash) == resource.id()`.
-//!
-//! The game counters make the user resource the source of truth for per-player game data:
-//! `games_started` seeds the game-resource id derivation (a player's Nth game derives
-//! `derive_game_resource(initial_lock_hash, games_started)`), while `games_won` /
-//! `games_finished` accumulate settlement stats. Fresh accounts are zeroed; the game actions are
-//! the only writers.
-//!
-//! Body shapes match the config wire layout (Lock body bytes only, no tag);
-//! both formats share `validate_lock_body` / `decode_lock_body_unchecked` from
-//! `crate::runtime::lock_codec`.
 
 use zerocopy::{
     FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned, little_endian::U64 as Le64,
@@ -42,7 +27,8 @@ use crate::{
 
 /// Fixed-header byte length: `kind (u8) || balance (u64 LE) || games_started (u64 LE) ||
 /// games_won (u64 LE) || games_finished (u64 LE) || initial_lock_hash ([u8; 32]) || lock_tag (u8)`.
-pub const USER_HEADER_LEN: usize = 1 + 8 + 8 + 8 + 8 + 32 + 1; // todo use core::offset
+/// Derived from `UserRaw` so the sum can never drift from the struct.
+pub const USER_HEADER_LEN: usize = core::mem::offset_of!(UserRaw, lock_tag) + 1;
 
 /// Per-player game counters carried by the user resource.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
@@ -223,7 +209,7 @@ mod tests {
     use crate::runtime::lock::{MultisigLockView, SchnorrLockView, UnlockedLockView};
 
     /// Offset of the lock-tag byte within the fixed header.
-    const LOCK_TAG_OFFSET: usize = USER_HEADER_LEN - 1; // todo use core::offset
+    const LOCK_TAG_OFFSET: usize = core::mem::offset_of!(UserRaw, lock_tag);
 
     fn pk(b: u8) -> [u8; 32] {
         [b; 32]
