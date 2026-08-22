@@ -1,35 +1,22 @@
 [package]
-edition = "2021"
+edition = "2024"
 name    = "vprog-tictactoe-guest"
-publish = false
 version = "0.1.0"
 
-# Structure inherited from vprogs' risc0 guest crates
-# (zk/backend/risc0/runtime-processor): dual lib + bin, own Cargo.lock, excluded from the
-# workspace. The lib doubles as the shared wire library for host crates and the web encoder;
-# the bin is the zkVM guest ELF entry, built for riscv32im-risc0-zkvm-elf.
 [lib]
 name = "vprog_tictactoe_guest"
 path = "src/lib.rs"
 
 [[bin]]
-name = "vprog-tictactoe-guest"
-path = "src/main.rs"
-# The guest entry is a zkVM main; built as a test harness on the host it runs
-# the entry and aborts on the first env call. Tests live in the lib (and later
-# in a tests/ harness); the bin is excluded from test and doctest targets.
 doctest = false
+name    = "vprog-tictactoe-guest"
+path    = "src/main.rs"
 test    = false
 
 [dependencies]
-hex-literal = "0.4"
+hex-literal = "1.1.0"
+risc0-zkvm  = { version = "3.0", default-features = false }
 zerocopy    = { version = "0.8", default-features = false, features = ["derive"] }
-# BIP-340 schnorr verification. For risc0 guest builds, pin to a precompile-accelerated
-# fork via `[patch.crates-io]` (e.g. risc0/RustCrypto-elliptic-curves) when wiring up the
-# docker build.
-k256       = { version = "0.13", default-features = false, features = ["schnorr"] }
-risc0-zkvm = { version = "3.0", default-features = false, features = ["std"] }
-signature  = { version = "2", default-features = false }
 
 # vprogs path pins (../../vprogs, branch guest-batteries); a git or crates.io pin replaces these
 # later without code changes here. Never vendored: only manifests reference vprogs.
@@ -40,8 +27,5 @@ vprogs-zk-abi = { path = "../../vprogs/zk/abi", default-features = false }
 vprogs-zk-backend-risc0-api = { path = "../../vprogs/zk/backend/risc0/api", default-features = false, features = [
   "guest",
 ] }
-# The battery: runtime-processor's lib is consumed as the reusable guest machinery (lock/signer
-# traits, auth, auth context, tx-input parsing, lifecycle, deposit policy). Its bin target and
-# tests are vprogs' own; only the lib builds for us. The dedicated batteries crate extraction is
-# deliberately delayed.
+# The battery: runtime-processor's lib is consumed as the reusable guest machinery.
 vprogs-zk-backend-risc0-runtime-processor = { path = "../../vprogs/zk/backend/risc0/runtime-processor", default-features = false }

@@ -22,12 +22,21 @@ fmt-check:
         taplo fmt --check guest/Cargo.toml; \
     fi
 
-# Clippy with warnings denied, on the workspace and the guest crate (CI parity).
-check:
+# Format check plus clippy with warnings denied, on the workspace, the guest crate (host
+# target), and the guest's zkVM ELF target (rzup `risc0` toolchain; run `rzup install` once).
+# One command: `just check` covers formatting, linting and both guest targets.
+check: fmt-check
     @if ls -d node driver >/dev/null 2>&1; then cargo clippy --tests -- -D warnings; fi
     @if [ -d guest ]; then \
         cargo clippy --tests --manifest-path guest/Cargo.toml -- -D warnings; \
+        cd guest && cargo +risc0 check --target riscv32im-risc0-zkvm-elf; \
     fi
+
+# Build the guest zkVM ELF (release). The reproducible Docker build lands with the ELF
+# milestone; this local build is for dev iteration.
+build-guest:
+    @cd guest && cargo +risc0 build --release --target riscv32im-risc0-zkvm-elf && \
+        ls -la target/riscv32im-risc0-zkvm-elf/release/vprog-tictactoe-guest
 
 # Find unused dependencies (nightly toolchain required).
 udeps:

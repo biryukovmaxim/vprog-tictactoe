@@ -29,12 +29,14 @@ Every commit leaves `README.md` accurate:
 ```bash
 just fmt          # nightly rustfmt + taplo, workspace + guest crate
 just fmt-check    # CI-style verification only
-just check        # clippy --tests with warnings denied, workspace + guest crate
+just check        # fmt-check + clippy --tests with warnings denied, workspace + guest
 just udeps        # unused-dependency scan (nightly)
 just test         # workspace + guest crate tests (L1 e2e is env-gated, off by default)
+just build-guest  # guest zkVM ELF, release, via the rzup `risc0` toolchain (`rzup install` once)
 ```
 
-Run the relevant recipes before every commit; `just fmt-check` and `just check` must pass.
+Run the relevant recipes before every commit; `just check` (which includes `fmt-check`) and
+`just test` must pass.
 
 ## Commit style
 
@@ -58,13 +60,13 @@ Run the relevant recipes before every commit; `just fmt-check` and `just check` 
   pin against the clone on branch `guest-batteries`; a git or crates.io pin replaces it later
   without code changes here).
 - The guest's battery is vprogs' runtime-processor **lib**: lock/signer traits *and variant impls*,
-  auth, auth context, tx-input parsing, lifecycle, and the sig-message digest. The dedicated
-  batteries crate extraction in vprogs is deliberately delayed; until it lands, the lib is the
-  battery.
+  auth, auth context, tx-input parsing, lifecycle, the deposit-policy trait (+ example impl), and
+  the sig-message digest. The dedicated batteries crate extraction in vprogs is deliberately
+  delayed; until it lands, the lib is the battery.
 - App-owned, never vendored from vprogs: the `LockEnum`/`SignerEnum` dispatchers over battery
   variant impls (`runtime/lock.rs`, `runtime/signer.rs`), `lock_codec` (multisig validation
   delegates to the battery decoder), kinds, domains, resource-id derivations, resource_ext, the
-  deposit policy (own trait + `CovenantDepositPolicy` over the app `LockEnum`, in
+  concrete deposit-policy impl (`CovenantDepositPolicy` over the battery trait, in
   `program/deposit_policy.rs`), the ix
   wire framing (generic over the program's `FnMut` action decoder), resources/actions, and the
   genesis key. The genesis pubkey is build-time env (`VPROG_TICTACTOE_GENESIS_PUBKEY`, 64 hex
@@ -99,4 +101,10 @@ questions; rebuild only when stale. Never stage graph files, reports or caches.
 ## Environment notes
 
 - `RISC0_DEV_MODE=1` is the default via `.cargo/config.toml` (stub receipts). Unset it for real proving.
+- The guest's zkVM-target build flags live in `guest/.cargo/config.toml` (getrandom `custom`
+  backend); they apply only when cargo runs with cwd inside `guest/` — the justfile recipes
+  `cd guest` for this reason.
+- The global `rustc-wrapper = "kache"` mis-serves some fresh vprogs-workspace builds
+  (phantom "can't find crate" errors); prefix vprogs-side cargo commands with
+  `RUSTC_WRAPPER=` when that surfaces.
 - `CLAUDE.md` is a local, untracked pointer to this file; it never enters git.

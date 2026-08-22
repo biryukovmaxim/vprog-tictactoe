@@ -29,12 +29,12 @@ own actions, accounts and game rules.
 │                         id derivations (config/user/game),       │
 │                         account + game resources (user carries   │
 │                         game counters), actions (wire + apply),  │
-│                         deposit policy                           │
+│                         deposit-policy impl                      │
 ├──────────────────────────────────────────────────────────────────┤
 │ ../vprogs    everything else, used as-is via path dependency:    │
 │              runtime-processor lib as the reusable battery       │
-│              (lock/signer traits + variant impls, auth,          │
-│              lifecycle, tx parsing; branch                       │
+│              (lock/signer + deposit-policy traits + variant      │
+│              impls, auth, lifecycle, tx parsing; branch          │
 │              guest-batteries), zk-abi, runner, L1 bridge         │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -57,7 +57,7 @@ own actions, accounts and game rules.
 - [ ] Guest crate: `program/` game (create, join, turn; settlement and split; per-creator
       sequential game ids from the user's `games_started` counter)
 - [ ] Guest tests: rules engine, wire round-trips, dev-mode flow tests
-- [ ] Guest ELF build (Docker, riscv32im target; flows the genesis env)
+- [ ] Guest ELF: Docker reproducible build, genesis env flow (local `just build-guest` works)
 - [ ] vprogs feature: app-level custom journal data via closures (prerequisite for indexes)
 - [ ] Node DA: indexer logic to find open games (rides on the vprogs feature above)
 - [ ] Node `ttd`: runner driver + DA server

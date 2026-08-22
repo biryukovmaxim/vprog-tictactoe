@@ -1,0 +1,8 @@
+# zkVM-target build flags, scoped to the guest ELF target so host checks and
+# tests are unaffected.
+#
+# getrandom 0.3 has no built-in zkVM backend; risc0-zkvm-platform provides the
+# `__getrandom_v03_custom` handler, selected by the `custom` backend cfg (same
+# flag the risc0 docker build sets via ENV RUSTFLAGS).
+[target.riscv32im-risc0-zkvm-elf]
+rustflags = ["--cfg", "getrandom_backend=\"custom\""]
