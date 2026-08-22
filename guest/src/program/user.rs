@@ -42,7 +42,7 @@ use crate::{
 
 /// Fixed-header byte length: `kind (u8) || balance (u64 LE) || games_started (u64 LE) ||
 /// games_won (u64 LE) || games_finished (u64 LE) || initial_lock_hash ([u8; 32]) || lock_tag (u8)`.
-pub const USER_HEADER_LEN: usize = 1 + 8 + 8 + 8 + 8 + 32 + 1;
+pub const USER_HEADER_LEN: usize = 1 + 8 + 8 + 8 + 8 + 32 + 1; // todo use core::offset
 
 /// Per-player game counters carried by the user resource.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
@@ -223,7 +223,7 @@ mod tests {
     use crate::runtime::lock::{MultisigLockView, SchnorrLockView, UnlockedLockView};
 
     /// Offset of the lock-tag byte within the fixed header.
-    const LOCK_TAG_OFFSET: usize = USER_HEADER_LEN - 1;
+    const LOCK_TAG_OFFSET: usize = USER_HEADER_LEN - 1; // todo use core::offset
 
     fn pk(b: u8) -> [u8; 32] {
         [b; 32]

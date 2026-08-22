@@ -8,12 +8,14 @@ use vprogs_zk_abi::{
 };
 use vprogs_zk_backend_risc0_runtime_processor::{
     auth_context::{AuthContext, MultisigUnlocker},
-    deposit_policy::DepositPolicy,
     signer_trait::{Signer, SignerResolveContext},
 };
 
 use crate::{
-    program::action::{self, ApplyContext, apply_action},
+    program::{
+        action::{self, ApplyContext, apply_action},
+        deposit_policy::DepositPolicy,
+    },
     runtime::{
         ix::{DecodedIx, decode_ix},
         signer::{
@@ -46,20 +48,11 @@ pub fn run<'a, P: DepositPolicy>(
     let DecodedIx { signers, actions, end_of_actions_in_ix } =
         decode_ix(payload.ix_data, resources.len(), action::decode_action)?;
 
-    // Translate end_of_actions from ix-relative to payload-relative bytes.
-    // payload.bytes = access_metadata_prefix || ix_data, so the prefix length
-    // is `payload.bytes.len() - ix_data.len()`. The sig-message digest over
-    // this presig slice is hashed lazily by `SignerResolveContext`, so a
-    // witness-only tx never pays for it.
     let access_prefix_len = payload.bytes.len() - payload.ix_data.len();
     let end_of_actions_in_payload = access_prefix_len + end_of_actions_in_ix;
     let payload_presig = &payload.bytes[..end_of_actions_in_payload];
 
-    // Resolve signers → AuthContext. Entries are pushed in wire order. The
-    // wire format must already be `(resource_idx asc, pubkey asc within
-    // resource)`; `decode_ix` enforces the resource_idx ordering, and the
-    // lock matchers (`SchnorrLockView`, `MultisigLockView`) reject malformed
-    // per-resource slices at match time rather than silently re-sorting.
+    // Resolve signers -> AuthContext
     let auth_ctx = resolve_signers(
         &signers,
         &SignerResolveContext::new(payload.bytes, current_rest_preimage, payload_presig, resources),
@@ -77,21 +70,6 @@ pub fn run<'a, P: DepositPolicy>(
 /// Walks parsed signers, calls `Signer::resolve` on each, and routes the
 /// produced unlocker into the matching `AuthContext` bucket. Each signer
 /// kind is statically tied to one bucket via its `Signer::Unlocker`.
-///
-/// **Order is preserved verbatim from the wire**: no post-sort, no dedup. The
-/// wire signer list is required to already be `(resource_idx asc, pubkey asc
-/// within resource)`. `decode_ix` enforces the outer (resource_idx) ordering;
-/// the inner (pubkey) ordering is verified by the lock matchers when they
-/// slice the per-resource bucket. A malformed bucket (duplicates, wrong
-/// order, or extras for a single-key lock) is rejected by the matcher and
-/// surfaces as `lock not satisfied`.
-///
-/// Multisig contributions are *aggregated* per `resource_idx`: each
-/// multisig-flavoured signer contributes one pubkey to the
-/// `MultisigUnlocker.pubkeys` Vec for its resource. Since `decode_ix`
-/// guarantees signers are sorted by `resource_idx`, a contiguous run of
-/// multisig signers for the same resource lands in the same aggregated
-/// entry (no map lookup or sort).
 fn resolve_signers<'a>(
     signers: &[(u8, SignerEnum)],
     ctx: &SignerResolveContext<'a>,

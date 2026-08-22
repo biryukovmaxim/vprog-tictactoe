@@ -10,6 +10,7 @@
 
 pub mod action;
 pub mod config;
+pub mod deposit_policy;
 pub mod domain;
 pub mod kind;
 pub mod resource_ext;

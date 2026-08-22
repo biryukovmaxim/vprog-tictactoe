@@ -8,12 +8,13 @@
 //! zero-balance birth.
 
 use vprogs_zk_abi::{Error as AbiError, Result as AbiResult};
-use vprogs_zk_backend_risc0_runtime_processor::{
-    deposit_policy::DepositPolicy, lifecycle::Lifecycle,
-};
+use vprogs_zk_backend_risc0_runtime_processor::lifecycle::Lifecycle;
 
 use super::{ApplyContext, validate_user_create};
-use crate::{program::resource_ext::ResourceExt, runtime::lock::LockEnum};
+use crate::{
+    program::{deposit_policy::DepositPolicy, resource_ext::ResourceExt},
+    runtime::lock::LockEnum,
+};
 
 /// Moves `amount` from `source_idx` to `dest_idx`. The source must be an existing user whose
 /// current lock authorizes the move. The destination is credited if it already exists, or created
@@ -50,10 +51,6 @@ pub(super) fn apply_transfer<'a, P: DepositPolicy>(
             .resources
             .get_disjoint_mut([source_idx as usize, dest_idx as usize])
             .map_err(|_| AbiError::Decode("transfer: bad indices".into()))?;
-
-        // Kind / liveness checks are folded into the combinators: `view_user`
-        // and `modify_user` return `None` when the resource is the wrong kind or
-        // an empty slot. We rely on those `None`s and never .expect / .unwrap.
 
         let src_auth = src
             .view_user(|v| {

@@ -59,13 +59,11 @@ where
     let mut bytes: &'a [u8] = orig;
     let mut decode_action = decode_action;
 
-    // Signers: enforce in-range and non-strict ascending by resource_idx during decode.
+    // Signers: `decode_signer` bounds-checks each resource_idx (via `read_resource_idx`);
+    // this loop enforces non-strict ascending order across entries.
     let mut prev_resource_idx: Option<u8> = None;
     let signers = bytes.many("ix.signers", |buf: &mut &'a [u8]| {
-        let entry = decode_signer(buf)?;
-        if entry.0 as usize >= n_resources {
-            return Err(Error::Decode("ix.signer: resource_idx out of range"));
-        }
+        let entry = decode_signer(buf, n_resources)?;
         if let Some(p) = prev_resource_idx {
             if entry.0 < p {
                 return Err(Error::Decode("ix.signer: resource_idx not ascending"));
@@ -82,8 +80,8 @@ where
 }
 
 /// Reads a `u8` resource index that must reference one of the `n_resources`
-/// declared resources. Shared by the signer bounds-check above (via inline
-/// check) and exposed for the program's action decoder.
+/// declared resources. Shared by the signer decoder and the program's action
+/// decoder, so every `resource_idx` on the wire gets the same bounds check.
 pub fn read_resource_idx(
     buf: &mut &[u8],
     field: &'static str,
@@ -180,9 +178,10 @@ mod tests {
         let mut ix = signer_section(&[(1, 0x01, schnorr_signer_body(100))]);
         ix.extend_from_slice(&empty_actions_section());
 
+        // The rejection surfaces from `read_resource_idx` as the field name.
         assert!(matches!(
             decode_ix(&ix, 1, reject_action),
-            Err(Error::Decode(m)) if m.contains("out of range")
+            Err(Error::Decode(m)) if m.contains("signer.resource_idx")
         ));
     }
 

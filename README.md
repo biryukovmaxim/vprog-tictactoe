@@ -28,12 +28,13 @@ own actions, accounts and game rules.
 │               program/  tic-tac-toe: kinds, domains, resource-   │
 │                         id derivations (config/user/game),       │
 │                         account + game resources (user carries   │
-│                         game counters), actions (wire + apply)   │
+│                         game counters), actions (wire + apply),  │
+│                         deposit policy                           │
 ├──────────────────────────────────────────────────────────────────┤
 │ ../vprogs    everything else, used as-is via path dependency:    │
 │              runtime-processor lib as the reusable battery       │
 │              (lock/signer traits + variant impls, auth,          │
-│              lifecycle, tx parsing, deposit policy; branch       │
+│              lifecycle, tx parsing; branch                       │
 │              guest-batteries), zk-abi, runner, L1 bridge         │
 └──────────────────────────────────────────────────────────────────┘
 ```

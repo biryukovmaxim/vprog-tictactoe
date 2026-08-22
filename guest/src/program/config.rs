@@ -18,10 +18,6 @@
 //! - `Multisig` (0x02): `u8 threshold || u8 n_pubkeys || n*32 pubkey bytes`
 //! - `Unlocked` (0x03): empty
 //!
-//! `ConfigRaw` is a zerocopy DST; the trailing `[u8]` field absorbs whatever
-//! body the tag implies. The struct is `Unaligned`, so `ConfigView` casts
-//! directly from any properly-shaped `&[u8]`.
-//!
 //! The tic-tac-toe game params (`min_stake`, `max_stake`, `default_rounds`) join this payload
 //! with the game milestone.
 
@@ -39,7 +35,7 @@ use crate::{
 
 /// Fixed-header byte length:
 /// `kind (u8) || min_withdrawal_amount (u64 LE) || covenant_id ([u8; 32]) || lock_tag (u8)`.
-pub const CONFIG_HEADER_LEN: usize = 1 + 8 + 32 + 1;
+pub const CONFIG_HEADER_LEN: usize = 1 + 8 + 32 + 1; // todo use core::offset
 
 /// Zerocopy DST: kind discriminator + fixed header + tag-driven variable body.
 #[repr(C)]

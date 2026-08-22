@@ -13,6 +13,7 @@ pub use vprogs_zk_backend_risc0_runtime_processor::signer_variants::{
     SchnorrSigPtrSigner,
 };
 
+use crate::runtime::ix::read_resource_idx;
 // The env-genesis variant is app-defined; re-exported alongside for one import site.
 pub use crate::runtime::signer_variants::GenesisSchnorrSigPtrSigner;
 
@@ -29,9 +30,10 @@ pub enum SignerEnum {
 
 /// Decodes a single signer entry: `(resource_idx u8 || kind u8 || body)`.
 /// Returns `(resource_idx, signer)`; `resource_idx` lives outside the body
-/// because it's a shared field every signer carries.
-pub fn decode_signer(buf: &mut &[u8]) -> CodecResult<(u8, SignerEnum)> {
-    let resource_idx = buf.byte("signer.resource_idx")?;
+/// because it's a shared field every signer carries, and is bounds-checked
+/// against `n_resources` via [`read_resource_idx`].
+pub fn decode_signer(buf: &mut &[u8], n_resources: usize) -> CodecResult<(u8, SignerEnum)> {
+    let resource_idx = read_resource_idx(buf, "signer.resource_idx", n_resources)?;
     let kind = buf.byte("signer.kind")?;
     let body = match kind {
         SchnorrSigPtrSigner::TAG => SignerEnum::SchnorrSigPtr(SchnorrSigPtrSigner::decode(buf)?),

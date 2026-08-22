@@ -7,15 +7,14 @@
 //! - **Game**: seeded by the creator's `initial_lock_hash` plus their `games_started` counter
 //!   (carried by the user resource): sequential, deterministic ids: the Nth game someone starts
 //!   always derives the same id, and two creators' games never collide.
-
 use vprogs_core_types::ResourceId;
 use vprogs_zk_backend_risc0_api::{Hasher, Sha256};
 
 use crate::program::domain::Domain;
 
-/// The singleton config resource id (`label = "config"`).
+/// The singleton config resource id.
 pub fn config_resource_id() -> ResourceId {
-    ResourceId::from(Sha256::hash_with_domain(&[Domain::Config as u8], b"config"))
+    ResourceId::from(Sha256::hash_with_domain(&[Domain::Config as u8], []))
 }
 
 /// Derives a user-resource id from the 32-byte identity hash of its initial
@@ -42,7 +41,7 @@ mod tests {
 
     #[test]
     fn config_id_matches_sha256_with_domain() {
-        let want = Sha256::hash_with_domain(&[Domain::Config as u8], b"config");
+        let want = Sha256::hash_with_domain(&[Domain::Config as u8], []);
         assert_eq!(*config_resource_id(), want);
     }
 

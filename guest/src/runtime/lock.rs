@@ -7,9 +7,6 @@
 use alloc::vec::Vec;
 
 use vprogs_core_codec::{Error, Reader, Result as CodecResult};
-/// The battery's lock enum: needed by battery APIs that speak their own `LockEnum` (the
-/// imported deposit policy's `DepositBody`).
-use vprogs_zk_backend_risc0_runtime_processor::lock::LockEnum as BatteryLockEnum;
 pub use vprogs_zk_backend_risc0_runtime_processor::lock_variants::{
     MultisigLockView, SchnorrLockView, UnlockedLockView,
 };
@@ -21,17 +18,6 @@ pub enum LockEnum<'a> {
     Schnorr(SchnorrLockView<'a>),
     Multisig(MultisigLockView<'a>),
     Unlocked(UnlockedLockView),
-}
-
-/// Lossless mapping onto the battery's enum (identical variant set).
-impl<'a> From<LockEnum<'a>> for BatteryLockEnum<'a> {
-    fn from(lock: LockEnum<'a>) -> Self {
-        match lock {
-            LockEnum::Schnorr(v) => Self::Schnorr(v),
-            LockEnum::Multisig(v) => Self::Multisig(v),
-            LockEnum::Unlocked(v) => Self::Unlocked(v),
-        }
-    }
 }
 
 /// Decodes a tag-prefixed lock from a self-advancing buffer.

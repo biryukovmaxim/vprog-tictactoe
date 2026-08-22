@@ -4,25 +4,21 @@
 use vprogs_zk_abi::{Error as AbiError, Result as AbiResult};
 use vprogs_zk_backend_risc0_api::delegate_entry_spk_hash;
 use vprogs_zk_backend_risc0_runtime_processor::{
-    deposit_policy::{CreditTarget, DepositBody, DepositPolicy, DepositSubject},
-    lifecycle::Lifecycle,
-    tx_inputs::parse_output_at_index_v1,
+    lifecycle::Lifecycle, tx_inputs::parse_output_at_index_v1,
 };
 
-use super::{ApplyContext, validate_user_create};
+use super::{ApplyContext, validate_user_create, view_config_at};
 use crate::{
-    program::{resource_ext::ResourceExt, resource_id::config_resource_id},
+    program::{
+        deposit_policy::{CreditTarget, DepositBody, DepositPolicy, DepositSubject},
+        resource_ext::ResourceExt,
+    },
     runtime::lock::LockEnum,
 };
 
-/// Credits (and possibly creates) the user at `user_idx` from a funding L1 output in the current
-/// tx.
-///
-/// No signature is required: the funding output's value is cryptographically committed by the tx_id
-/// the ABI asserts, so the host cannot inflate it. The address/lock binding check is the sole gate
-/// preventing an attacker from redirecting a deposit to their own balance.
 pub(super) fn apply_deposit<'a, P: DepositPolicy>(
     user_idx: u8,
+    config_idx: u8,
     output_idx: u32,
     initial_lock: &LockEnum<'a>,
     cx: &mut ApplyContext<'a, '_>,
@@ -33,36 +29,22 @@ pub(super) fn apply_deposit<'a, P: DepositPolicy>(
         return Err(AbiError::Decode("deposit: output already consumed in this tx".into()));
     }
 
-    let mut covenant_id_opt: Option<[u8; 32]> = None;
-    for r in cx.resources.iter() {
-        if r.id() == &config_resource_id() {
-            covenant_id_opt = r.view_config(|c| *c.covenant_id());
-            break;
-        }
-    }
-    let covenant_id = covenant_id_opt
-        .ok_or_else(|| AbiError::Decode("deposit: config resource absent or not live".into()))?;
+    let covenant_id = view_config_at(cx.resources, config_idx, |c| *c.covenant_id())?;
 
     // Parse the funding output from the current tx's rest_preimage. The value is cryptographically
     // committed via rest_digest to tx_id.
     let out = parse_output_at_index_v1(cx.tx.rest_preimage, output_idx)
         .map_err(|_| AbiError::Decode("deposit: bad output_idx / rest_preimage".into()))?;
 
-    // Compare the funding output's SPK to the policy's expected deposit address. For this example
-    // policy that is `P2SH(delegate_entry_script(covenant_id))`, derived from the config-committed
-    // covenant_id above. Both sides are raw on-chain script bytes with no version prefix
-    // (`parse_output_at_index_v1` keeps `spk_version` separate, and `deposit_spk` returns the 35
-    // script bytes alone), so the comparison is script-bytes against script-bytes.
-    // The battery's `DepositBody` speaks its own `LockEnum`; the app's
-    // converts losslessly (same variant set).
-    let body = DepositBody { user_idx, output_idx, initial_lock: initial_lock };
+    // Compare the funding output's SPK to the policy's expected deposit address.
+    let body = DepositBody { user_idx, output_idx, initial_lock: *initial_lock };
     let want_spk = policy.deposit_spk(&DepositSubject { body: &body, covenant_id: &covenant_id });
     if out.spk_version != 0 || out.spk != want_spk.as_slice() {
         return Err(AbiError::Decode("deposit: funding output SPK != policy deposit_spk".into()));
     }
 
     // Resolve credit target via policy (which user, create-or-credit).
-    let target_decision: CreditTarget<'_> =
+    let target_decision: CreditTarget =
         policy.credit_target(&body).map_err(|m| AbiError::Decode(m.into()))?;
     let idx = target_decision.user_idx as usize;
     // The policy may return an out-of-range idx.
@@ -81,22 +63,20 @@ pub(super) fn apply_deposit<'a, P: DepositPolicy>(
     }
     let credit_kind = match cx.lifecycle(idx) {
         // Brand-new slot: create it if the policy allows, binding its address to `initial_lock`.
-        Lifecycle::New => match target_decision.create_with {
-            Some(_) => {
-                let ilh = validate_user_create(
-                    cx.resources[idx].id(),
-                    initial_lock,
-                    deposit_value,
-                    policy.min_create_balance(),
-                )?;
-                CreditKind::Create(ilh)
-            }
-            None => {
+        Lifecycle::New => {
+            if !target_decision.may_create {
                 return Err(AbiError::Decode(
                     "deposit: user does not exist (policy forbids create)".into(),
                 ));
             }
-        },
+            let ilh = validate_user_create(
+                cx.resources[idx].id(),
+                initial_lock,
+                deposit_value,
+                policy.min_create_balance(),
+            )?;
+            CreditKind::Create(ilh)
+        }
         // Live user (committed, or created by an earlier action in this same tx): confirm kind,
         // read balance, bind initial_lock_hash, then accumulate.
         Lifecycle::Live => {

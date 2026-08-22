@@ -1,22 +1,5 @@
 //! Closure-based combinators on `Resource<'a>` that layer typed views onto
-//! the framework's byte-backed storage.
-//!
-//! The framework's `Resource<'a>` is byte-backed and lifecycle-agnostic (`data()` / `is_dirty()` /
-//! `resize()`); the per-tx lifecycle state machine lives one layer up in
-//! [`ApplyContext`](crate::program::action::ApplyContext) (see the battery's `lifecycle`). This
-//! extension trait layers typed views onto the bytes, reading liveness off data-emptiness alone:
-//!
-//! - `kind()`: read the leading kind byte (`KIND_CONFIG` / `KIND_USER` / ...); `None` on an empty
-//!   slot (never-created or torn-down).
-//! - `view_*`: closure receives a borrowed typed view; returns `None` on kind mismatch or an empty
-//!   slot, which is what rejects use-after-delete here.
-//! - `modify_*`: closure receives a mutable typed view; takes `&mut Resource` so the framework
-//!   marks the resource dirty internally.
-//! - `init_*`: fresh-resource init into an empty slot; `resize()` to the new payload's length and
-//!   writes the canonical wire bytes. The caller owns the `New -> Live` transition via
-//!   `ApplyContext::mark_created`, which rejects double-create and re-create-after-delete.
-//! - `set_*_lock`: variable-tail rewrite for lock rotation. Handles shrink, same-size, and grow by
-//!   deferring to `Resource::resize` (the framework promotes to a heap buffer when needed).
+//! the byte-backed storage.
 
 use vprogs_zk_abi::transaction_processor::Resource;
 
