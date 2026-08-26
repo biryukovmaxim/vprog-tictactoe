@@ -1,12 +1,14 @@
 //! Closure-based combinators on `Resource<'a>` that layer typed views onto
 //! the byte-backed storage.
 
+use vprogs_core_types::ResourceId;
 use vprogs_zk_abi::transaction_processor::Resource;
 
 use crate::{
     program::{
         config::{CONFIG_HEADER_LEN, ConfigView, ConfigViewMut, config_total_len, write_config},
-        kind::{KIND_CONFIG, KIND_USER, kind_of},
+        game::{GAME_WIRE_LEN, GameView, GameViewMut, write_game},
+        kind::{KIND_CONFIG, KIND_GAME, KIND_USER, kind_of},
         user::{GameStats, USER_HEADER_LEN, UserView, UserViewMut, user_total_len, write_user},
     },
     runtime::lock::LockEnum,
@@ -18,9 +20,11 @@ pub trait ResourceExt<'a> {
 
     fn view_config<R>(&self, f: impl FnOnce(ConfigView<'_>) -> R) -> Option<R>;
     fn view_user<R>(&self, f: impl FnOnce(UserView<'_>) -> R) -> Option<R>;
+    fn view_game<R>(&self, f: impl FnOnce(GameView<'_>) -> R) -> Option<R>;
 
     fn modify_config<R>(&mut self, f: impl FnOnce(&mut ConfigViewMut<'_>) -> R) -> Option<R>;
     fn modify_user<R>(&mut self, f: impl FnOnce(&mut UserViewMut<'_>) -> R) -> Option<R>;
+    fn modify_game<R>(&mut self, f: impl FnOnce(&mut GameViewMut<'_>) -> R) -> Option<R>;
 
     fn init_config(
         &mut self,
@@ -34,6 +38,13 @@ pub trait ResourceExt<'a> {
         balance: u64,
         initial_lock_hash: &[u8; 32],
         lock: &LockEnum<'_>,
+    ) -> Result<(), &'static str>;
+    fn init_game(
+        &mut self,
+        creator: &ResourceId,
+        creator_mark: u8,
+        stake: u64,
+        rounds_total: u8,
     ) -> Result<(), &'static str>;
 
     fn set_config_lock(&mut self, new_lock: &LockEnum<'_>) -> Result<(), &'static str>;
@@ -66,6 +77,13 @@ impl<'a> ResourceExt<'a> for Resource<'a> {
         UserView::from_bytes(self.data()).ok().map(f)
     }
 
+    fn view_game<R>(&self, f: impl FnOnce(GameView<'_>) -> R) -> Option<R> {
+        if self.kind()? != KIND_GAME {
+            return None;
+        }
+        GameView::from_bytes(self.data()).ok().map(f)
+    }
+
     fn modify_config<R>(&mut self, f: impl FnOnce(&mut ConfigViewMut<'_>) -> R) -> Option<R> {
         if self.kind()? != KIND_CONFIG {
             return None;
@@ -79,6 +97,14 @@ impl<'a> ResourceExt<'a> for Resource<'a> {
             return None;
         }
         let mut mv = UserViewMut::from_bytes_mut(self.data_mut()).ok()?;
+        Some(f(&mut mv))
+    }
+
+    fn modify_game<R>(&mut self, f: impl FnOnce(&mut GameViewMut<'_>) -> R) -> Option<R> {
+        if self.kind()? != KIND_GAME {
+            return None;
+        }
+        let mut mv = GameViewMut::from_bytes_mut(self.data_mut()).ok()?;
         Some(f(&mut mv))
     }
 
@@ -110,6 +136,20 @@ impl<'a> ResourceExt<'a> for Resource<'a> {
         self.resize(total);
         // Fresh accounts have no game history; the game actions are the only writers.
         write_user(self.data_mut(), balance, GameStats::default(), initial_lock_hash, lock)
+    }
+
+    fn init_game(
+        &mut self,
+        creator: &ResourceId,
+        creator_mark: u8,
+        stake: u64,
+        rounds_total: u8,
+    ) -> Result<(), &'static str> {
+        if !self.data().is_empty() {
+            return Err("init_game: slot is not empty");
+        }
+        self.resize(GAME_WIRE_LEN);
+        write_game(self.data_mut(), creator, creator_mark, stake, rounds_total)
     }
 
     fn set_config_lock(&mut self, new_lock: &LockEnum<'_>) -> Result<(), &'static str> {

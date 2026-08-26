@@ -12,6 +12,7 @@ pub mod action;
 pub mod config;
 pub mod deposit_policy;
 pub mod domain;
+pub mod game;
 pub mod kind;
 pub mod resource_ext;
 pub mod resource_id;
