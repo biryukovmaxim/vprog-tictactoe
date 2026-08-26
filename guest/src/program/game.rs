@@ -64,7 +64,7 @@ pub enum State {
 }
 
 /// A board cell; `creator_mark` reuses the same values minus `Empty` (rejected by
-/// `validate`), so the all-zero construction state parses.
+/// `write_game`), so the all-zero construction state parses.
 #[repr(u8)]
 #[derive(
     Copy,
@@ -126,14 +126,16 @@ pub struct GameRaw {
     pub board: [Cell; 9],
 }
 
-/// Read-only view over a game resource. Shape and invariants validated at `from_bytes`
-/// time, so accessors are infallible.
+/// Read-only view over a game resource. The enum bytes (kind, state, mark, board cells)
+/// are discriminant-checked at `from_bytes` time, so accessors are infallible. Cross-field
+/// invariants (mark parity, queue cursors, players) are owned by the writers: stored game
+/// bytes only ever come from `write_game` and the game actions, so no reachable state can
+/// carry them wrong.
 pub struct GameView<'a>(&'a GameRaw);
 
 impl<'a> GameView<'a> {
     pub fn from_bytes(bytes: &'a [u8]) -> Result<Self, &'static str> {
         let raw = GameRaw::try_ref_from_bytes(bytes).map_err(|_| "game: invalid layout")?;
-        validate(raw)?;
         Ok(Self(raw))
     }
 
@@ -141,8 +143,7 @@ impl<'a> GameView<'a> {
         self.0.m.state
     }
 
-    /// The creator's mark in even rounds (the joiner's in odd); never `Empty` on a parsed
-    /// view.
+    /// The creator's mark in even rounds (the joiner's in odd).
     pub fn creator_mark(&self) -> Cell {
         self.0.m.creator_mark
     }
@@ -169,7 +170,7 @@ impl<'a> GameView<'a> {
         self.0.m.last_move_at.get()
     }
 
-    /// Seat 0's user id. Set at creation; never the all-zero id.
+    /// Seat 0's user id, set at creation.
     pub fn creator(&self) -> &'a ResourceId {
         &self.0.m.players[0]
     }
@@ -191,15 +192,14 @@ impl<'a> GameView<'a> {
     }
 }
 
-/// Mutable view for in-place updates. Setters do not re-validate; `from_bytes` checks run
-/// again whenever the buffer is re-viewed, and the game actions write only reachable states.
-/// `stake`, `creator_mark`, `rounds_total` and seat 0 are create-time only by construction.
+/// Mutable view for in-place updates. Setters do not re-validate; the writers own every
+/// invariant. `stake`, `creator_mark`, `rounds_total` and seat 0 are create-time only by
+/// construction.
 pub struct GameViewMut<'a>(&'a mut GameRaw);
 
 impl<'a> GameViewMut<'a> {
     pub fn from_bytes_mut(bytes: &'a mut [u8]) -> Result<Self, &'static str> {
         let raw = GameRaw::try_mut_from_bytes(bytes).map_err(|_| "game: invalid layout")?;
-        validate(raw)?;
         Ok(Self(raw))
     }
 
@@ -232,44 +232,6 @@ impl<'a> GameViewMut<'a> {
     pub fn board_mut(&mut self) -> &mut [Cell; 9] {
         &mut self.0.board
     }
-}
-
-/// Shared `from_bytes`/`from_bytes_mut` validation: the cross-field invariants zerocopy's
-/// discriminant checks cannot see. The enum bytes themselves (kind, state, mark, board
-/// cells) are already valid by the time this runs.
-fn validate(raw: &GameRaw) -> Result<(), &'static str> {
-    if !matches!(raw.kind, GameKind::Game) {
-        return Err("game: kind is Unset");
-    }
-    if raw.m.creator_mark == Cell::Empty {
-        return Err("game: creator_mark is Empty");
-    }
-    if raw.m.players[0] == ResourceId::default() {
-        return Err("game: creator seat unset");
-    }
-    for q in &raw.m.pending {
-        if q.head as usize >= PENDING_CAP || q.count as usize > PENDING_CAP {
-            return Err("game: pending queue cursors out of range");
-        }
-        if q.cells.iter().any(|&c| c >= 9) {
-            return Err("game: pending cell out of range");
-        }
-    }
-    let mut xs = 0usize;
-    let mut os = 0usize;
-    for &cell in &raw.board {
-        match cell {
-            Cell::Empty => {}
-            Cell::X => xs += 1,
-            Cell::O => os += 1,
-        }
-    }
-    // X opens every round, so the mark counts can never differ by more than X's single
-    // move-in-hand.
-    if os > xs || xs > os + 1 {
-        return Err("game: impossible mark counts on board");
-    }
-    Ok(())
 }
 
 /// Writes a fresh game wire buffer into `out`. `out` must be pre-sized to
@@ -309,9 +271,6 @@ mod tests {
         ResourceId::from([b; 32])
     }
 
-    /// Offset of the pending-queue pair within the wire buffer.
-    const PENDING_OFF: usize =
-        core::mem::offset_of!(GameRaw, m) + core::mem::offset_of!(MatchRaw, pending);
     /// Offset of the board within the wire buffer.
     const BOARD_OFF: usize = GAME_WIRE_LEN - 9;
 
@@ -359,31 +318,9 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unset_kind_byte() {
-        // Unset parses at the zerocopy layer; the view must reject it so it never persists.
-        let mut buf = game_buf();
-        buf[0] = 0;
-        assert!(GameView::from_bytes(&buf).is_err());
-    }
-
-    #[test]
     fn rejects_unknown_state() {
         let mut buf = game_buf();
         buf[1] = 5;
-        assert!(GameView::from_bytes(&buf).is_err());
-    }
-
-    #[test]
-    fn rejects_empty_creator_mark() {
-        let mut buf = game_buf();
-        buf[2] = 0;
-        assert!(GameView::from_bytes(&buf).is_err());
-    }
-
-    #[test]
-    fn rejects_zero_creator_seat() {
-        let mut buf = game_buf();
-        buf[23..55].fill(0);
         assert!(GameView::from_bytes(&buf).is_err());
     }
 
@@ -397,40 +334,6 @@ mod tests {
     fn rejects_bad_board_cell() {
         let mut buf = game_buf();
         buf[BOARD_OFF] = 3;
-        assert!(GameView::from_bytes(&buf).is_err());
-    }
-
-    #[test]
-    fn rejects_impossible_mark_counts() {
-        // O leading: X opens every round.
-        let mut buf = game_buf();
-        buf[BOARD_OFF] = Cell::O as u8;
-        assert!(GameView::from_bytes(&buf).is_err());
-
-        // X two ahead: moves strictly alternate within a round.
-        let mut buf = game_buf();
-        buf[BOARD_OFF] = Cell::X as u8;
-        buf[BOARD_OFF + 1] = Cell::X as u8;
-        assert!(GameView::from_bytes(&buf).is_err());
-    }
-
-    #[test]
-    fn rejects_queue_cell_out_of_range() {
-        let mut buf = game_buf();
-        buf[PENDING_OFF] = 9;
-        assert!(GameView::from_bytes(&buf).is_err());
-    }
-
-    #[test]
-    fn rejects_queue_cursor_overflow() {
-        // Seat 1's count byte (cells [u8; 4] || head || count).
-        let mut buf = game_buf();
-        buf[PENDING_OFF + 2 * core::mem::size_of::<PendingQueue>() + PENDING_CAP + 1] = 5;
-        assert!(GameView::from_bytes(&buf).is_err());
-
-        // Seat 0's head byte.
-        let mut buf = game_buf();
-        buf[PENDING_OFF + PENDING_CAP] = PENDING_CAP as u8;
         assert!(GameView::from_bytes(&buf).is_err());
     }
 

@@ -62,9 +62,6 @@ pub struct UserView<'a>(&'a UserRaw);
 impl<'a> UserView<'a> {
     pub fn from_bytes(bytes: &'a [u8]) -> Result<Self, &'static str> {
         let raw = UserRaw::try_ref_from_bytes(bytes).map_err(|_| "user: invalid layout")?;
-        if !matches!(raw.kind, UserKind::User) {
-            return Err("user: wrong kind byte");
-        }
         validate_lock_body(raw.lock_tag, &raw.lock_body)?;
         Ok(Self(raw))
     }
@@ -121,9 +118,6 @@ pub struct UserViewMut<'a>(&'a mut UserRaw);
 impl<'a> UserViewMut<'a> {
     pub fn from_bytes_mut(bytes: &'a mut [u8]) -> Result<Self, &'static str> {
         let raw = UserRaw::try_mut_from_bytes(bytes).map_err(|_| "user: invalid layout")?;
-        if !matches!(raw.kind, UserKind::User) {
-            return Err("user: wrong kind byte");
-        }
         validate_lock_body(raw.lock_tag, &raw.lock_body)?;
         Ok(Self(raw))
     }
@@ -315,18 +309,6 @@ mod tests {
         let mut buf = vec![0u8; user_total_len(&lock)];
         write_user(&mut buf, 1, GameStats::default(), &ilh, &lock).unwrap();
         buf[0] = UserKind::User as u8 + 7; // bogus
-        assert!(UserView::from_bytes(&buf).is_err());
-    }
-
-    #[test]
-    fn rejects_unset_kind_byte() {
-        // Unset parses at the zerocopy layer; the view must reject it so it never persists.
-        let pubkey = pk(0x55);
-        let lock = LockEnum::Schnorr(SchnorrLockView { pubkey: &pubkey });
-        let ilh = hash(0xAA);
-        let mut buf = vec![0u8; user_total_len(&lock)];
-        write_user(&mut buf, 1, GameStats::default(), &ilh, &lock).unwrap();
-        buf[0] = 0;
         assert!(UserView::from_bytes(&buf).is_err());
     }
 

@@ -9,8 +9,8 @@
 //! The [`KIND_*`] consts are the wire values used by that byte-level dispatch; the
 //! typed enums below carry the same values into the resource layouts, where zerocopy
 //! checks the discriminant at parse time. `Unset = 0` exists only in the all-zero
-//! construction state (a `write_*` starting from zeroed bytes); the views reject it,
-//! so it never persists.
+//! construction state (a `write_*` starting from zeroed bytes); the writers set the
+//! real kind before anything is stored, so it never persists.
 
 use zerocopy::{FromZeros, Immutable, IntoBytes, KnownLayout, Unaligned};
 
