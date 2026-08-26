@@ -24,11 +24,12 @@
 //! join this payload with the game milestone.
 
 use zerocopy::{
-    FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned, little_endian::U64 as Le64,
+    FromZeros, Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned,
+    little_endian::U64 as Le64,
 };
 
 use crate::{
-    program::kind::KIND_CONFIG,
+    program::kind::ConfigKind,
     runtime::{
         lock::LockEnum,
         lock_codec::{decode_lock_body_unchecked, validate_lock_body},
@@ -42,9 +43,9 @@ pub const CONFIG_HEADER_LEN: usize = core::mem::offset_of!(ConfigRaw, lock_tag) 
 
 /// Zerocopy DST: kind discriminator + fixed header + tag-driven variable body.
 #[repr(C)]
-#[derive(FromBytes, IntoBytes, Immutable, KnownLayout, Unaligned)]
+#[derive(FromZeros, IntoBytes, Immutable, KnownLayout, Unaligned)]
 pub struct ConfigRaw {
-    pub kind: u8,
+    pub kind: ConfigKind,
     pub min_withdrawal_amount: Le64,
     pub turn_ttl: Le64,
     pub covenant_id: [u8; 32],
@@ -58,13 +59,7 @@ pub struct ConfigView<'a>(&'a ConfigRaw);
 
 impl<'a> ConfigView<'a> {
     pub fn from_bytes(bytes: &'a [u8]) -> Result<Self, &'static str> {
-        if bytes.len() < CONFIG_HEADER_LEN {
-            return Err("config: too short for header");
-        }
-        let raw = ConfigRaw::ref_from_bytes(bytes).map_err(|_| "config: invalid layout")?;
-        if raw.kind != KIND_CONFIG {
-            return Err("config: wrong kind byte");
-        }
+        let raw = ConfigRaw::try_ref_from_bytes(bytes).map_err(|_| "config: invalid layout")?;
         validate_lock_body(raw.lock_tag, &raw.lock_body)?;
         Ok(Self(raw))
     }
@@ -104,13 +99,7 @@ pub struct ConfigViewMut<'a>(&'a mut ConfigRaw);
 
 impl<'a> ConfigViewMut<'a> {
     pub fn from_bytes_mut(bytes: &'a mut [u8]) -> Result<Self, &'static str> {
-        if bytes.len() < CONFIG_HEADER_LEN {
-            return Err("config: too short for header");
-        }
-        let raw = ConfigRaw::mut_from_bytes(bytes).map_err(|_| "config: invalid layout")?;
-        if raw.kind != KIND_CONFIG {
-            return Err("config: wrong kind byte");
-        }
+        let raw = ConfigRaw::try_mut_from_bytes(bytes).map_err(|_| "config: invalid layout")?;
         validate_lock_body(raw.lock_tag, &raw.lock_body)?;
         Ok(Self(raw))
     }
@@ -154,12 +143,16 @@ pub fn write_config(
     if out.len() != need {
         return Err("config: write buffer wrong length");
     }
-    out[0] = KIND_CONFIG;
-    out[1..9].copy_from_slice(&min_withdrawal_amount.to_le_bytes());
-    out[9..17].copy_from_slice(&turn_ttl.to_le_bytes());
-    out[17..49].copy_from_slice(covenant_id);
-    out[49] = lock.tag();
-    lock.write_body(&mut out[CONFIG_HEADER_LEN..]);
+    // Start from zeros: every field not written below takes its zero value, and the kind
+    // byte's zero value already parses as Config.
+    out.fill(0);
+    let raw = ConfigRaw::try_mut_from_bytes(out).map_err(|_| "config: invalid layout")?;
+    raw.kind = ConfigKind::Config;
+    raw.min_withdrawal_amount = Le64::new(min_withdrawal_amount);
+    raw.turn_ttl = Le64::new(turn_ttl);
+    raw.covenant_id = *covenant_id;
+    raw.lock_tag = lock.tag();
+    lock.write_body(&mut raw.lock_body);
     Ok(())
 }
 

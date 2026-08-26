@@ -7,7 +7,7 @@ use vprogs_zk_abi::transaction_processor::Resource;
 use crate::{
     program::{
         config::{CONFIG_HEADER_LEN, ConfigView, ConfigViewMut, config_total_len, write_config},
-        game::{GAME_WIRE_LEN, GameView, GameViewMut, write_game},
+        game::{Cell, GAME_WIRE_LEN, GameView, GameViewMut, write_game},
         kind::{KIND_CONFIG, KIND_GAME, KIND_USER, kind_of},
         user::{GameStats, USER_HEADER_LEN, UserView, UserViewMut, user_total_len, write_user},
     },
@@ -42,7 +42,7 @@ pub trait ResourceExt<'a> {
     fn init_game(
         &mut self,
         creator: &ResourceId,
-        creator_mark: u8,
+        creator_mark: Cell,
         stake: u64,
         rounds_total: u8,
     ) -> Result<(), &'static str>;
@@ -141,7 +141,7 @@ impl<'a> ResourceExt<'a> for Resource<'a> {
     fn init_game(
         &mut self,
         creator: &ResourceId,
-        creator_mark: u8,
+        creator_mark: Cell,
         stake: u64,
         rounds_total: u8,
     ) -> Result<(), &'static str> {

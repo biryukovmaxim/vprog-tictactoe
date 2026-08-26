@@ -4,9 +4,10 @@
 //! lock, so unlike config/user there is no tag-driven tail: the payload is fully fixed-size,
 //! created once at `GAME_WIRE_LEN`, and every later mutation is in-place.
 //! ```text
-//! [0]       kind          (KIND_GAME = 2; see `crate::program::kind`)
-//! [1]       state         (u8; 0=Open 1=Playing 2=First 3=Second 4=Draw; finished ⟺ >= 2)
-//! [2]       creator_mark  (u8; 1=X 2=O; the creator's mark in even rounds)
+//! [0]       kind          (GameKind::Game = 2; see `crate::program::kind`)
+//! [1]       state         (State; 0=Open 1=Playing 2=First 3=Second 4=Draw; finished ⟺ a
+//!                         win/draw variant)
+//! [2]       creator_mark  (Cell::X or Cell::O; the creator's mark in even rounds)
 //! [3]       rounds_total  (u8)
 //! [4..6]    round_wins    ([u8; 2])
 //! [6]       draws         (u8)
@@ -15,7 +16,7 @@
 //! [23..55]  players[0]    (creator ResourceId; never all-zero)
 //! [55..87]  players[1]    (joiner ResourceId; all-zero while Open)
 //! [87..99]  pending       (2x `cells [u8; 4] || head u8 || count u8`, seat-indexed)
-//! [99..108] board         ([u8; 9]; 0=Empty 1=X 2=O; zeroized on round completion)
+//! [99..108] board         ([Cell; 9]; zeroized on round completion)
 //! ```
 //!
 //! Derived, not stored: the current round is `round_wins[0] + round_wins[1] + draws`, the
@@ -29,25 +30,59 @@
 
 use vprogs_core_types::ResourceId;
 use zerocopy::{
-    FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned, little_endian::U64 as Le64,
+    FromZeros, Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned,
+    little_endian::U64 as Le64,
 };
 
-use crate::program::kind::KIND_GAME;
+use crate::program::kind::GameKind;
 
-/// Game is open for a joiner.
-pub const STATE_OPEN: u8 = 0;
-/// Match in progress.
-pub const STATE_PLAYING: u8 = 1;
-/// Finished: seat 0 (creator) takes the pot.
-pub const STATE_FIRST: u8 = 2;
-/// Finished: seat 1 (joiner) takes the pot.
-pub const STATE_SECOND: u8 = 3;
-/// Finished: equal round wins; the stake returns to each seat exactly.
-pub const STATE_DRAW: u8 = 4;
+/// Match lifecycle; the win/draw variants are exactly the finished states.
+#[repr(u8)]
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    FromZeros,
+    IntoBytes,
+    Immutable,
+    KnownLayout,
+    Unaligned
+)]
+pub enum State {
+    /// Open for a joiner.
+    Open = 0,
+    /// Match in progress.
+    Playing = 1,
+    /// Finished: seat 0 (creator) takes the pot.
+    First = 2,
+    /// Finished: seat 1 (joiner) takes the pot.
+    Second = 3,
+    /// Finished: equal round wins; the stake returns to each seat exactly.
+    Draw = 4,
+}
 
-/// Mark values; double as the board's non-empty cell values.
-pub const MARK_X: u8 = 1;
-pub const MARK_O: u8 = 2;
+/// A board cell; `creator_mark` reuses the same values minus `Empty` (rejected by
+/// `validate`), so the all-zero construction state parses.
+#[repr(u8)]
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    FromZeros,
+    IntoBytes,
+    Immutable,
+    KnownLayout,
+    Unaligned
+)]
+pub enum Cell {
+    Empty = 0,
+    X = 1,
+    O = 2,
+}
 
 /// Per-seat pending-turn capacity.
 pub const PENDING_CAP: usize = 4;
@@ -59,7 +94,7 @@ pub const GAME_WIRE_LEN: usize = core::mem::size_of::<GameRaw>();
 /// `(head + count) % PENDING_CAP`, pops at `head`. `count` gates everything (zero-fill is
 /// inert), so popped slots need no purge; the cursors and body are zeroed at game end.
 #[repr(C)]
-#[derive(Copy, Clone, FromBytes, IntoBytes, Immutable, KnownLayout, Unaligned)]
+#[derive(FromZeros, IntoBytes, Immutable, KnownLayout, Unaligned)]
 pub struct PendingQueue {
     pub cells: [u8; PENDING_CAP],
     pub head: u8,
@@ -69,10 +104,10 @@ pub struct PendingQueue {
 /// Whole-match fields; the embedded struct groups everything that lives for the game's
 /// lifetime, zeroized per-unit (the queues at game end).
 #[repr(C)]
-#[derive(FromBytes, IntoBytes, Immutable, KnownLayout, Unaligned)]
+#[derive(FromZeros, IntoBytes, Immutable, KnownLayout, Unaligned)]
 pub struct MatchRaw {
-    pub state: u8,
-    pub creator_mark: u8,
+    pub state: State,
+    pub creator_mark: Cell,
     pub rounds_total: u8,
     pub round_wins: [u8; 2],
     pub draws: u8,
@@ -84,11 +119,11 @@ pub struct MatchRaw {
 
 /// Zerocopy layout: kind discriminator + match struct + inlined round board.
 #[repr(C)]
-#[derive(FromBytes, IntoBytes, Immutable, KnownLayout, Unaligned)]
+#[derive(FromZeros, IntoBytes, Immutable, KnownLayout, Unaligned)]
 pub struct GameRaw {
-    pub kind: u8,
+    pub kind: GameKind,
     pub m: MatchRaw,
-    pub board: [u8; 9],
+    pub board: [Cell; 9],
 }
 
 /// Read-only view over a game resource. Shape and invariants validated at `from_bytes`
@@ -97,20 +132,18 @@ pub struct GameView<'a>(&'a GameRaw);
 
 impl<'a> GameView<'a> {
     pub fn from_bytes(bytes: &'a [u8]) -> Result<Self, &'static str> {
-        if bytes.len() != GAME_WIRE_LEN {
-            return Err("game: wrong length");
-        }
-        let raw = GameRaw::ref_from_bytes(bytes).map_err(|_| "game: invalid layout")?;
+        let raw = GameRaw::try_ref_from_bytes(bytes).map_err(|_| "game: invalid layout")?;
         validate(raw)?;
         Ok(Self(raw))
     }
 
-    pub fn state(&self) -> u8 {
+    pub fn state(&self) -> State {
         self.0.m.state
     }
 
-    /// The creator's mark in even rounds (the joiner's in odd); X or O.
-    pub fn creator_mark(&self) -> u8 {
+    /// The creator's mark in even rounds (the joiner's in odd); never `Empty` on a parsed
+    /// view.
+    pub fn creator_mark(&self) -> Cell {
         self.0.m.creator_mark
     }
 
@@ -147,14 +180,14 @@ impl<'a> GameView<'a> {
         (*j != ResourceId::default()).then_some(j)
     }
 
-    /// The current round's board; 0=Empty 1=X 2=O.
-    pub fn board(&self) -> &'a [u8; 9] {
+    /// The current round's board.
+    pub fn board(&self) -> &'a [Cell; 9] {
         &self.0.board
     }
 
-    /// Finished games are exactly the states at or above [`STATE_FIRST`].
+    /// Finished games are exactly the win/draw states.
     pub fn is_finished(&self) -> bool {
-        self.0.m.state >= STATE_FIRST
+        matches!(self.0.m.state, State::First | State::Second | State::Draw)
     }
 }
 
@@ -165,16 +198,13 @@ pub struct GameViewMut<'a>(&'a mut GameRaw);
 
 impl<'a> GameViewMut<'a> {
     pub fn from_bytes_mut(bytes: &'a mut [u8]) -> Result<Self, &'static str> {
-        if bytes.len() != GAME_WIRE_LEN {
-            return Err("game: wrong length");
-        }
-        let raw = GameRaw::mut_from_bytes(bytes).map_err(|_| "game: invalid layout")?;
+        let raw = GameRaw::try_mut_from_bytes(bytes).map_err(|_| "game: invalid layout")?;
         validate(raw)?;
         Ok(Self(raw))
     }
 
-    /// Mutable handle to the state byte.
-    pub fn set_state(&mut self, v: u8) {
+    /// Mutable handle to the state.
+    pub fn set_state(&mut self, v: State) {
         self.0.m.state = v;
     }
 
@@ -198,29 +228,26 @@ impl<'a> GameViewMut<'a> {
         self.0.m.players[1] = *id;
     }
 
-    /// The current round's board; round completion is `board_mut().fill(0)`.
-    pub fn board_mut(&mut self) -> &mut [u8; 9] {
+    /// The current round's board; round completion is `board_mut().fill(Cell::Empty)`.
+    pub fn board_mut(&mut self) -> &mut [Cell; 9] {
         &mut self.0.board
     }
 }
 
-/// Shared `from_bytes`/`from_bytes_mut` validation: every byte-range and invariant a
-/// reachable game state satisfies.
+/// Shared `from_bytes`/`from_bytes_mut` validation: the cross-field invariants zerocopy's
+/// discriminant checks cannot see. The enum bytes themselves (kind, state, mark, board
+/// cells) are already valid by the time this runs.
 fn validate(raw: &GameRaw) -> Result<(), &'static str> {
-    if raw.kind != KIND_GAME {
-        return Err("game: wrong kind byte");
+    if !matches!(raw.kind, GameKind::Game) {
+        return Err("game: kind is Unset");
     }
-    let m = &raw.m;
-    if m.state > STATE_DRAW {
-        return Err("game: unknown state");
+    if raw.m.creator_mark == Cell::Empty {
+        return Err("game: creator_mark is Empty");
     }
-    if m.creator_mark != MARK_X && m.creator_mark != MARK_O {
-        return Err("game: creator_mark must be X or O");
-    }
-    if m.players[0] == ResourceId::default() {
+    if raw.m.players[0] == ResourceId::default() {
         return Err("game: creator seat unset");
     }
-    for q in &m.pending {
+    for q in &raw.m.pending {
         if q.head as usize >= PENDING_CAP || q.count as usize > PENDING_CAP {
             return Err("game: pending queue cursors out of range");
         }
@@ -232,10 +259,9 @@ fn validate(raw: &GameRaw) -> Result<(), &'static str> {
     let mut os = 0usize;
     for &cell in &raw.board {
         match cell {
-            0 => {}
-            MARK_X => xs += 1,
-            MARK_O => os += 1,
-            _ => return Err("game: board cell not empty/X/O"),
+            Cell::Empty => {}
+            Cell::X => xs += 1,
+            Cell::O => os += 1,
         }
     }
     // X opens every round, so the mark counts can never differ by more than X's single
@@ -252,29 +278,24 @@ fn validate(raw: &GameRaw) -> Result<(), &'static str> {
 pub fn write_game(
     out: &mut [u8],
     creator: &ResourceId,
-    creator_mark: u8,
+    creator_mark: Cell,
     stake: u64,
     rounds_total: u8,
 ) -> Result<(), &'static str> {
     if out.len() != GAME_WIRE_LEN {
         return Err("game: write buffer wrong length");
     }
-    if creator_mark != MARK_X && creator_mark != MARK_O {
+    if creator_mark == Cell::Empty {
         return Err("game: creator_mark must be X or O");
     }
-    let raw = GameRaw::mut_from_bytes(out).map_err(|_| "game: invalid layout")?;
-    raw.kind = KIND_GAME;
-    raw.m.state = STATE_OPEN;
+    let raw = &mut GameRaw::new_zeroed();
+    raw.kind = GameKind::Game;
+    raw.m.state = State::Open;
     raw.m.creator_mark = creator_mark;
     raw.m.rounds_total = rounds_total;
-    raw.m.round_wins = [0; 2];
-    raw.m.draws = 0;
     raw.m.stake = Le64::new(stake);
-    raw.m.last_move_at = Le64::new(0);
-    raw.m.players = [*creator, ResourceId::default()];
-    let empty = PendingQueue { cells: [0; PENDING_CAP], head: 0, count: 0 };
-    raw.m.pending = [empty, empty];
-    raw.board = [0; 9];
+    raw.m.players[0] = *creator;
+    out.copy_from_slice(raw.as_bytes());
     Ok(())
 }
 
@@ -296,7 +317,7 @@ mod tests {
 
     fn game_buf() -> alloc::vec::Vec<u8> {
         let mut buf = vec![0u8; GAME_WIRE_LEN];
-        write_game(&mut buf, &id(0x11), MARK_X, 5_000, 3).unwrap();
+        write_game(&mut buf, &id(0x11), Cell::X, 5_000, 3).unwrap();
         buf
     }
 
@@ -304,11 +325,11 @@ mod tests {
     fn round_trip_through_write_game() {
         let creator = id(0x11);
         let mut buf = vec![0u8; GAME_WIRE_LEN];
-        write_game(&mut buf, &creator, MARK_O, 5_000, 3).unwrap();
+        write_game(&mut buf, &creator, Cell::O, 5_000, 3).unwrap();
 
         let view = GameView::from_bytes(&buf).unwrap();
-        assert_eq!(view.state(), STATE_OPEN);
-        assert_eq!(view.creator_mark(), MARK_O);
+        assert_eq!(view.state(), State::Open);
+        assert_eq!(view.creator_mark(), Cell::O);
         assert_eq!(view.rounds_total(), 3);
         assert_eq!(view.round_wins(), [0, 0]);
         assert_eq!(view.draws(), 0);
@@ -316,41 +337,47 @@ mod tests {
         assert_eq!(view.last_move_at(), 0);
         assert_eq!(view.creator(), &creator);
         assert_eq!(view.joiner(), None);
-        assert_eq!(view.board(), &[0u8; 9]);
+        assert_eq!(view.board(), &[Cell::Empty; 9]);
         assert!(!view.is_finished());
     }
 
     #[test]
-    fn write_game_rejects_bad_mark_and_length() {
+    fn write_game_rejects_empty_mark_and_wrong_length() {
         let creator = id(0x11);
         let mut buf = vec![0u8; GAME_WIRE_LEN];
-        assert!(write_game(&mut buf, &creator, 0, 5_000, 3).is_err());
-        assert!(write_game(&mut buf, &creator, 3, 5_000, 3).is_err());
+        assert!(write_game(&mut buf, &creator, Cell::Empty, 5_000, 3).is_err());
         let mut short = vec![0u8; GAME_WIRE_LEN - 1];
-        assert!(write_game(&mut short, &creator, MARK_X, 5_000, 3).is_err());
+        assert!(write_game(&mut short, &creator, Cell::X, 5_000, 3).is_err());
     }
 
     #[test]
     fn rejects_wrong_kind_byte() {
+        // 1 is the user kind: not a valid game discriminant.
         let mut buf = game_buf();
-        buf[0] = crate::program::kind::KIND_USER;
+        buf[0] = 1;
+        assert!(GameView::from_bytes(&buf).is_err());
+    }
+
+    #[test]
+    fn rejects_unset_kind_byte() {
+        // Unset parses at the zerocopy layer; the view must reject it so it never persists.
+        let mut buf = game_buf();
+        buf[0] = 0;
         assert!(GameView::from_bytes(&buf).is_err());
     }
 
     #[test]
     fn rejects_unknown_state() {
         let mut buf = game_buf();
-        buf[1] = STATE_DRAW + 1;
+        buf[1] = 5;
         assert!(GameView::from_bytes(&buf).is_err());
     }
 
     #[test]
-    fn rejects_bad_creator_mark() {
-        for bad in [0u8, MARK_O + 1] {
-            let mut buf = game_buf();
-            buf[2] = bad;
-            assert!(GameView::from_bytes(&buf).is_err());
-        }
+    fn rejects_empty_creator_mark() {
+        let mut buf = game_buf();
+        buf[2] = 0;
+        assert!(GameView::from_bytes(&buf).is_err());
     }
 
     #[test]
@@ -377,13 +404,13 @@ mod tests {
     fn rejects_impossible_mark_counts() {
         // O leading: X opens every round.
         let mut buf = game_buf();
-        buf[BOARD_OFF] = MARK_O;
+        buf[BOARD_OFF] = Cell::O as u8;
         assert!(GameView::from_bytes(&buf).is_err());
 
         // X two ahead: moves strictly alternate within a round.
         let mut buf = game_buf();
-        buf[BOARD_OFF] = MARK_X;
-        buf[BOARD_OFF + 1] = MARK_X;
+        buf[BOARD_OFF] = Cell::X as u8;
+        buf[BOARD_OFF + 1] = Cell::X as u8;
         assert!(GameView::from_bytes(&buf).is_err());
     }
 
@@ -413,24 +440,28 @@ mod tests {
         let mut buf = game_buf();
         {
             let mut mv = GameViewMut::from_bytes_mut(&mut buf).unwrap();
-            mv.set_state(STATE_PLAYING);
+            mv.set_state(State::Playing);
             mv.set_joiner(&joiner);
             mv.round_wins_mut()[1] = 2;
             *mv.draws_mut() = 1;
             mv.set_last_move_at(77_777);
-            mv.board_mut()[0] = MARK_X;
-            mv.board_mut()[4] = MARK_O;
+            mv.board_mut()[0] = Cell::X;
+            mv.board_mut()[4] = Cell::O;
         }
 
         let view = GameView::from_bytes(&buf).unwrap();
-        assert_eq!(view.state(), STATE_PLAYING);
+        assert_eq!(view.state(), State::Playing);
         assert_eq!(view.joiner(), Some(&joiner));
         assert_eq!(view.round_wins(), [0, 2]);
         assert_eq!(view.draws(), 1);
         assert_eq!(view.last_move_at(), 77_777);
-        assert_eq!(view.board()[0], MARK_X);
-        assert_eq!(view.board()[4], MARK_O);
+        assert_eq!(view.board()[0], Cell::X);
+        assert_eq!(view.board()[4], Cell::O);
         assert!(!view.is_finished());
+
+        // A finished state flips the flag.
+        GameViewMut::from_bytes_mut(&mut buf).unwrap().set_state(State::Draw);
+        assert!(GameView::from_bytes(&buf).unwrap().is_finished());
     }
 
     #[test]
@@ -439,16 +470,16 @@ mod tests {
         let mut buf = game_buf();
         {
             let mut mv = GameViewMut::from_bytes_mut(&mut buf).unwrap();
-            mv.set_state(STATE_PLAYING);
+            mv.set_state(State::Playing);
             mv.set_joiner(&joiner);
             mv.round_wins_mut()[0] = 1;
-            mv.board_mut()[0] = MARK_X;
-            mv.board_mut()[8] = MARK_O;
-            mv.board_mut().fill(0);
+            mv.board_mut()[0] = Cell::X;
+            mv.board_mut()[8] = Cell::O;
+            mv.board_mut().fill(Cell::Empty);
         }
 
         let view = GameView::from_bytes(&buf).unwrap();
-        assert_eq!(view.board(), &[0u8; 9]);
+        assert_eq!(view.board(), &[Cell::Empty; 9]);
         assert_eq!(view.round_wins(), [1, 0]);
         assert_eq!(view.joiner(), Some(&joiner));
     }

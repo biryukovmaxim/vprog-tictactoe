@@ -13,11 +13,12 @@
 //! ```
 
 use zerocopy::{
-    FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned, little_endian::U64 as Le64,
+    FromZeros, Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned,
+    little_endian::U64 as Le64,
 };
 
 use crate::{
-    program::kind::KIND_USER,
+    program::kind::UserKind,
     runtime::{
         lock::LockEnum,
         lock_codec::{decode_lock_body_unchecked, validate_lock_body},
@@ -42,9 +43,9 @@ pub struct GameStats {
 
 /// Zerocopy DST: kind discriminator + fixed header + tag-driven variable body.
 #[repr(C)]
-#[derive(FromBytes, IntoBytes, Immutable, KnownLayout, Unaligned)]
+#[derive(FromZeros, IntoBytes, Immutable, KnownLayout, Unaligned)]
 pub struct UserRaw {
-    pub kind: u8,
+    pub kind: UserKind,
     pub balance: Le64,
     pub games_started: Le64,
     pub games_won: Le64,
@@ -60,11 +61,8 @@ pub struct UserView<'a>(&'a UserRaw);
 
 impl<'a> UserView<'a> {
     pub fn from_bytes(bytes: &'a [u8]) -> Result<Self, &'static str> {
-        if bytes.len() < USER_HEADER_LEN {
-            return Err("user: too short for header");
-        }
-        let raw = UserRaw::ref_from_bytes(bytes).map_err(|_| "user: invalid layout")?;
-        if raw.kind != KIND_USER {
+        let raw = UserRaw::try_ref_from_bytes(bytes).map_err(|_| "user: invalid layout")?;
+        if !matches!(raw.kind, UserKind::User) {
             return Err("user: wrong kind byte");
         }
         validate_lock_body(raw.lock_tag, &raw.lock_body)?;
@@ -122,11 +120,8 @@ pub struct UserViewMut<'a>(&'a mut UserRaw);
 
 impl<'a> UserViewMut<'a> {
     pub fn from_bytes_mut(bytes: &'a mut [u8]) -> Result<Self, &'static str> {
-        if bytes.len() < USER_HEADER_LEN {
-            return Err("user: too short for header");
-        }
-        let raw = UserRaw::mut_from_bytes(bytes).map_err(|_| "user: invalid layout")?;
-        if raw.kind != KIND_USER {
+        let raw = UserRaw::try_mut_from_bytes(bytes).map_err(|_| "user: invalid layout")?;
+        if !matches!(raw.kind, UserKind::User) {
             return Err("user: wrong kind byte");
         }
         validate_lock_body(raw.lock_tag, &raw.lock_body)?;
@@ -187,14 +182,16 @@ pub fn write_user(
     if out.len() != need {
         return Err("user: write buffer wrong length");
     }
-    out[0] = KIND_USER;
-    out[1..9].copy_from_slice(&balance.to_le_bytes());
-    out[9..17].copy_from_slice(&stats.started.to_le_bytes());
-    out[17..25].copy_from_slice(&stats.won.to_le_bytes());
-    out[25..33].copy_from_slice(&stats.finished.to_le_bytes());
-    out[33..65].copy_from_slice(initial_lock_hash);
-    out[65] = lock.tag();
-    lock.write_body(&mut out[USER_HEADER_LEN..]);
+    out.fill(0);
+    let raw = UserRaw::try_mut_from_bytes(out).map_err(|_| "user: invalid layout")?;
+    raw.kind = UserKind::User;
+    raw.balance = Le64::new(balance);
+    raw.games_started = Le64::new(stats.started);
+    raw.games_won = Le64::new(stats.won);
+    raw.games_finished = Le64::new(stats.finished);
+    raw.initial_lock_hash = *initial_lock_hash;
+    raw.lock_tag = lock.tag();
+    lock.write_body(&mut raw.lock_body);
     Ok(())
 }
 
@@ -251,7 +248,7 @@ mod tests {
         let buf = vec![0u8; USER_HEADER_LEN + 31];
         // First, set the kind byte so we exercise the body-length check, not the kind check.
         let mut buf = buf;
-        buf[0] = KIND_USER;
+        buf[0] = UserKind::User as u8;
         buf[LOCK_TAG_OFFSET] = SchnorrLockView::TAG;
         assert!(UserView::from_bytes(&buf).is_err());
     }
@@ -317,14 +314,26 @@ mod tests {
         let ilh = hash(0xAA);
         let mut buf = vec![0u8; user_total_len(&lock)];
         write_user(&mut buf, 1, GameStats::default(), &ilh, &lock).unwrap();
-        buf[0] = KIND_USER + 7; // bogus
+        buf[0] = UserKind::User as u8 + 7; // bogus
+        assert!(UserView::from_bytes(&buf).is_err());
+    }
+
+    #[test]
+    fn rejects_unset_kind_byte() {
+        // Unset parses at the zerocopy layer; the view must reject it so it never persists.
+        let pubkey = pk(0x55);
+        let lock = LockEnum::Schnorr(SchnorrLockView { pubkey: &pubkey });
+        let ilh = hash(0xAA);
+        let mut buf = vec![0u8; user_total_len(&lock)];
+        write_user(&mut buf, 1, GameStats::default(), &ilh, &lock).unwrap();
+        buf[0] = 0;
         assert!(UserView::from_bytes(&buf).is_err());
     }
 
     #[test]
     fn rejects_unknown_lock_tag() {
         let mut buf = vec![0u8; USER_HEADER_LEN];
-        buf[0] = KIND_USER;
+        buf[0] = UserKind::User as u8;
         buf[LOCK_TAG_OFFSET] = 0xFF;
         assert!(UserView::from_bytes(&buf).is_err());
     }
