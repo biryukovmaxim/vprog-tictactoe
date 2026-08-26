@@ -3,9 +3,9 @@ use vprogs_zk_backend_risc0_runtime_processor::lifecycle::Lifecycle;
 
 use super::ApplyContext;
 use crate::{
-    program::{
+    program::resources::{
         config::{ConfigView, config_total_len, write_config},
-        resource_id::config_resource_id,
+        id::config_resource_id,
     },
     runtime::{
         genesis::GENESIS_PUBKEY,

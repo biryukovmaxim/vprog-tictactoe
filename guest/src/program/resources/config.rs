@@ -2,7 +2,7 @@
 //!
 //! Wire layout: kind byte + fixed header + tag-driven variable body:
 //! ```text
-//! [0]       kind                    (KIND_CONFIG = 0; see `crate::program::kind`)
+//! [0]       kind                    (KIND_CONFIG = 0; see `crate::program::resources::kind`)
 //! [1..9]    min_withdrawal_amount   (u64 LE)
 //! [9..17]   turn_ttl                (u64 LE, milliseconds)
 //! [17..49]  covenant_id             ([u8; 32]; the covenant a deposit's funding
@@ -29,7 +29,7 @@ use zerocopy::{
 };
 
 use crate::{
-    program::kind::ConfigKind,
+    program::resources::kind::ConfigKind,
     runtime::{
         lock::LockEnum,
         lock_codec::{decode_lock_body_unchecked, validate_lock_body},

@@ -19,10 +19,10 @@ use withdraw::apply_withdraw;
 // re-exported for one import site for the apply fns below.
 pub use crate::runtime::ApplyContext;
 use crate::{
-    program::{
+    program::resources::{
         config::ConfigView,
-        resource_ext::ResourceExt,
-        resource_id::{config_resource_id, derive_user_resource},
+        ext::ResourceExt,
+        id::{config_resource_id, derive_user_resource},
     },
     runtime::{
         ix::read_resource_idx,

@@ -4,7 +4,7 @@
 use vprogs_zk_abi::{Error as AbiError, Result as AbiResult, withdrawal::StandardSpk};
 
 use super::{ApplyContext, view_config_at};
-use crate::program::resource_ext::ResourceExt;
+use crate::program::resources::ext::ResourceExt;
 
 /// Debits `amount` from the user at `user_idx` and emits an L2-to-L1 exit to `dest`.
 ///

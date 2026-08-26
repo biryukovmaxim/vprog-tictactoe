@@ -7,8 +7,10 @@
 //!   machinery (lock/signer traits, auth, the generic apply context this runtime instantiates over
 //!   its auth context, tx-input parsing, lifecycle, sig-message digest) is imported from vprogs'
 //!   runtime-processor lib on branch `guest-batteries` and re-exported there.
-//! - [`program`]: this program's logic: accounts (config, deposit, transfer, withdraw) and the
-//!   staked tic-tac-toe game (landed next), plus the deposit policy.
+//! - [`program`]: this program's logic: the resources (config, user, game payloads, views, kinds,
+//!   domains, id derivations) in [`program::resources`], the actions (config, deposit, transfer,
+//!   withdraw; the staked game lands next) in [`program::action`], the deposit policy, and the
+//!   dispatch loop.
 //!
 //! The dependency direction is one-way: `program` may use `runtime`, never the reverse.
 //!

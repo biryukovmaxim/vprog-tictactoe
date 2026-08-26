@@ -1,20 +1,13 @@
-//! Tic-tac-toe program logic: this app's resources, kinds and actions.
+//! Tic-tac-toe program logic: the app's resources and the actions over them.
 //!
-//! Program-owned decisions live here: the resource kinds (config, user, game) and their
-//! per-kind domain tags / id derivations (`kind`, `domain`, `resource_id`), the resource wire
-//! formats (`config`, `user`, later `game`) with the user resource carrying the game counters
-//! the game derivation and stats need, and the actions (wire types, decode, apply) in
-//! [`action`]. The account model is the starting point; the staked game lands on top.
+//! Program-owned decisions live here: the resources (payloads, views, kinds, domains,
+//! id derivations) in [`resources`], the actions (wire types, decode, apply) in
+//! [`action`], the deposit policy in [`deposit_policy`], and the thin dispatch loop in
+//! [`run`]. The account model is the starting point; the staked game lands on top.
 //!
 //! `program` may use [`crate::runtime`] and the vprogs batteries, never the reverse.
 
 pub mod action;
-pub mod config;
 pub mod deposit_policy;
-pub mod domain;
-pub mod game;
-pub mod kind;
-pub mod resource_ext;
-pub mod resource_id;
+pub mod resources;
 pub mod run;
-pub mod user;

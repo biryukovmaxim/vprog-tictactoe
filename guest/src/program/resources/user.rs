@@ -2,7 +2,7 @@
 //!
 //! Wire layout: kind byte + fixed header + tag-driven variable body:
 //! ```text
-//! [0]       kind                (KIND_USER = 1; see `crate::program::kind`)
+//! [0]       kind                (KIND_USER = 1; see `crate::program::resources::kind`)
 //! [1..9]    balance             (u64 LE)
 //! [9..17]   games_started       (u64 LE; game-id derivation seed)
 //! [17..25]  games_won           (u64 LE)
@@ -18,7 +18,7 @@ use zerocopy::{
 };
 
 use crate::{
-    program::kind::UserKind,
+    program::resources::kind::UserKind,
     runtime::{
         lock::LockEnum,
         lock_codec::{decode_lock_body_unchecked, validate_lock_body},

@@ -13,7 +13,7 @@ use vprogs_zk_backend_risc0_runtime_processor::{
 };
 
 use super::{ApplyContext, validate_user_create};
-use crate::{program::resource_ext::ResourceExt, runtime::lock::LockEnum};
+use crate::{program::resources::ext::ResourceExt, runtime::lock::LockEnum};
 
 /// Moves `amount` from `source_idx` to `dest_idx`. The source must be an existing user whose
 /// current lock authorizes the move. The destination is credited if it already exists, or created

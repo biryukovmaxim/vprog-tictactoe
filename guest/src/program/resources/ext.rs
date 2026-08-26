@@ -5,7 +5,7 @@ use vprogs_core_types::ResourceId;
 use vprogs_zk_abi::transaction_processor::Resource;
 
 use crate::{
-    program::{
+    program::resources::{
         config::{CONFIG_HEADER_LEN, ConfigView, ConfigViewMut, config_total_len, write_config},
         game::{Cell, GAME_WIRE_LEN, GameView, GameViewMut, write_game},
         kind::{KIND_CONFIG, KIND_GAME, KIND_USER, kind_of},

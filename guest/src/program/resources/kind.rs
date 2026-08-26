@@ -2,7 +2,7 @@
 //! distinguishes one typed payload from another (config vs user vs game) without
 //! re-hashing the resource id.
 //!
-//! Views in `crate::program::resource_ext` read this byte to dispatch into the
+//! Views in `crate::program::resources::ext` read this byte to dispatch into the
 //! typed view; apply functions in `crate::program::action` use it to reject ix that
 //! aimed an action at the wrong kind of resource.
 //!

@@ -10,7 +10,7 @@ use vprogs_zk_backend_risc0_runtime_processor::{
 };
 
 use super::{ApplyContext, validate_user_create, view_config_at};
-use crate::{program::resource_ext::ResourceExt, runtime::lock::LockEnum};
+use crate::{program::resources::ext::ResourceExt, runtime::lock::LockEnum};
 
 pub(super) fn apply_deposit<'a, P: DepositPolicy<Lock<'a> = LockEnum<'a>>>(
     user_idx: u8,

@@ -4,7 +4,7 @@
 //! lock, so unlike config/user there is no tag-driven tail: the payload is fully fixed-size,
 //! created once at `GAME_WIRE_LEN`, and every later mutation is in-place.
 //! ```text
-//! [0]       kind          (GameKind::Game = 2; see `crate::program::kind`)
+//! [0]       kind          (GameKind::Game = 2; see `crate::program::resources::kind`)
 //! [1]       state         (State; 0=Open 1=Playing 2=First 3=Second 4=Draw; finished ⟺ a
 //!                         win/draw variant)
 //! [2]       creator_mark  (Cell::X or Cell::O; the creator's mark in even rounds)
@@ -34,7 +34,7 @@ use zerocopy::{
     little_endian::U64 as Le64,
 };
 
-use crate::program::kind::GameKind;
+use crate::program::resources::kind::GameKind;
 
 /// Match lifecycle; the win/draw variants are exactly the finished states.
 #[repr(u8)]

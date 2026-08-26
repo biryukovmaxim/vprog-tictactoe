@@ -1,6 +1,6 @@
 //! Domain-separated resource id derivations: one per resource kind, each under its own
-//! [`Domain`] tag (see `crate::program::domain`), so the three keyspaces are uncollidable
-//! regardless of seed content.
+//! [`Domain`] tag (see `crate::program::resources::domain`), so the three keyspaces are
+//! uncollidable regardless of seed content.
 //!
 //! - **Config** (singleton): seeded by a fixed label.
 //! - **User**: seeded by the 32-byte identity hash of the initial lock controlling the resource.
@@ -10,7 +10,7 @@
 use vprogs_core_types::ResourceId;
 use vprogs_zk_backend_risc0_api::{Hasher, Sha256};
 
-use crate::program::domain::Domain;
+use crate::program::resources::domain::Domain;
 
 /// The singleton config resource id.
 pub fn config_resource_id() -> ResourceId {
