@@ -33,41 +33,64 @@ use crate::{
     },
 };
 
-/// Action variant: update an existing config resource.
-pub const ACTION_TAG_UPDATE: u8 = 0x01;
-/// Action variant: bootstrap (create) the singleton config resource. Gated by
-/// the env-provided genesis pubkey at apply time.
-pub const ACTION_TAG_INIT: u8 = 0x02;
-/// Action variant: move balance between two user resources, creating the
-/// destination when its slot is new and a dest lock is supplied. Auth is checked
-/// against the source's current lock; the destination is not authed.
-pub const ACTION_TAG_TRANSFER: u8 = 0x03;
-/// Action variant: rotate the lock on a user resource. The current lock must
-/// authorize the rotation; `initial_lock_hash` is preserved.
-pub const ACTION_TAG_UPDATE_USER_LOCK: u8 = 0x04;
-/// Action variant: credit a user from an L1 deposit output, creating the user
-/// when the slot is new (the sole path that creates a user resource). The
-/// funding output at `output_idx` of this tx must pay
-/// `DepositPolicy::deposit_spk(..)`; the credited amount is that output's
-/// `value`.
-pub const ACTION_TAG_DEPOSIT: u8 = 0x05;
-/// Action variant: debit a user and emit an L2-to-L1 exit to `dest`. Authorized by the user's
-/// current lock; enforces `config.min_withdrawal_amount`.
-pub const ACTION_TAG_WITHDRAW: u8 = 0x06;
-/// Action variant: create an open staked game, locking `stake` from the creator's balance.
-/// Auth: the creator's user lock. The game slot must be new and carry
-/// `derive_game_resource(creator's initial_lock_hash, games_started)`.
-pub const ACTION_TAG_CREATE_GAME: u8 = 0x07;
-/// Action variant: join an open game, locking the matching stake from the joiner's balance and
-/// starting play. Auth: the joiner's user lock.
-pub const ACTION_TAG_JOIN_GAME: u8 = 0x08;
-/// Action variant: place a mark on the board of a playing game. Auth: the to-move player's lock.
-/// (Reserved.)
-pub const ACTION_TAG_TURN: u8 = 0x09;
+/// Action discriminant on the ix wire: the byte that precedes every action body. Wire values
+/// are fixed; new actions append.
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum ActionTag {
+    /// Update an existing config resource.
+    Update = 0x01,
+    /// Bootstrap (create) the singleton config resource. Gated by the env-provided genesis
+    /// pubkey at apply time.
+    Init = 0x02,
+    /// Move balance between two user resources, creating the destination when its slot is new
+    /// and a dest lock is supplied. Auth is checked against the source's current lock; the
+    /// destination is not authed.
+    Transfer = 0x03,
+    /// Rotate the lock on a user resource. The current lock must authorize the rotation;
+    /// `initial_lock_hash` is preserved.
+    UpdateUserLock = 0x04,
+    /// Credit a user from an L1 deposit output, creating the user when the slot is new (the
+    /// sole path that creates a user resource). The funding output at `output_idx` of this tx
+    /// must pay `DepositPolicy::deposit_spk(..)`; the credited amount is that output's `value`.
+    Deposit = 0x05,
+    /// Debit a user and emit an L2-to-L1 exit to `dest`. Authorized by the user's current
+    /// lock; enforces `config.min_withdrawal_amount`.
+    Withdraw = 0x06,
+    /// Create an open staked game, locking `stake` from the creator's balance. Auth: the
+    /// creator's user lock. The game slot must be new and carry
+    /// `derive_game_resource(creator's initial_lock_hash, games_started)`.
+    CreateGame = 0x07,
+    /// Join an open game, locking the matching stake from the joiner's balance and starting
+    /// play. Auth: the joiner's user lock.
+    JoinGame = 0x08,
+    /// Place a mark on the board of a playing game. Auth: the to-move player's lock.
+    /// (Reserved: no decode arm yet.)
+    Turn = 0x09,
+}
+
+impl TryFrom<u8> for ActionTag {
+    type Error = ();
+
+    fn try_from(v: u8) -> Result<Self, Self::Error> {
+        match v {
+            0x01 => Ok(Self::Update),
+            0x02 => Ok(Self::Init),
+            0x03 => Ok(Self::Transfer),
+            0x04 => Ok(Self::UpdateUserLock),
+            0x05 => Ok(Self::Deposit),
+            0x06 => Ok(Self::Withdraw),
+            0x07 => Ok(Self::CreateGame),
+            0x08 => Ok(Self::JoinGame),
+            0x09 => Ok(Self::Turn),
+            _ => Err(()),
+        }
+    }
+}
 
 /// Read view over a single action entry.
 pub struct ActionView<'a> {
-    pub action_tag: u8,
+    pub action_tag: ActionTag,
     pub body: ActionBody<'a>,
 }
 
@@ -158,9 +181,10 @@ pub enum ActionBody<'a> {
 /// Decodes one action entry (`action_tag u8 || body`), bounds-checking every
 /// resource index against `n_resources`.
 pub fn decode_action<'a>(buf: &mut &'a [u8], n_resources: usize) -> CodecResult<ActionView<'a>> {
-    let action_tag = buf.byte("action.action_tag")?;
+    let action_tag = ActionTag::try_from(buf.byte("action.action_tag")?)
+        .map_err(|_| Error::Decode("action: unknown tag"))?;
     let body = match action_tag {
-        ACTION_TAG_UPDATE => {
+        ActionTag::Update => {
             let config_idx = read_resource_idx(buf, "action.update.config_idx", n_resources)?;
             let new_min_withdrawal_amount =
                 buf.le_u64("action.update.new_min_withdrawal_amount")?;
@@ -175,7 +199,7 @@ pub fn decode_action<'a>(buf: &mut &'a [u8], n_resources: usize) -> CodecResult<
                 new_lock,
             }
         }
-        ACTION_TAG_INIT => {
+        ActionTag::Init => {
             let config_idx = read_resource_idx(buf, "action.init.config_idx", n_resources)?;
             let new_min_withdrawal_amount = buf.le_u64("action.init.new_min_withdrawal_amount")?;
             let new_turn_ttl = buf.le_u64("action.init.new_turn_ttl")?;
@@ -189,7 +213,7 @@ pub fn decode_action<'a>(buf: &mut &'a [u8], n_resources: usize) -> CodecResult<
                 new_lock,
             }
         }
-        ACTION_TAG_TRANSFER => {
+        ActionTag::Transfer => {
             let source_idx = read_resource_idx(buf, "action.transfer.source_idx", n_resources)?;
             let dest_idx = read_resource_idx(buf, "action.transfer.dest_idx", n_resources)?;
             let amount = buf.le_u64("action.transfer.amount")?;
@@ -202,19 +226,19 @@ pub fn decode_action<'a>(buf: &mut &'a [u8], n_resources: usize) -> CodecResult<
             };
             ActionBody::Transfer { source_idx, dest_idx, amount, dest_init }
         }
-        ACTION_TAG_UPDATE_USER_LOCK => {
+        ActionTag::UpdateUserLock => {
             let user_idx = read_resource_idx(buf, "action.update_user_lock.user_idx", n_resources)?;
             let new_lock = decode_lock(buf)?;
             ActionBody::UpdateUserLock { user_idx, new_lock }
         }
-        ACTION_TAG_DEPOSIT => {
+        ActionTag::Deposit => {
             let user_idx = read_resource_idx(buf, "action.deposit.user_idx", n_resources)?;
             let config_idx = read_resource_idx(buf, "action.deposit.config_idx", n_resources)?;
             let output_idx = buf.le_u32("action.deposit.output_idx")?;
             let initial_lock = decode_lock(buf)?;
             ActionBody::Deposit { user_idx, config_idx, output_idx, initial_lock }
         }
-        ACTION_TAG_WITHDRAW => {
+        ActionTag::Withdraw => {
             let user_idx = read_resource_idx(buf, "action.withdraw.user_idx", n_resources)?;
             let config_idx = read_resource_idx(buf, "action.withdraw.config_idx", n_resources)?;
             let amount = buf.le_u64("action.withdraw.amount")?;
@@ -224,7 +248,7 @@ pub fn decode_action<'a>(buf: &mut &'a [u8], n_resources: usize) -> CodecResult<
                 .map_err(|_| Error::Decode("action.withdraw: bad dest spk"))?;
             ActionBody::Withdraw { user_idx, config_idx, amount, dest }
         }
-        ACTION_TAG_CREATE_GAME => {
+        ActionTag::CreateGame => {
             let creator_idx =
                 read_resource_idx(buf, "action.create_game.creator_idx", n_resources)?;
             let game_idx = read_resource_idx(buf, "action.create_game.game_idx", n_resources)?;
@@ -238,12 +262,14 @@ pub fn decode_action<'a>(buf: &mut &'a [u8], n_resources: usize) -> CodecResult<
             };
             ActionBody::CreateGame { creator_idx, game_idx, stake, rounds, mark }
         }
-        ACTION_TAG_JOIN_GAME => {
+        ActionTag::JoinGame => {
             let game_idx = read_resource_idx(buf, "action.join_game.game_idx", n_resources)?;
             let joiner_idx = read_resource_idx(buf, "action.join_game.joiner_idx", n_resources)?;
             ActionBody::JoinGame { game_idx, joiner_idx }
         }
-        _ => return Err(Error::Decode("action: unknown tag")),
+        // Exhaustiveness makes the reservation explicit: when the Turn slice lands, this arm
+        // gains its body decoder.
+        ActionTag::Turn => return Err(Error::Decode("action.turn: reserved tag")),
     };
     Ok(ActionView { action_tag, body })
 }
@@ -365,7 +391,7 @@ mod tests {
     /// `updater_idx u8 || new_min u64 || new_turn_ttl u64 || covenant_id[32] || schnorr_lock(pk)`.
     fn update_action(updater_idx: u8, new_min: u64, new_turn_ttl: u64, pk: [u8; 32]) -> Vec<u8> {
         let mut body = Vec::new();
-        body.push(ACTION_TAG_UPDATE);
+        body.push(ActionTag::Update as u8);
         body.push(updater_idx);
         body.extend_from_slice(&new_min.to_le_bytes());
         body.extend_from_slice(&new_turn_ttl.to_le_bytes());
@@ -515,7 +541,7 @@ mod tests {
 
     fn transfer_action(source: u8, dest: u8, amount: u64) -> Vec<u8> {
         let mut body = Vec::new();
-        body.push(ACTION_TAG_TRANSFER);
+        body.push(ActionTag::Transfer as u8);
         body.push(source);
         body.push(dest);
         body.extend_from_slice(&amount.to_le_bytes());
@@ -525,7 +551,7 @@ mod tests {
 
     fn transfer_create_action(source: u8, dest: u8, amount: u64, pk: [u8; 32]) -> Vec<u8> {
         let mut body = Vec::new();
-        body.push(ACTION_TAG_TRANSFER);
+        body.push(ActionTag::Transfer as u8);
         body.push(source);
         body.push(dest);
         body.extend_from_slice(&amount.to_le_bytes());
@@ -537,7 +563,7 @@ mod tests {
 
     fn update_user_lock_action(user_idx: u8, pk: [u8; 32]) -> Vec<u8> {
         let mut body = Vec::new();
-        body.push(ACTION_TAG_UPDATE_USER_LOCK);
+        body.push(ActionTag::UpdateUserLock as u8);
         body.push(user_idx);
         body.push(SchnorrLockView::TAG);
         body.extend_from_slice(&pk);
@@ -583,7 +609,7 @@ mod tests {
         let mut ix = 0u32.to_le_bytes().to_vec();
         ix.extend_from_slice(&1u32.to_le_bytes());
         let mut body = Vec::new();
-        body.push(ACTION_TAG_TRANSFER);
+        body.push(ActionTag::Transfer as u8);
         body.push(0); // source
         body.push(1); // dest
         body.extend_from_slice(&500u64.to_le_bytes());
@@ -625,7 +651,7 @@ mod tests {
     /// schnorr_lock(pk)`.
     fn deposit_action(user_idx: u8, config_idx: u8, output_idx: u32, pk: [u8; 32]) -> Vec<u8> {
         let mut body = Vec::new();
-        body.push(ACTION_TAG_DEPOSIT);
+        body.push(ActionTag::Deposit as u8);
         body.push(user_idx);
         body.push(config_idx);
         body.extend_from_slice(&output_idx.to_le_bytes());
@@ -638,7 +664,7 @@ mod tests {
     /// spk_payload`.
     fn withdraw_action_pubkey(user_idx: u8, amount: u64, pk: [u8; 32]) -> Vec<u8> {
         let mut body = Vec::new();
-        body.push(ACTION_TAG_WITHDRAW);
+        body.push(ActionTag::Withdraw as u8);
         body.push(user_idx);
         body.push(0); // config_idx
         body.extend_from_slice(&amount.to_le_bytes());
@@ -649,7 +675,7 @@ mod tests {
 
     fn withdraw_action_pubkey_ecdsa(user_idx: u8, amount: u64, pk: [u8; 33]) -> Vec<u8> {
         let mut body = Vec::new();
-        body.push(ACTION_TAG_WITHDRAW);
+        body.push(ActionTag::Withdraw as u8);
         body.push(user_idx);
         body.push(0); // config_idx
         body.extend_from_slice(&amount.to_le_bytes());
@@ -660,7 +686,7 @@ mod tests {
 
     fn withdraw_action_script_hash(user_idx: u8, amount: u64, hash: [u8; 32]) -> Vec<u8> {
         let mut body = Vec::new();
-        body.push(ACTION_TAG_WITHDRAW);
+        body.push(ActionTag::Withdraw as u8);
         body.push(user_idx);
         body.push(0); // config_idx
         body.extend_from_slice(&amount.to_le_bytes());
@@ -770,7 +796,7 @@ mod tests {
         let mut ix = 0u32.to_le_bytes().to_vec();
         ix.extend_from_slice(&1u32.to_le_bytes());
         let mut body = Vec::new();
-        body.push(ACTION_TAG_WITHDRAW);
+        body.push(ActionTag::Withdraw as u8);
         body.push(0u8); // user_idx
         body.extend_from_slice(&500u64.to_le_bytes());
         body.push(0xFF); // bad tag
@@ -791,7 +817,7 @@ mod tests {
         mark: u8,
     ) -> Vec<u8> {
         let mut body = Vec::new();
-        body.push(ACTION_TAG_CREATE_GAME);
+        body.push(ActionTag::CreateGame as u8);
         body.push(creator_idx);
         body.push(game_idx);
         body.extend_from_slice(&stake.to_le_bytes());
@@ -801,7 +827,7 @@ mod tests {
     }
 
     fn join_game_action(game_idx: u8, joiner_idx: u8) -> Vec<u8> {
-        vec![ACTION_TAG_JOIN_GAME, game_idx, joiner_idx]
+        vec![ActionTag::JoinGame as u8, game_idx, joiner_idx]
     }
 
     #[test]
@@ -888,5 +914,38 @@ mod tests {
 
             assert!(decode_ix(&ix, 2, decode_action).is_err());
         }
+    }
+
+    // ActionTag <-> wire byte
+
+    /// Every variant maps to exactly one wire byte and back; the bounds (0, 0x0A) reject.
+    /// A new variant added without a `TryFrom` arm fails here.
+    #[test]
+    fn action_tag_round_trips_every_variant() {
+        for tag in [
+            ActionTag::Update,
+            ActionTag::Init,
+            ActionTag::Transfer,
+            ActionTag::UpdateUserLock,
+            ActionTag::Deposit,
+            ActionTag::Withdraw,
+            ActionTag::CreateGame,
+            ActionTag::JoinGame,
+            ActionTag::Turn,
+        ] {
+            assert_eq!(ActionTag::try_from(tag as u8), Ok(tag));
+        }
+        assert!(ActionTag::try_from(0x00).is_err());
+        assert!(ActionTag::try_from(0x0A).is_err());
+        assert!(ActionTag::try_from(0xFF).is_err());
+    }
+
+    #[test]
+    fn decode_rejects_reserved_turn_tag() {
+        let mut ix = 0u32.to_le_bytes().to_vec();
+        ix.extend_from_slice(&1u32.to_le_bytes());
+        ix.push(ActionTag::Turn as u8);
+
+        assert!(decode_ix(&ix, 1, decode_action).is_err());
     }
 }
