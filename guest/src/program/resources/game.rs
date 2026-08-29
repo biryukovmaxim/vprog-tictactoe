@@ -101,6 +101,41 @@ pub struct PendingQueue {
     pub count: u8,
 }
 
+impl PendingQueue {
+    /// Appends `cell` in insert order, or returns `false` when the ring is full.
+    pub fn push(&mut self, cell: u8) -> bool {
+        if self.count as usize == PENDING_CAP {
+            return false;
+        }
+        let tail = (self.head as usize + self.count as usize) % PENDING_CAP;
+        self.cells[tail] = cell;
+        self.count += 1;
+        true
+    }
+
+    /// Pops the oldest entry; `None` when empty. The popped slot lingers (a cursor, not a
+    /// purge) until its reuse or the game-end zeroing.
+    pub fn pop(&mut self) -> Option<u8> {
+        if self.count == 0 {
+            return None;
+        }
+        let cell = self.cells[self.head as usize];
+        self.head = (self.head + 1) % PENDING_CAP as u8;
+        self.count -= 1;
+        Some(cell)
+    }
+
+    /// The oldest entry without removing it; `None` when empty.
+    pub fn peek(&self) -> Option<u8> {
+        (self.count > 0).then(|| self.cells[self.head as usize])
+    }
+
+    /// Whether the queue holds no entries.
+    pub fn is_empty(&self) -> bool {
+        self.count == 0
+    }
+}
+
 /// Whole-match fields; the embedded struct groups everything that lives for the game's
 /// lifetime, zeroized per-unit (the queues at game end).
 #[repr(C)]
@@ -203,6 +238,12 @@ impl<'a> GameViewMut<'a> {
         Ok(Self(raw))
     }
 
+    /// Read-only view over the same bytes; every [`GameView`] accessor is available for the
+    /// read-compute-write steps of an in-place update.
+    pub fn view(&self) -> GameView<'_> {
+        GameView(self.0)
+    }
+
     /// Mutable handle to the state.
     pub fn set_state(&mut self, v: State) {
         self.0.m.state = v;
@@ -231,6 +272,18 @@ impl<'a> GameViewMut<'a> {
     /// The current round's board; round completion is `board_mut().fill(Cell::Empty)`.
     pub fn board_mut(&mut self) -> &mut [Cell; 9] {
         &mut self.0.board
+    }
+
+    /// One seat's pending-queue ring; when to push or pop belongs to the game actions.
+    pub fn pending_mut(&mut self, seat: usize) -> &mut PendingQueue {
+        &mut self.0.m.pending[seat]
+    }
+
+    /// Zeroes both queues: match end only, since entries persist across rounds by design.
+    pub fn clear_pending(&mut self) {
+        for q in &mut self.0.m.pending {
+            *q = PendingQueue::new_zeroed();
+        }
     }
 }
 
@@ -385,5 +438,89 @@ mod tests {
         assert_eq!(view.board(), &[Cell::Empty; 9]);
         assert_eq!(view.round_wins(), [1, 0]);
         assert_eq!(view.joiner(), Some(&joiner));
+    }
+
+    // Pending-queue ring
+
+    #[test]
+    fn queue_pops_in_push_order() {
+        let mut q = PendingQueue::new_zeroed();
+        for cell in [1u8, 2, 3] {
+            assert!(q.push(cell));
+        }
+        assert_eq!(q.pop(), Some(1));
+        assert_eq!(q.pop(), Some(2));
+        assert_eq!(q.pop(), Some(3));
+        assert!(q.is_empty());
+    }
+
+    #[test]
+    fn queue_rejects_push_past_capacity() {
+        let mut q = PendingQueue::new_zeroed();
+        for cell in 0u8..PENDING_CAP as u8 {
+            assert!(q.push(cell));
+        }
+        assert!(!q.push(9));
+    }
+
+    /// Pop-then-push wraps the tail back over drained slots without disturbing order.
+    #[test]
+    fn queue_wraps_after_pops() {
+        let mut q = PendingQueue::new_zeroed();
+        q.push(10);
+        q.push(11);
+        q.push(12);
+        assert_eq!(q.pop(), Some(10));
+        assert_eq!(q.pop(), Some(11));
+        assert!(q.push(13));
+        assert!(q.push(14));
+        assert_eq!(q.pop(), Some(12));
+        assert_eq!(q.pop(), Some(13));
+        assert_eq!(q.pop(), Some(14));
+        assert_eq!(q.pop(), None);
+    }
+
+    #[test]
+    fn queue_pop_on_empty_is_none() {
+        let mut q = PendingQueue::new_zeroed();
+        assert_eq!(q.pop(), None);
+    }
+
+    /// Draining leaves stale bytes in `cells`; `count == 0` keeps them inert on re-push
+    /// (every live slot is rewritten) and on pop (never reached).
+    #[test]
+    fn drained_slots_linger_inertly() {
+        let mut q = PendingQueue::new_zeroed();
+        q.push(7);
+        assert_eq!(q.pop(), Some(7));
+        assert_eq!(q.cells[0], 7, "slot lingers by design");
+        assert!(q.is_empty());
+        assert_eq!(q.pop(), None);
+    }
+
+    #[test]
+    fn view_pending_is_seat_indexed_and_clearable() {
+        let mut buf = game_buf();
+        {
+            let mut mv = GameViewMut::from_bytes_mut(&mut buf).unwrap();
+            mv.pending_mut(0).push(3);
+            mv.pending_mut(1).push(5);
+            mv.pending_mut(1).push(6);
+        }
+        {
+            let mut mv = GameViewMut::from_bytes_mut(&mut buf).unwrap();
+            assert_eq!(mv.pending_mut(0).pop(), Some(3));
+            assert_eq!(mv.pending_mut(1).pop(), Some(5));
+            assert_eq!(mv.pending_mut(1).pop(), Some(6));
+        }
+        {
+            let mut mv = GameViewMut::from_bytes_mut(&mut buf).unwrap();
+            mv.pending_mut(0).push(1);
+            mv.pending_mut(1).push(2);
+            mv.clear_pending();
+        }
+        let mut mv = GameViewMut::from_bytes_mut(&mut buf).unwrap();
+        assert!(mv.pending_mut(0).is_empty());
+        assert!(mv.pending_mut(1).is_empty());
     }
 }
