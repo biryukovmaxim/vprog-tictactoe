@@ -74,7 +74,7 @@ own actions, accounts and game rules.
 - [ ] vprogs feature: app-level custom journal data via closures (prerequisite for indexes)
 - [ ] Node DA: indexer logic to find open games (rides on the vprogs feature above)
 - [x] Node `ttd`: runner driver (execution and proving modes, devmode stub and GPU proving; DA server pending journal feature)
-- [ ] Driver `ttflow`: scripted scenarios
+- [x] Driver `ttflow`: scripted scenarios
 - [ ] Web frontend: wallet, board, trust ladder (optimistic → L2 → settled → confirmed)
 - [ ] Env-gated L1 e2e against a local testnet-10 fork node
 
@@ -98,6 +98,16 @@ TT_PRIVATE_KEY=<32-byte-hex-key> \
 TT_BATCH_ELF=../vprogs/zk/backend/risc0/batch-processor/compiled/program.elf \
 TT_AGGREGATOR_ELF=../vprogs/zk/backend/risc0/batch-aggregator/compiled/program.elf \
 cargo run -p vprog-tictactoe-node
+```
+
+Run the `ttflow` scenario driver against a running node and lane:
+
+```bash
+TT_WRPC_URL=ws://127.0.0.1:17210 \
+TT_LANE_ID=1 \
+TT_COVENANT_ID=<32-byte-hex-covenant-id> \
+TTFLOW_PRIVATE_KEY=<32-byte-hex-operator-funding-key> \
+cargo run -p vprog-tictactoe-driver
 ```
 
 ## Documentation

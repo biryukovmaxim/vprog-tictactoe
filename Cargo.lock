@@ -1019,7 +1019,7 @@ dependencies = [
  "bitflags 2.13.1",
  "cexpr",
  "clang-sys",
- "itertools 0.11.0",
+ "itertools 0.13.0",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -2804,6 +2804,12 @@ name = "hex-literal"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6fe2267d4ed49bc07b63801559be28c718ea06c4738b7a03c94df7386d2cde46"
+
+[[package]]
+name = "hex-literal"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e712f64ec3850b98572bffac52e2c6f282b29fe6c5fa6d42334b30be438d95c1"
 
 [[package]]
 name = "hexplay"
@@ -5038,7 +5044,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
 dependencies = [
  "heck",
- "itertools 0.11.0",
+ "itertools 0.14.0",
  "log",
  "multimap",
  "once_cell",
@@ -5058,7 +5064,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03da047801ff44bb6a4d407d4860c05fd70bb81714e6b2f3812603d5b145b042"
 dependencies = [
  "heck",
- "itertools 0.11.0",
+ "itertools 0.14.0",
  "log",
  "multimap",
  "petgraph 0.8.3",
@@ -5079,7 +5085,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.11.0",
+ "itertools 0.14.0",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
@@ -5092,7 +5098,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b570b25f7617e43d59005d0990ccb79e950a423952cea19671b7a876da390adf"
 dependencies = [
  "anyhow",
- "itertools 0.11.0",
+ "itertools 0.14.0",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
@@ -5816,7 +5822,7 @@ dependencies = [
  "digest 0.10.7",
  "ff",
  "hex",
- "hex-literal",
+ "hex-literal 0.4.1",
  "metal",
  "ndarray",
  "parking_lot",
@@ -7453,6 +7459,40 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "vprog-tictactoe-driver"
 version = "0.1.0"
+dependencies = [
+ "ctrlc",
+ "kaspa-addresses",
+ "kaspa-consensus-core",
+ "kaspa-core",
+ "kaspa-hashes",
+ "kaspa-rpc-core",
+ "kaspa-txscript",
+ "kaspa-wrpc-client",
+ "log",
+ "secp256k1",
+ "tokio",
+ "vprog-tictactoe-guest",
+ "vprogs-core-types",
+ "vprogs-l1-wallet",
+ "vprogs-zk-abi",
+ "vprogs-zk-backend-risc0-api",
+ "vprogs-zk-backend-risc0-app-kit",
+]
+
+[[package]]
+name = "vprog-tictactoe-guest"
+version = "0.1.0"
+dependencies = [
+ "hex-literal 1.1.0",
+ "risc0-zkvm",
+ "vprogs-core-codec",
+ "vprogs-core-types",
+ "vprogs-l1-utils",
+ "vprogs-zk-abi",
+ "vprogs-zk-backend-risc0-api",
+ "vprogs-zk-backend-risc0-runtime-processor",
+ "zerocopy",
+]
 
 [[package]]
 name = "vprog-tictactoe-node"
@@ -7867,6 +7907,28 @@ dependencies = [
  "vprogs-zk-batch-prover",
  "vprogs-zk-transaction-prover",
  "vprogs-zk-vm",
+]
+
+[[package]]
+name = "vprogs-zk-backend-risc0-app-kit"
+version = "0.1.0"
+dependencies = [
+ "kaspa-addresses",
+ "kaspa-consensus-core",
+ "kaspa-hashes",
+ "kaspa-rpc-core",
+ "kaspa-txscript",
+ "log",
+ "rand 0.8.8",
+ "secp256k1",
+ "tokio",
+ "vprogs-core-codec",
+ "vprogs-core-types",
+ "vprogs-l1-utils",
+ "vprogs-l1-wallet",
+ "vprogs-zk-abi",
+ "vprogs-zk-backend-risc0-api",
+ "vprogs-zk-backend-risc0-runtime-processor",
 ]
 
 [[package]]
