@@ -22,10 +22,7 @@ use withdraw::apply_withdraw;
 pub use crate::runtime::ApplyContext;
 use crate::{
     program::resources::{
-        config::ConfigView,
-        ext::ResourceExt,
-        game::Cell,
-        id::{config_resource_id, derive_user_resource},
+        config::ConfigView, ext::ResourceExt, game::Cell, id::derive_user_resource,
     },
     runtime::{
         ix::read_resource_idx,
@@ -368,22 +365,21 @@ pub fn apply_action<'a, P: DepositPolicy<Lock<'a> = LockEnum<'a>>>(
     }
 }
 
-/// Reads a config field via the resource at `config_idx`, shared by the actions that carry an
-/// explicit config index (`Deposit`, `Withdraw`) instead of scanning the resource list.
+/// Reads a config field via the resource at `config_idx`, for actions that address the
+/// config by index instead of scanning the resource list.
 ///
-/// The index must name the singleton config resource: the id check preserves the binding the
-/// scan performed, and `view_config`'s `None` (wrong kind, malformed, or emptied slot) rejects
-/// a not-live config. The decoder has already bounds-checked the index against `n_resources`.
+/// No id derivation runs here: `Init` is the config's only birth path and it enforces the
+/// derived id, so a live config-kind slot is the singleton by construction. `view_config`'s
+/// `None` (wrong kind, malformed, or emptied slot) rejects everything else. The decoder has
+/// already bounds-checked the index against `n_resources`.
 pub(super) fn view_config_at<R>(
     resources: &[Resource<'_>],
     config_idx: u8,
-    f: impl FnOnce(ConfigView<'_>) -> R,
+    f: impl FnOnce(&ConfigView) -> R,
 ) -> AbiResult<R> {
-    let r = &resources[config_idx as usize];
-    if r.id() != &config_resource_id() {
-        return Err(AbiError::Decode("config_idx does not name the config resource".into()));
-    }
-    r.view_config(f).ok_or_else(|| AbiError::Decode("config resource not live".into()))
+    resources[config_idx as usize]
+        .view_config(f)
+        .ok_or_else(|| AbiError::Decode("config resource not live".into()))
 }
 
 /// Validates that a new user slot may be opened at `initial_lock`'s derived address with `funding`,

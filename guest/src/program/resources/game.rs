@@ -4,7 +4,7 @@
 //! lock, so unlike config/user there is no tag-driven tail: the payload is fully fixed-size,
 //! created once at `GAME_WIRE_LEN`, and every later mutation is in-place.
 //! ```text
-//! [0]       kind          (GameKind::Game = 2; see `crate::program::resources::kind`)
+//! [0]       kind          (Kind::Game = 2; see `crate::program::resources::kind`)
 //! [1]       state         (State; 0=Open 1=Playing 2=First 3=Second 4=Draw; finished ⟺ a
 //!                         win/draw variant)
 //! [2]       creator_mark  (Cell::X or Cell::O; the creator's mark in even rounds)
@@ -18,6 +18,9 @@
 //! [87..99]  pending       (2x `cells [u8; 4] || head u8 || count u8`, seat-indexed)
 //! [99..108] board         ([Cell; 9]; zeroized on round completion)
 //! ```
+//!
+//! The kind byte is checked by `from_bytes` before the kindless body is
+//! zerocopy-parsed, so it carries no field of [`GameView`] itself.
 //!
 //! Derived, not stored: the current round is `round_wins[0] + round_wins[1] + draws`, the
 //! ply-in-round is the count of marks on the board, and the to-move seat follows from ply
@@ -34,7 +37,7 @@ use zerocopy::{
     little_endian::U64 as Le64,
 };
 
-use crate::program::resources::kind::GameKind;
+use crate::program::resources::kind::{Kind, kind_of};
 
 /// Match lifecycle; the win/draw variants are exactly the finished states.
 #[repr(u8)]
@@ -88,7 +91,7 @@ pub enum Cell {
 pub const PENDING_CAP: usize = 4;
 
 /// Total wire length of a game resource. Fixed: no lock tail, no variable body.
-pub const GAME_WIRE_LEN: usize = core::mem::size_of::<GameRaw>();
+pub const GAME_WIRE_LEN: usize = 1 + core::mem::size_of::<GameView>();
 
 /// One seat's ring of pre-committed cells in insert order: writes at
 /// `(head + count) % PENDING_CAP`, pops at `head`. `count` gates everything (zero-fill is
@@ -140,148 +143,145 @@ impl PendingQueue {
 /// lifetime, zeroized per-unit (the queues at game end).
 #[repr(C)]
 #[derive(FromZeros, IntoBytes, Immutable, KnownLayout, Unaligned)]
-pub struct MatchRaw {
-    pub state: State,
-    pub creator_mark: Cell,
-    pub rounds_total: u8,
-    pub round_wins: [u8; 2],
-    pub draws: u8,
-    pub stake: Le64,
-    pub last_move_at: Le64,
-    pub players: [ResourceId; 2],
-    pub pending: [PendingQueue; 2],
+struct MatchRaw {
+    state: State,
+    creator_mark: Cell,
+    rounds_total: u8,
+    round_wins: [u8; 2],
+    draws: u8,
+    stake: Le64,
+    last_move_at: Le64,
+    players: [ResourceId; 2],
+    pending: [PendingQueue; 2],
 }
 
-/// Zerocopy layout: kind discriminator + match struct + inlined round board.
+/// Zerocopy layout over the kindless body: match struct + inlined round board.
+/// Fields are private; a handle is obtainable only through the validating
+/// `from_bytes` / `from_bytes_mut`.
+///
+/// The enum bytes (state, mark, board cells) are discriminant-checked at parse time, so
+/// accessors are infallible. Cross-field invariants (mark parity, queue cursors, players)
+/// are owned by the writers: stored game bytes only ever come from `write_game` and the
+/// game actions, so no reachable state can carry them wrong.
 #[repr(C)]
 #[derive(FromZeros, IntoBytes, Immutable, KnownLayout, Unaligned)]
-pub struct GameRaw {
-    pub kind: GameKind,
-    pub m: MatchRaw,
-    pub board: [Cell; 9],
+pub struct GameView {
+    m: MatchRaw,
+    board: [Cell; 9],
 }
 
-/// Read-only view over a game resource. The enum bytes (kind, state, mark, board cells)
-/// are discriminant-checked at `from_bytes` time, so accessors are infallible. Cross-field
-/// invariants (mark parity, queue cursors, players) are owned by the writers: stored game
-/// bytes only ever come from `write_game` and the game actions, so no reachable state can
-/// carry them wrong.
-pub struct GameView<'a>(&'a GameRaw);
+impl GameView {
+    /// Validates `bytes` (kind byte + body) and returns the read view over them.
+    pub fn from_bytes(bytes: &[u8]) -> Result<&Self, &'static str> {
+        if kind_of(bytes) != Some(Kind::Game) {
+            return Err("game: wrong kind");
+        }
+        Self::try_ref_from_bytes(&bytes[1..]).map_err(|_| "game: invalid layout")
+    }
 
-impl<'a> GameView<'a> {
-    pub fn from_bytes(bytes: &'a [u8]) -> Result<Self, &'static str> {
-        let raw = GameRaw::try_ref_from_bytes(bytes).map_err(|_| "game: invalid layout")?;
-        Ok(Self(raw))
+    /// Mutable counterpart of [`Self::from_bytes`] for in-place updates. Setters do not
+    /// re-validate; the writers own every invariant. `stake`, `creator_mark`,
+    /// `rounds_total` and seat 0 are create-time only by construction.
+    pub fn from_bytes_mut(bytes: &mut [u8]) -> Result<&mut Self, &'static str> {
+        if kind_of(bytes) != Some(Kind::Game) {
+            return Err("game: wrong kind");
+        }
+        Self::try_mut_from_bytes(&mut bytes[1..]).map_err(|_| "game: invalid layout")
     }
 
     pub fn state(&self) -> State {
-        self.0.m.state
+        self.m.state
     }
 
     /// The creator's mark in even rounds (the joiner's in odd).
     pub fn creator_mark(&self) -> Cell {
-        self.0.m.creator_mark
+        self.m.creator_mark
     }
 
+    /// Match length in rounds, fixed at creation.
     pub fn rounds_total(&self) -> u8 {
-        self.0.m.rounds_total
+        self.m.rounds_total
     }
 
+    /// Per-seat round-win counters, seat-indexed.
     pub fn round_wins(&self) -> [u8; 2] {
-        self.0.m.round_wins
+        self.m.round_wins
     }
 
+    /// Rounds ended without a winner.
     pub fn draws(&self) -> u8 {
-        self.0.m.draws
+        self.m.draws
     }
 
     /// One seat's locked stake; the pot is `2 * stake`.
     pub fn stake(&self) -> u64 {
-        self.0.m.stake.get()
+        self.m.stake.get()
     }
 
     /// When the last play was applied, in ms of the mergeset clock. 0 while Open.
     pub fn last_move_at(&self) -> u64 {
-        self.0.m.last_move_at.get()
+        self.m.last_move_at.get()
     }
 
     /// Seat 0's user id, set at creation.
-    pub fn creator(&self) -> &'a ResourceId {
-        &self.0.m.players[0]
+    pub fn creator(&self) -> &ResourceId {
+        &self.m.players[0]
     }
 
     /// Seat 1's user id, or `None` while the game is Open (all-zero id).
-    pub fn joiner(&self) -> Option<&'a ResourceId> {
-        let j = &self.0.m.players[1];
+    pub fn joiner(&self) -> Option<&ResourceId> {
+        let j = &self.m.players[1];
         (*j != ResourceId::default()).then_some(j)
     }
 
     /// The current round's board.
-    pub fn board(&self) -> &'a [Cell; 9] {
-        &self.0.board
+    pub fn board(&self) -> &[Cell; 9] {
+        &self.board
     }
 
     /// Finished games are exactly the win/draw states.
     pub fn is_finished(&self) -> bool {
-        matches!(self.0.m.state, State::First | State::Second | State::Draw)
-    }
-}
-
-/// Mutable view for in-place updates. Setters do not re-validate; the writers own every
-/// invariant. `stake`, `creator_mark`, `rounds_total` and seat 0 are create-time only by
-/// construction.
-pub struct GameViewMut<'a>(&'a mut GameRaw);
-
-impl<'a> GameViewMut<'a> {
-    pub fn from_bytes_mut(bytes: &'a mut [u8]) -> Result<Self, &'static str> {
-        let raw = GameRaw::try_mut_from_bytes(bytes).map_err(|_| "game: invalid layout")?;
-        Ok(Self(raw))
-    }
-
-    /// Read-only view over the same bytes; every [`GameView`] accessor is available for the
-    /// read-compute-write steps of an in-place update.
-    pub fn view(&self) -> GameView<'_> {
-        GameView(self.0)
+        matches!(self.m.state, State::First | State::Second | State::Draw)
     }
 
     /// Mutable handle to the state.
     pub fn set_state(&mut self, v: State) {
-        self.0.m.state = v;
+        self.m.state = v;
     }
 
     /// Mutable handle to the per-seat round-win counters.
     pub fn round_wins_mut(&mut self) -> &mut [u8; 2] {
-        &mut self.0.m.round_wins
+        &mut self.m.round_wins
     }
 
     /// Mutable handle to the draw counter.
     pub fn draws_mut(&mut self) -> &mut u8 {
-        &mut self.0.m.draws
+        &mut self.m.draws
     }
 
     /// Sets the last-applied-play timestamp (ms of the mergeset clock).
     pub fn set_last_move_at(&mut self, v: u64) {
-        self.0.m.last_move_at.set(v);
+        self.m.last_move_at.set(v);
     }
 
     /// Fills the joiner seat.
     pub fn set_joiner(&mut self, id: &ResourceId) {
-        self.0.m.players[1] = *id;
+        self.m.players[1] = *id;
     }
 
     /// The current round's board; round completion is `board_mut().fill(Cell::Empty)`.
     pub fn board_mut(&mut self) -> &mut [Cell; 9] {
-        &mut self.0.board
+        &mut self.board
     }
 
     /// One seat's pending-queue ring; when to push or pop belongs to the game actions.
     pub fn pending_mut(&mut self, seat: usize) -> &mut PendingQueue {
-        &mut self.0.m.pending[seat]
+        &mut self.m.pending[seat]
     }
 
     /// Zeroes both queues: match end only, since entries persist across rounds by design.
     pub fn clear_pending(&mut self) {
-        for q in &mut self.0.m.pending {
+        for q in &mut self.m.pending {
             *q = PendingQueue::new_zeroed();
         }
     }
@@ -303,14 +303,14 @@ pub fn write_game(
     if creator_mark == Cell::Empty {
         return Err("game: creator_mark must be X or O");
     }
-    let raw = &mut GameRaw::new_zeroed();
-    raw.kind = GameKind::Game;
+    let mut raw = GameView::new_zeroed();
     raw.m.state = State::Open;
     raw.m.creator_mark = creator_mark;
     raw.m.rounds_total = rounds_total;
     raw.m.stake = Le64::new(stake);
     raw.m.players[0] = *creator;
-    out.copy_from_slice(raw.as_bytes());
+    out[0] = Kind::Game as u8;
+    out[1..].copy_from_slice(raw.as_bytes());
     Ok(())
 }
 
@@ -364,9 +364,18 @@ mod tests {
 
     #[test]
     fn rejects_wrong_kind_byte() {
-        // 1 is the user kind: not a valid game discriminant.
+        // 1 is the user kind: not the game discriminator.
         let mut buf = game_buf();
-        buf[0] = 1;
+        buf[0] = Kind::User as u8;
+        assert!(GameView::from_bytes(&buf).is_err());
+    }
+
+    /// Kind 0 is the config kind; it must not parse as a game even though the old
+    /// `Unset` construction value sat there.
+    #[test]
+    fn rejects_config_kind_byte() {
+        let mut buf = game_buf();
+        buf[0] = Kind::Config as u8;
         assert!(GameView::from_bytes(&buf).is_err());
     }
 
@@ -395,7 +404,7 @@ mod tests {
         let joiner = id(0x22);
         let mut buf = game_buf();
         {
-            let mut mv = GameViewMut::from_bytes_mut(&mut buf).unwrap();
+            let mv = GameView::from_bytes_mut(&mut buf).unwrap();
             mv.set_state(State::Playing);
             mv.set_joiner(&joiner);
             mv.round_wins_mut()[1] = 2;
@@ -416,7 +425,7 @@ mod tests {
         assert!(!view.is_finished());
 
         // A finished state flips the flag.
-        GameViewMut::from_bytes_mut(&mut buf).unwrap().set_state(State::Draw);
+        GameView::from_bytes_mut(&mut buf).unwrap().set_state(State::Draw);
         assert!(GameView::from_bytes(&buf).unwrap().is_finished());
     }
 
@@ -425,7 +434,7 @@ mod tests {
         let joiner = id(0x22);
         let mut buf = game_buf();
         {
-            let mut mv = GameViewMut::from_bytes_mut(&mut buf).unwrap();
+            let mv = GameView::from_bytes_mut(&mut buf).unwrap();
             mv.set_state(State::Playing);
             mv.set_joiner(&joiner);
             mv.round_wins_mut()[0] = 1;
@@ -502,24 +511,24 @@ mod tests {
     fn view_pending_is_seat_indexed_and_clearable() {
         let mut buf = game_buf();
         {
-            let mut mv = GameViewMut::from_bytes_mut(&mut buf).unwrap();
+            let mv = GameView::from_bytes_mut(&mut buf).unwrap();
             mv.pending_mut(0).push(3);
             mv.pending_mut(1).push(5);
             mv.pending_mut(1).push(6);
         }
         {
-            let mut mv = GameViewMut::from_bytes_mut(&mut buf).unwrap();
+            let mv = GameView::from_bytes_mut(&mut buf).unwrap();
             assert_eq!(mv.pending_mut(0).pop(), Some(3));
             assert_eq!(mv.pending_mut(1).pop(), Some(5));
             assert_eq!(mv.pending_mut(1).pop(), Some(6));
         }
         {
-            let mut mv = GameViewMut::from_bytes_mut(&mut buf).unwrap();
+            let mv = GameView::from_bytes_mut(&mut buf).unwrap();
             mv.pending_mut(0).push(1);
             mv.pending_mut(1).push(2);
             mv.clear_pending();
         }
-        let mut mv = GameViewMut::from_bytes_mut(&mut buf).unwrap();
+        let mv = GameView::from_bytes_mut(&mut buf).unwrap();
         assert!(mv.pending_mut(0).is_empty());
         assert!(mv.pending_mut(1).is_empty());
     }

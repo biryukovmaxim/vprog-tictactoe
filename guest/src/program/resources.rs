@@ -1,9 +1,9 @@
 //! The app's resources: wire formats, typed views, and the id/kind machinery around
 //! them.
 //!
-//! - [`config`], [`user`], [`game`]: the three resource payloads with their zerocopy raw layouts
-//!   and read/write views.
-//! - [`kind`]: the first-byte discriminator partition and its typed enums.
+//! - [`config`], [`user`], [`game`]: the three resource payloads, each as one zerocopy view over
+//!   its kindless body (kind byte checked at `from_bytes`).
+//! - [`kind`]: the first-byte discriminator enum.
 //! - [`domain`]: one-byte hash domains, one per kind, so the id derivations cannot collide across
 //!   keyspaces.
 //! - [`id`]: the domain-separated resource id derivations.

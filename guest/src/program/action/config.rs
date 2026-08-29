@@ -13,6 +13,8 @@ use crate::{
     },
 };
 
+/// Applies `Update`: rewrites the live config under its current lock's authority;
+/// `covenant_id` is immutable.
 pub(super) fn apply_update<'a>(
     updater_idx: u8,
     new_min_withdrawal_amount: u64,
@@ -24,9 +26,6 @@ pub(super) fn apply_update<'a>(
     let idx = updater_idx as usize;
     // `decode_ix` already bounds-checked `updater_idx` against resources.len(),
     // so this lookup cannot fail.
-    if cx.resources[idx].id() != &config_resource_id() {
-        return Err(AbiError::Decode("update: target is not the config resource".into()));
-    }
     match cx.lifecycle(idx) {
         Lifecycle::Live => {}
         Lifecycle::New => {
@@ -40,6 +39,9 @@ pub(super) fn apply_update<'a>(
     let target = &mut cx.resources[idx];
     // Read current config: its lock authorizes the update, and its covenant_id
     // is immutable (the deposit address is bound to it for the covenant's life).
+    // The kind check inside `from_bytes` rejects any slot that is not the
+    // config: `Init` is its only birth path, and it enforces the derived id,
+    // so a live config-kind slot is the singleton.
     let cur = ConfigView::from_bytes(target.data()).map_err(|m| AbiError::Decode(m.into()))?;
     if new_covenant_id != cur.covenant_id() {
         return Err(AbiError::Decode("update: covenant_id is immutable after init".into()));
@@ -51,6 +53,8 @@ pub(super) fn apply_update<'a>(
     write_new_state(target, new_min_withdrawal_amount, new_turn_ttl, new_covenant_id, new_lock)
 }
 
+/// Applies `Init`: bootstraps the config slot, gated by the env-provided genesis
+/// pubkey instead of a resource lock.
 pub(super) fn apply_init<'a>(
     updater_idx: u8,
     new_min_withdrawal_amount: u64,

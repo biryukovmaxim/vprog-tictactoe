@@ -2,7 +2,7 @@
 //!
 //! Wire layout: kind byte + fixed header + tag-driven variable body:
 //! ```text
-//! [0]       kind                    (KIND_CONFIG = 0; see `crate::program::resources::kind`)
+//! [0]       kind                    (Kind::Config = 0; see `crate::program::resources::kind`)
 //! [1..9]    min_withdrawal_amount   (u64 LE)
 //! [9..17]   turn_ttl                (u64 LE, milliseconds)
 //! [17..49]  covenant_id             ([u8; 32]; the covenant a deposit's funding
@@ -11,6 +11,9 @@
 //! [49]      lock_tag                (one of the LockEnum variants)
 //! [50..]    lock_body               (length and shape implied by tag)
 //! ```
+//!
+//! The kind byte is checked by `from_bytes` before the kindless body is
+//! zerocopy-parsed, so it carries no field of [`ConfigView`] itself.
 //!
 //! Body shapes (each variant's wire form is the same as on the ix wire,
 //! minus the tag byte; `Lock::encode` is reused both here and in the ix
@@ -29,7 +32,7 @@ use zerocopy::{
 };
 
 use crate::{
-    program::resources::kind::ConfigKind,
+    program::resources::kind::{Kind, kind_of},
     runtime::{
         lock::LockEnum,
         lock_codec::{decode_lock_body_unchecked, validate_lock_body},
@@ -37,91 +40,93 @@ use crate::{
 };
 
 /// Fixed-header byte length:
-/// `kind (u8) || min_withdrawal_amount (u64 LE) || covenant_id ([u8; 32]) || lock_tag (u8)`.
-/// Derived from `ConfigRaw` so the sum can never drift from the struct.
-pub const CONFIG_HEADER_LEN: usize = core::mem::offset_of!(ConfigRaw, lock_tag) + 1;
+/// `kind (u8) || min_withdrawal_amount (u64 LE) || turn_ttl (u64 LE) || covenant_id ([u8; 32])
+/// || lock_tag (u8)`, derived from the struct layout so the sum can never drift.
+pub const CONFIG_HEADER_LEN: usize = core::mem::offset_of!(ConfigView, lock_tag) + 2;
 
-/// Zerocopy DST: kind discriminator + fixed header + tag-driven variable body.
+/// Zerocopy DST over the kindless body: fixed header + tag-driven variable tail.
+/// Fields are private; a handle is obtainable only through the validating
+/// `from_bytes` / `from_bytes_mut`, so accessors are infallible.
 #[repr(C)]
 #[derive(FromZeros, IntoBytes, Immutable, KnownLayout, Unaligned)]
-pub struct ConfigRaw {
-    pub kind: ConfigKind,
-    pub min_withdrawal_amount: Le64,
-    pub turn_ttl: Le64,
-    pub covenant_id: [u8; 32],
-    pub lock_tag: u8,
-    pub lock_body: [u8],
+pub struct ConfigView {
+    min_withdrawal_amount: Le64,
+    turn_ttl: Le64,
+    covenant_id: [u8; 32],
+    lock_tag: u8,
+    lock_body: [u8],
 }
 
-/// Read-only view over an existing config resource. Body shape was validated
-/// at `from_bytes` time, so accessors are infallible.
-pub struct ConfigView<'a>(&'a ConfigRaw);
-
-impl<'a> ConfigView<'a> {
-    pub fn from_bytes(bytes: &'a [u8]) -> Result<Self, &'static str> {
-        let raw = ConfigRaw::try_ref_from_bytes(bytes).map_err(|_| "config: invalid layout")?;
-        validate_lock_body(raw.lock_tag, &raw.lock_body)?;
-        Ok(Self(raw))
+impl ConfigView {
+    /// Validates `bytes` (kind byte + body) and returns the read view over them.
+    pub fn from_bytes(bytes: &[u8]) -> Result<&Self, &'static str> {
+        if kind_of(bytes) != Some(Kind::Config) {
+            return Err("config: wrong kind");
+        }
+        let v = Self::try_ref_from_bytes(&bytes[1..]).map_err(|_| "config: invalid layout")?;
+        validate_lock_body(v.lock_tag, &v.lock_body)?;
+        Ok(v)
     }
 
+    /// Mutable counterpart of [`Self::from_bytes`] for in-place, same-shape updates.
+    /// The lock body can be rewritten via `lock_body_mut`; the caller is
+    /// responsible for keeping the tag-implied invariants intact.
+    pub fn from_bytes_mut(bytes: &mut [u8]) -> Result<&mut Self, &'static str> {
+        if kind_of(bytes) != Some(Kind::Config) {
+            return Err("config: wrong kind");
+        }
+        let v = Self::try_mut_from_bytes(&mut bytes[1..]).map_err(|_| "config: invalid layout")?;
+        validate_lock_body(v.lock_tag, &v.lock_body)?;
+        Ok(v)
+    }
+
+    /// Smallest exit the config admits.
     pub fn min_withdrawal_amount(&self) -> u64 {
-        self.0.min_withdrawal_amount.get()
+        self.min_withdrawal_amount.get()
     }
 
     /// How long a turn may remain unplayed, in milliseconds of chain time (mergeset-context
     /// timestamps), before the game can be finished as timed out.
     pub fn turn_ttl(&self) -> u64 {
-        self.0.turn_ttl.get()
+        self.turn_ttl.get()
     }
 
     /// The covenant a deposit's funding output must pay (as P2SH of its
     /// delegate-entry script). Immutable after `Init`.
     pub fn covenant_id(&self) -> &[u8; 32] {
-        &self.0.covenant_id
+        &self.covenant_id
     }
 
+    /// Tag of the lock variant whose body follows the header.
     pub fn lock_tag(&self) -> u8 {
-        self.0.lock_tag
+        self.lock_tag
     }
 
     /// Returns the typed lock view over the body bytes.
     ///
     /// Infallible by construction: `from_bytes` validated this (tag, body) pair.
-    pub fn lock(&self) -> LockEnum<'a> {
-        decode_lock_body_unchecked(self.0.lock_tag, &self.0.lock_body)
-    }
-}
-
-/// Mutable view for header-only (same-shape) updates. The lock body can be
-/// rewritten via `lock_body_mut`; caller is responsible for keeping the
-/// tag-implied invariants intact.
-pub struct ConfigViewMut<'a>(&'a mut ConfigRaw);
-
-impl<'a> ConfigViewMut<'a> {
-    pub fn from_bytes_mut(bytes: &'a mut [u8]) -> Result<Self, &'static str> {
-        let raw = ConfigRaw::try_mut_from_bytes(bytes).map_err(|_| "config: invalid layout")?;
-        validate_lock_body(raw.lock_tag, &raw.lock_body)?;
-        Ok(Self(raw))
+    pub fn lock(&self) -> LockEnum<'_> {
+        decode_lock_body_unchecked(self.lock_tag, &self.lock_body)
     }
 
+    /// Sets the minimum admitted exit.
     pub fn set_min_withdrawal_amount(&mut self, v: u64) {
-        self.0.min_withdrawal_amount.set(v);
+        self.min_withdrawal_amount.set(v);
     }
 
+    /// Sets the turn TTL (ms of chain time).
     pub fn set_turn_ttl(&mut self, v: u64) {
-        self.0.turn_ttl.set(v);
+        self.turn_ttl.set(v);
     }
 
+    /// Sets the deposit covenant id.
     pub fn set_covenant_id(&mut self, covenant_id: &[u8; 32]) {
-        self.0.covenant_id = *covenant_id;
+        self.covenant_id = *covenant_id;
     }
 
-    pub fn lock_tag(&self) -> u8 {
-        self.0.lock_tag
-    }
-
+    /// The lock body bytes, mutable for same-shape rewrites.
     pub fn lock_body_mut(&mut self) -> &mut [u8] {
-        &mut self.0.lock_body
+        &mut self.lock_body
     }
 }
 
@@ -143,16 +148,13 @@ pub fn write_config(
     if out.len() != need {
         return Err("config: write buffer wrong length");
     }
-    // Start from zeros: every field not written below takes its zero value, and the kind
-    // byte's zero value already parses as Config.
-    out.fill(0);
-    let raw = ConfigRaw::try_mut_from_bytes(out).map_err(|_| "config: invalid layout")?;
-    raw.kind = ConfigKind::Config;
-    raw.min_withdrawal_amount = Le64::new(min_withdrawal_amount);
-    raw.turn_ttl = Le64::new(turn_ttl);
-    raw.covenant_id = *covenant_id;
-    raw.lock_tag = lock.tag();
-    lock.write_body(&mut raw.lock_body);
+    out[0] = Kind::Config as u8;
+    let v = ConfigView::try_mut_from_bytes(&mut out[1..]).map_err(|_| "config: invalid layout")?;
+    v.min_withdrawal_amount = Le64::new(min_withdrawal_amount);
+    v.turn_ttl = Le64::new(turn_ttl);
+    v.covenant_id = *covenant_id;
+    v.lock_tag = lock.tag();
+    lock.write_body(&mut v.lock_body);
     Ok(())
 }
 
@@ -255,7 +257,7 @@ mod tests {
     fn multisig_rejects_unsorted_body() {
         // Manually craft a malformed config: tag = Multisig, body has unsorted pks.
         let mut buf = vec![0u8; CONFIG_HEADER_LEN + 2 + 2 * 32];
-        // buf[0] = KIND_CONFIG (0) is already correct via vec![0u8; ..]
+        // buf[0] = Kind::Config (0) is already correct via vec![0u8; ..]
         buf[CONFIG_HEADER_LEN - 1] = MultisigLockView::TAG;
         buf[CONFIG_HEADER_LEN] = 1; // threshold
         buf[CONFIG_HEADER_LEN + 1] = 2; // n_pubkeys
@@ -341,7 +343,7 @@ mod tests {
         let lock = LockEnum::Schnorr(SchnorrLockView { pubkey: &pubkey });
         let mut buf = vec![0u8; config_total_len(&lock)];
         write_config(&mut buf, 1, 60_000, &covenant_id(0x44), &lock).unwrap();
-        buf[0] = 0xFE; // not KIND_CONFIG
+        buf[0] = 0xFE; // not Kind::Config
         assert!(ConfigView::from_bytes(&buf).is_err());
     }
 
@@ -355,7 +357,7 @@ mod tests {
         write_config(&mut buf, 100, 60_000, &covenant_id(0x33), &lock).unwrap();
 
         {
-            let mut mv = ConfigViewMut::from_bytes_mut(&mut buf).unwrap();
+            let mv = ConfigView::from_bytes_mut(&mut buf).unwrap();
             mv.set_min_withdrawal_amount(200);
             mv.set_turn_ttl(120_000);
             mv.set_covenant_id(&covenant_id(0x66));
