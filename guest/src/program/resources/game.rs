@@ -12,7 +12,7 @@
 //! [4..6]    round_wins    ([u8; 2])
 //! [6]       draws         (u8)
 //! [7..15]   stake         (u64 LE; the pot is always 2 x stake, not stored)
-//! [15..23]  last_move_at  (u64 LE, ms of mergeset clock; 0 while Open)
+//! [15..23]  last_move_at  (u64 LE, mergeset DAA score; 0 while Open)
 //! [23..55]  players[0]    (creator ResourceId; never all-zero)
 //! [55..87]  players[1]    (joiner ResourceId; all-zero while Open)
 //! [87..99]  pending       (2x `cells [u8; 4] || head u8 || count u8`, seat-indexed)
@@ -220,7 +220,7 @@ impl GameBody {
         self.m.stake.get()
     }
 
-    /// When the last play was applied, in ms of the mergeset clock. 0 while Open.
+    /// When the last play was applied, as a mergeset DAA score. 0 while Open.
     pub fn last_move_at(&self) -> u64 {
         self.m.last_move_at.get()
     }
@@ -261,7 +261,7 @@ impl GameBody {
         &mut self.m.draws
     }
 
-    /// Sets the last-applied-play timestamp (ms of the mergeset clock).
+    /// Sets the last-applied-play clock (mergeset DAA score).
     pub fn set_last_move_at(&mut self, v: u64) {
         self.m.last_move_at.set(v);
     }

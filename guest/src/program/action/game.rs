@@ -2,9 +2,12 @@
 //! start play), `Turn` (place a mark, run the pre-commit cascade, settle the match), and
 //! `Timeout` (forfeit a round whose to-move player let the clock expire).
 //!
-//! `Timeout` is the only game action that reads config: it compares the mergeset clock against
-//! `last_move_at` + config `turn_ttl`. Stake and rounds are explicit `CreateGame` parameters,
+//! `Timeout` is the only game action that reads config: it compares the mergeset DAA score
+//! against `last_move_at + turn_ttl`. Stake and rounds are explicit `CreateGame` parameters,
 //! so nothing else needs a config read.
+//!
+//! The DAA score (not the timestamp) is the clock: it is monotonic in chain progression, while
+//! block timestamps only have to clear the median of past blocks and may move backwards.
 
 use vprogs_core_types::ResourceId;
 use vprogs_zk_abi::{Error as AbiError, Result as AbiResult, transaction_processor::Resource};
@@ -91,7 +94,7 @@ pub(super) fn apply_create_game(
 
 /// Joins the open game at `game_idx`, authored by the joiner's user lock. Locks the game's
 /// stake from the joiner's balance, fills seat 1, moves the match to `Playing`, and stamps
-/// `last_move_at` with the mergeset clock so the turn-TTL window starts at match start.
+/// `last_move_at` with the mergeset DAA score so the turn-TTL window starts at match start.
 ///
 /// The state check subsumes every other shape of bad join: a finished or in-progress game is
 /// not `Open`, and a non-game or non-live slot fails in `view_game`.
@@ -132,7 +135,7 @@ pub(super) fn apply_join_game(
         })?;
     debit.map_err(|m| AbiError::Decode(m.into()))?;
 
-    let now = cx.context.timestamp.get();
+    let now = cx.context.daa_score.get();
     cx.resources[game_idx as usize]
         .modify_game(|g| {
             g.set_joiner(&joiner_id);
@@ -166,7 +169,7 @@ pub(super) fn apply_turn(
         return Err(AbiError::Decode("turn: mover lock not satisfied".into()));
     }
     let mover_id = *cx.resources[user_idx as usize].id();
-    let now = cx.context.timestamp.get();
+    let now = cx.context.daa_score.get();
 
     let finished = cx.resources[game_idx as usize]
         .modify_game(|g| play_turn(g, &mover_id, cell, now))
@@ -179,8 +182,9 @@ pub(super) fn apply_turn(
 }
 
 /// Forfeits the current round of a playing game to the seat not to move, once its turn expired:
-/// the mergeset clock reached `last_move_at + turn_ttl` (the config's, read via `config_idx`).
-/// Permissionless: the clock check is the whole authority, so anyone may sweep an expired turn.
+/// the mergeset DAA score reached `last_move_at + turn_ttl` (the config's, read via
+/// `config_idx`). Permissionless: the clock check is the whole authority, so anyone may sweep
+/// an expired turn.
 ///
 /// The forfeited round closes like a won one (board reset, early-clinch check), and the
 /// winner's queued pre-commits drain into the fresh round, mirroring `Turn`'s cascade. When the
@@ -191,7 +195,7 @@ pub(super) fn apply_timeout(
     cx: &mut ApplyContext<'_, '_>,
 ) -> AbiResult<()> {
     let turn_ttl = view_config_at(cx.resources, config_idx, |c| c.turn_ttl())?;
-    let now = cx.context.timestamp.get();
+    let now = cx.context.daa_score.get();
 
     let finished = cx.resources[game_idx as usize]
         .modify_game(|g| forfeit_round(g, turn_ttl, now))

@@ -99,7 +99,7 @@ pub enum ActionBody<'a> {
     Update {
         config_idx: u8,
         new_min_withdrawal_amount: u64,
-        /// New turn TTL, in milliseconds of chain time.
+        /// New turn TTL, in DAA-score units of the mergeset context.
         new_turn_ttl: u64,
         /// Carried for wire-shape symmetry with `Init`. `apply_update` rejects
         /// any change here: covenant_id is immutable after `Init`.
@@ -109,7 +109,7 @@ pub enum ActionBody<'a> {
     Init {
         config_idx: u8,
         new_min_withdrawal_amount: u64,
-        /// Turn TTL the config opens with, in milliseconds of chain time.
+        /// Turn TTL the config opens with, in DAA-score units of the mergeset context.
         new_turn_ttl: u64,
         /// The covenant a deposit's funding output must pay (as P2SH of its
         /// delegate-entry script). Written into config state once at `Init`;

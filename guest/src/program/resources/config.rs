@@ -4,7 +4,7 @@
 //! ```text
 //! [0]       kind                    (Kind::Config = 0; see `crate::program::resources::kind`)
 //! [1..9]    min_withdrawal_amount   (u64 LE)
-//! [9..17]   turn_ttl                (u64 LE, milliseconds)
+//! [9..17]   turn_ttl                (u64 LE, DAA-score units)
 //! [17..49]  covenant_id             ([u8; 32]; the covenant a deposit's funding
 //!                                    output must pay, as P2SH of its
 //!                                    delegate-entry script)
@@ -87,8 +87,9 @@ impl ConfigBody {
         self.min_withdrawal_amount.get()
     }
 
-    /// How long a turn may remain unplayed, in milliseconds of chain time (mergeset-context
-    /// timestamps), before the game can be finished as timed out.
+    /// How long a turn may remain unplayed, in DAA-score units of the mergeset context (the
+    /// monotonic chain clock; block timestamps are not, and are never used), before the game
+    /// can be finished as timed out.
     pub fn turn_ttl(&self) -> u64 {
         self.turn_ttl.get()
     }
@@ -116,7 +117,7 @@ impl ConfigBody {
         self.min_withdrawal_amount.set(v);
     }
 
-    /// Sets the turn TTL (ms of chain time).
+    /// Sets the turn TTL (DAA-score units).
     pub fn set_turn_ttl(&mut self, v: u64) {
         self.turn_ttl.set(v);
     }
