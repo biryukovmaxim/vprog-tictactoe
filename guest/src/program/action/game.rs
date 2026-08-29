@@ -1,18 +1,22 @@
-//! Game actions: `CreateGame` (open a staked match) and `JoinGame` (fill the second seat and
-//! start play).
+//! Game actions: `CreateGame` (open a staked match), `JoinGame` (fill the second seat and
+//! start play), and `Turn` (place a mark, run the pre-commit cascade, settle the match).
 //!
 //! Game actions read no config: stake and rounds are explicit `CreateGame` parameters, and the
 //! only time-dependent behavior (the turn timeout) belongs to a later action that compares the
 //! mergeset clock against `last_move_at` + `turn_ttl`.
 
-use vprogs_zk_abi::{Error as AbiError, Result as AbiResult};
+use vprogs_core_types::ResourceId;
+use vprogs_zk_abi::{Error as AbiError, Result as AbiResult, transaction_processor::Resource};
 use vprogs_zk_backend_risc0_runtime_processor::lifecycle::Lifecycle;
 
 use super::ApplyContext;
-use crate::program::resources::{
-    ext::ResourceExt,
-    game::{Cell, State},
-    id::derive_game_resource,
+use crate::program::{
+    resources::{
+        ext::ResourceExt,
+        game::{Cell, GameView, GameViewMut, State},
+        id::derive_game_resource,
+    },
+    rules,
 };
 
 /// Creates an open staked game at `game_idx`, authored by the creator's user lock.
@@ -70,7 +74,9 @@ pub(super) fn apply_create_game(
             v.games_started_mut().set(games_started + 1);
             Ok::<(), &'static str>(())
         })
-        .ok_or_else(|| AbiError::Decode("create_game: creator not a live user resource".into()))?;
+        .ok_or_else(|| {
+            AbiError::Decode("create_game: creator not a live writable user resource".into())
+        })?;
     debit.map_err(|m| AbiError::Decode(m.into()))?;
 
     // Advance `New -> Live` (rejecting double-create) before writing the fresh payload.
@@ -119,7 +125,9 @@ pub(super) fn apply_join_game(
             bal.set(new);
             Ok::<(), &'static str>(())
         })
-        .ok_or_else(|| AbiError::Decode("join_game: joiner not a live user resource".into()))?;
+        .ok_or_else(|| {
+            AbiError::Decode("join_game: joiner not a live writable user resource".into())
+        })?;
     debit.map_err(|m| AbiError::Decode(m.into()))?;
 
     let now = cx.context.timestamp.get();
@@ -129,5 +137,212 @@ pub(super) fn apply_join_game(
             g.set_state(State::Playing);
             g.set_last_move_at(now);
         })
-        .ok_or_else(|| AbiError::Decode("join_game: not a live game resource".into()))
+        .ok_or_else(|| AbiError::Decode("join_game: not a live writable game resource".into()))
+}
+
+/// Places a mark for a player of a playing game, authored by the mover's user lock.
+///
+/// A turn for the mover's own ply lands on the board at once; a turn for a future ply queues as
+/// the mover's pre-commit. After the explicit turn, the cascade applies the to-move seat's
+/// queued head whenever it names an open cell (stale heads on taken cells are dropped), so one
+/// tx carrying live moves plus pre-commits can play out many plies.
+///
+/// When a turn finishes the match (final round or early clinch), the pot settles: winner takes
+/// `2 x stake`, a draw returns each seat's stake, and both players' user resources (located by
+/// id in this tx's resource list) take their `games_finished`/`games_won` bumps. Both players
+/// must be attached and declared writable in the finalizing tx, or the action rejects.
+pub(super) fn apply_turn(
+    game_idx: u8,
+    user_idx: u8,
+    cell: u8,
+    cx: &mut ApplyContext<'_, '_>,
+) -> AbiResult<()> {
+    let auth_ok = cx.resources[user_idx as usize]
+        .view_user(|v| v.lock().unlock(user_idx, cx.auth_ctx))
+        .ok_or_else(|| AbiError::Decode("turn: mover not a live user resource".into()))?;
+    if !auth_ok {
+        return Err(AbiError::Decode("turn: mover lock not satisfied".into()));
+    }
+    let mover_id = *cx.resources[user_idx as usize].id();
+    let now = cx.context.timestamp.get();
+
+    let finished = cx.resources[game_idx as usize]
+        .modify_game(|g| play_turn(g, &mover_id, cell, now))
+        .ok_or_else(|| AbiError::Decode("turn: not a live writable game resource".into()))?
+        .map_err(|m| AbiError::Decode(m.into()))?;
+    if finished {
+        settle_match(cx, game_idx)?;
+    }
+    Ok(())
+}
+
+/// Pays out a just-finished match's pot and bumps both players' stats. Both players' user
+/// resources must be attached to this tx and declared writable, or the settlement rejects the
+/// finalizing turn and the submitter retries with them included.
+fn settle_match(cx: &mut ApplyContext<'_, '_>, game_idx: u8) -> AbiResult<()> {
+    let (state, players, stake) = {
+        let (state, creator, joiner, stake) = cx.resources[game_idx as usize]
+            .view_game(|g| (g.state(), *g.creator(), g.joiner().copied(), g.stake()))
+            .ok_or_else(|| AbiError::Decode("turn: not a live game resource".into()))?;
+        match joiner {
+            Some(joiner) => (state, [creator, joiner], stake),
+            None => return Err(AbiError::Decode("turn: finished game without a joiner".into())),
+        }
+    };
+
+    let pot = stake.checked_mul(2).ok_or_else(|| AbiError::Decode("turn: pot overflows".into()))?;
+    let (credits, winner): ([u64; 2], Option<usize>) = match state {
+        State::First => ([pot, 0], Some(0)),
+        State::Second => ([0, pot], Some(1)),
+        State::Draw => ([stake, stake], None),
+        State::Open | State::Playing => {
+            return Err(AbiError::Decode("turn: settlement on an unfinished game".into()));
+        }
+    };
+
+    for (seat, (player, credit)) in players.into_iter().zip(credits).enumerate() {
+        let idx = user_slot_of(cx.resources, &player)
+            .ok_or_else(|| AbiError::Decode("turn: player user resource missing from tx".into()))?;
+        let won = winner == Some(seat);
+        let update = cx.resources[idx]
+            .modify_user(|v| {
+                if credit > 0 {
+                    let bal = v.balance_mut();
+                    bal.set(bal.get().checked_add(credit).ok_or("turn: balance overflow")?);
+                }
+                let finished = v.games_finished_mut();
+                finished.set(finished.get() + 1);
+                if won {
+                    let won = v.games_won_mut();
+                    won.set(won.get() + 1);
+                }
+                Ok::<(), &'static str>(())
+            })
+            .ok_or_else(|| {
+                AbiError::Decode("turn: player not a live writable user resource".into())
+            })?;
+        update.map_err(|m| AbiError::Decode(m.into()))?;
+    }
+    Ok(())
+}
+
+/// Plays the explicit turn and its cascade, all under the caller's `modify_game` borrow, and
+/// returns whether the match just finished. Every check that can fail runs before the first
+/// board or queue write.
+fn play_turn(
+    g: &mut GameViewMut<'_>,
+    mover_id: &ResourceId,
+    cell: u8,
+    now: u64,
+) -> Result<bool, &'static str> {
+    if g.view().state() != State::Playing {
+        return Err("turn: game is not playing");
+    }
+    let seat = seat_of(&g.view(), mover_id)?;
+    commit_explicit(g, seat, cell, now)?;
+    drain_pending(g, now);
+    Ok(g.view().is_finished())
+}
+
+/// Lands the explicit turn: on the board when it is the mover's own ply, else queued as the
+/// mover's pre-commit.
+fn commit_explicit(
+    g: &mut GameViewMut<'_>,
+    seat: usize,
+    cell: u8,
+    now: u64,
+) -> Result<(), &'static str> {
+    if g.view().board()[cell as usize] != Cell::Empty {
+        return Err("turn: cell is occupied");
+    }
+    if seat == to_move(&g.view()) {
+        apply_move(g, seat, cell, now);
+    } else if !g.pending_mut(seat).push(cell) {
+        return Err("turn: pending queue is full");
+    }
+    Ok(())
+}
+
+/// Applies queued pre-commits while the game plays: each applied move hands the turn to the
+/// other seat, whose own head applies next, and so on across round boundaries (queues are
+/// ply-agnostic). Heads naming taken cells are stale and dropped. Every iteration pops exactly
+/// one entry, so the loop terminates.
+fn drain_pending(g: &mut GameViewMut<'_>, now: u64) {
+    while g.view().state() == State::Playing {
+        let seat = to_move(&g.view());
+        let Some(cell) = g.pending_mut(seat).peek() else { break };
+        g.pending_mut(seat).pop();
+        if g.view().board()[cell as usize] == Cell::Empty {
+            apply_move(g, seat, cell, now);
+        }
+    }
+}
+
+/// Places `seat`'s mark at `cell`, stamps the clock, and closes the round when the move ends it
+/// (a completed line or a full board).
+fn apply_move(g: &mut GameViewMut<'_>, seat: usize, cell: u8, now: u64) {
+    let (creator_mark, round) = mark_and_round(&g.view());
+    let mark = rules::mark_for_seat(creator_mark, round, seat);
+    g.board_mut()[cell as usize] = mark;
+    g.set_last_move_at(now);
+
+    // The mover's own line is the only one this move can complete; a full board with no line is
+    // the round draw.
+    let won = rules::winner(g.view().board()) == Some(mark);
+    let full = !won && rules::board_full(g.view().board());
+    if won {
+        g.round_wins_mut()[seat] += 1;
+    } else if full {
+        *g.draws_mut() += 1;
+    }
+    if won || full {
+        close_round(g);
+    }
+}
+
+/// Resets the board for the next round, then ends the match when the counters decide it.
+fn close_round(g: &mut GameViewMut<'_>) {
+    g.board_mut().fill(Cell::Empty);
+    end_match_if_decided(g);
+}
+
+/// Ends the match (terminal state, queues zeroed) when the counters decide it: an early clinch
+/// or the final round played.
+fn end_match_if_decided(g: &mut GameViewMut<'_>) {
+    let outcome = {
+        let v = g.view();
+        rules::match_outcome(v.rounds_total(), &v.round_wins(), v.draws())
+    };
+    if let Some(state) = outcome {
+        g.set_state(state);
+        g.clear_pending();
+    }
+}
+
+/// The mover's seat in the game, or an error when their resource id names neither player.
+fn seat_of(v: &GameView<'_>, mover_id: &ResourceId) -> Result<usize, &'static str> {
+    if v.creator() == mover_id {
+        Ok(0)
+    } else if v.joiner() == Some(mover_id) {
+        Ok(1)
+    } else {
+        Err("turn: mover is not a player of this game")
+    }
+}
+
+/// The seat whose ply it is on the current board.
+fn to_move(v: &GameView<'_>) -> usize {
+    let (creator_mark, round) = mark_and_round(v);
+    rules::seat_to_move(creator_mark, round, v.board())
+}
+
+/// Creator mark and current round index (rounds played so far, derived from the counters).
+fn mark_and_round(v: &GameView<'_>) -> (Cell, u8) {
+    let wins = v.round_wins();
+    (v.creator_mark(), wins[0] + wins[1] + v.draws())
+}
+
+/// Position of the user resource carrying `id` in the tx resource list, if attached.
+fn user_slot_of(resources: &[Resource<'_>], id: &ResourceId) -> Option<usize> {
+    resources.iter().position(|r| r.id() == id)
 }

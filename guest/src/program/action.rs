@@ -6,7 +6,7 @@ mod withdraw;
 
 use config::{apply_init, apply_update};
 use deposit::apply_deposit;
-use game::{apply_create_game, apply_join_game};
+use game::{apply_create_game, apply_join_game, apply_turn};
 use user::{apply_transfer, apply_update_user_lock};
 use vprogs_core_codec::{Error, Reader, Result as CodecResult};
 use vprogs_core_types::ResourceId;
@@ -64,8 +64,8 @@ pub enum ActionTag {
     /// Join an open game, locking the matching stake from the joiner's balance and starting
     /// play. Auth: the joiner's user lock.
     JoinGame = 0x08,
-    /// Place a mark on the board of a playing game. Auth: the to-move player's lock.
-    /// (Reserved: no decode arm yet.)
+    /// Place a mark for a player of a playing game: applied when it is the mover's own ply,
+    /// queued as a pre-commit otherwise. Auth: the mover's user lock.
     Turn = 0x09,
 }
 
@@ -175,6 +175,15 @@ pub enum ActionBody<'a> {
         /// and its id must differ from the creator's.
         joiner_idx: u8,
     },
+    Turn {
+        /// Resource-list index of the game being played.
+        game_idx: u8,
+        /// Resource-list index of the moving user's resource; its lock authorizes the turn
+        /// and its id must name a player of the game.
+        user_idx: u8,
+        /// Board position 0..=8 the mover commits to.
+        cell: u8,
+    },
 }
 
 /// The program's action decoder, handed to `runtime::ix::decode_ix`.
@@ -267,9 +276,17 @@ pub fn decode_action<'a>(buf: &mut &'a [u8], n_resources: usize) -> CodecResult<
             let joiner_idx = read_resource_idx(buf, "action.join_game.joiner_idx", n_resources)?;
             ActionBody::JoinGame { game_idx, joiner_idx }
         }
-        // Exhaustiveness makes the reservation explicit: when the Turn slice lands, this arm
-        // gains its body decoder.
-        ActionTag::Turn => return Err(Error::Decode("action.turn: reserved tag")),
+        ActionTag::Turn => {
+            let game_idx = read_resource_idx(buf, "action.turn.game_idx", n_resources)?;
+            let user_idx = read_resource_idx(buf, "action.turn.user_idx", n_resources)?;
+            let cell = buf.byte("action.turn.cell")?;
+            // A fixed-domain byte like the CreateGame mark: positions beyond the board are not
+            // a semantic choice the apply layer should ever see.
+            if cell > 8 {
+                return Err(Error::Decode("action.turn: cell must be a board position 0..=8"));
+            }
+            ActionBody::Turn { game_idx, user_idx, cell }
+        }
     };
     Ok(ActionView { action_tag, body })
 }
@@ -327,6 +344,9 @@ pub fn apply_action<'a, P: DepositPolicy<Lock<'a> = LockEnum<'a>>>(
         }
         ActionBody::JoinGame { game_idx, joiner_idx } => {
             apply_join_game(*game_idx, *joiner_idx, cx)
+        }
+        ActionBody::Turn { game_idx, user_idx, cell } => {
+            apply_turn(*game_idx, *user_idx, *cell, cx)
         }
     }
 }
@@ -916,6 +936,52 @@ mod tests {
         }
     }
 
+    // Turn decoder arm
+
+    /// Builds a Turn action: `tag | game_idx | user_idx | cell`.
+    fn turn_action(game_idx: u8, user_idx: u8, cell: u8) -> Vec<u8> {
+        vec![ActionTag::Turn as u8, game_idx, user_idx, cell]
+    }
+
+    #[test]
+    fn decode_turn_action() {
+        let mut ix = 0u32.to_le_bytes().to_vec();
+        ix.extend_from_slice(&1u32.to_le_bytes());
+        ix.extend_from_slice(&turn_action(0, 2, 8));
+
+        let decoded = decode_ix(&ix, 3, decode_action).unwrap();
+        match &decoded.actions[0].body {
+            ActionBody::Turn { game_idx, user_idx, cell } => {
+                assert_eq!(*game_idx, 0);
+                assert_eq!(*user_idx, 2);
+                assert_eq!(*cell, 8);
+            }
+            _ => panic!("expected Turn"),
+        }
+    }
+
+    #[test]
+    fn decode_turn_rejects_cell_off_board() {
+        for bad in [9u8, 255] {
+            let mut ix = 0u32.to_le_bytes().to_vec();
+            ix.extend_from_slice(&1u32.to_le_bytes());
+            ix.extend_from_slice(&turn_action(0, 1, bad));
+
+            assert!(decode_ix(&ix, 2, decode_action).is_err());
+        }
+    }
+
+    #[test]
+    fn decode_turn_rejects_out_of_range_idx() {
+        for action in [turn_action(2, 1, 0), turn_action(0, 2, 0)] {
+            let mut ix = 0u32.to_le_bytes().to_vec();
+            ix.extend_from_slice(&1u32.to_le_bytes());
+            ix.extend_from_slice(&action);
+
+            assert!(decode_ix(&ix, 2, decode_action).is_err());
+        }
+    }
+
     // ActionTag <-> wire byte
 
     /// Every variant maps to exactly one wire byte and back; the bounds (0, 0x0A) reject.
@@ -938,14 +1004,5 @@ mod tests {
         assert!(ActionTag::try_from(0x00).is_err());
         assert!(ActionTag::try_from(0x0A).is_err());
         assert!(ActionTag::try_from(0xFF).is_err());
-    }
-
-    #[test]
-    fn decode_rejects_reserved_turn_tag() {
-        let mut ix = 0u32.to_le_bytes().to_vec();
-        ix.extend_from_slice(&1u32.to_le_bytes());
-        ix.push(ActionTag::Turn as u8);
-
-        assert!(decode_ix(&ix, 1, decode_action).is_err());
     }
 }
