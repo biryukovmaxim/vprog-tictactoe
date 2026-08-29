@@ -1,5 +1,6 @@
 mod config;
 mod deposit;
+pub mod encode;
 mod game;
 mod user;
 mod withdraw;
