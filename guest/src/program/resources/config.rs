@@ -13,7 +13,7 @@
 //! ```
 //!
 //! The kind byte is checked by `from_bytes` before the kindless body is
-//! zerocopy-parsed, so it carries no field of [`ConfigView`] itself.
+//! zerocopy-parsed, so it carries no field of [`ConfigBody`] itself.
 //!
 //! Body shapes (each variant's wire form is the same as on the ix wire,
 //! minus the tag byte; `Lock::encode` is reused both here and in the ix
@@ -32,7 +32,7 @@ use zerocopy::{
 };
 
 use crate::{
-    program::resources::kind::{Kind, kind_of},
+    program::resources::kind::Kind,
     runtime::{
         lock::LockEnum,
         lock_codec::{decode_lock_body_unchecked, validate_lock_body},
@@ -42,14 +42,14 @@ use crate::{
 /// Fixed-header byte length:
 /// `kind (u8) || min_withdrawal_amount (u64 LE) || turn_ttl (u64 LE) || covenant_id ([u8; 32])
 /// || lock_tag (u8)`, derived from the struct layout so the sum can never drift.
-pub const CONFIG_HEADER_LEN: usize = core::mem::offset_of!(ConfigView, lock_tag) + 2;
+pub const CONFIG_HEADER_LEN: usize = core::mem::offset_of!(ConfigBody, lock_tag) + 2;
 
 /// Zerocopy DST over the kindless body: fixed header + tag-driven variable tail.
 /// Fields are private; a handle is obtainable only through the validating
 /// `from_bytes` / `from_bytes_mut`, so accessors are infallible.
 #[repr(C)]
 #[derive(FromZeros, IntoBytes, Immutable, KnownLayout, Unaligned)]
-pub struct ConfigView {
+pub struct ConfigBody {
     min_withdrawal_amount: Le64,
     turn_ttl: Le64,
     covenant_id: [u8; 32],
@@ -57,13 +57,14 @@ pub struct ConfigView {
     lock_body: [u8],
 }
 
-impl ConfigView {
-    /// Validates `bytes` (kind byte + body) and returns the read view over them.
+impl ConfigBody {
+    /// Validates `bytes` (kind byte + body) and returns the read handle over them.
     pub fn from_bytes(bytes: &[u8]) -> Result<&Self, &'static str> {
-        if kind_of(bytes) != Some(Kind::Config) {
+        let (kind, body) = Kind::try_ref_from_prefix(bytes).map_err(|_| "config: wrong kind")?;
+        if !matches!(kind, Kind::Config) {
             return Err("config: wrong kind");
         }
-        let v = Self::try_ref_from_bytes(&bytes[1..]).map_err(|_| "config: invalid layout")?;
+        let v = Self::try_ref_from_bytes(body).map_err(|_| "config: invalid layout")?;
         validate_lock_body(v.lock_tag, &v.lock_body)?;
         Ok(v)
     }
@@ -72,10 +73,11 @@ impl ConfigView {
     /// The lock body can be rewritten via `lock_body_mut`; the caller is
     /// responsible for keeping the tag-implied invariants intact.
     pub fn from_bytes_mut(bytes: &mut [u8]) -> Result<&mut Self, &'static str> {
-        if kind_of(bytes) != Some(Kind::Config) {
+        let (kind, body) = Kind::try_mut_from_prefix(bytes).map_err(|_| "config: wrong kind")?;
+        if !matches!(kind, Kind::Config) {
             return Err("config: wrong kind");
         }
-        let v = Self::try_mut_from_bytes(&mut bytes[1..]).map_err(|_| "config: invalid layout")?;
+        let v = Self::try_mut_from_bytes(body).map_err(|_| "config: invalid layout")?;
         validate_lock_body(v.lock_tag, &v.lock_body)?;
         Ok(v)
     }
@@ -149,7 +151,7 @@ pub fn write_config(
         return Err("config: write buffer wrong length");
     }
     out[0] = Kind::Config as u8;
-    let v = ConfigView::try_mut_from_bytes(&mut out[1..]).map_err(|_| "config: invalid layout")?;
+    let v = ConfigBody::try_mut_from_bytes(&mut out[1..]).map_err(|_| "config: invalid layout")?;
     v.min_withdrawal_amount = Le64::new(min_withdrawal_amount);
     v.turn_ttl = Le64::new(turn_ttl);
     v.covenant_id = *covenant_id;
@@ -190,7 +192,7 @@ mod tests {
         let mut buf = vec![0u8; total];
         write_config(&mut buf, 999_999, 86_400_000, &cov_id, &lock).unwrap();
 
-        let view = ConfigView::from_bytes(&buf).unwrap();
+        let view = ConfigBody::from_bytes(&buf).unwrap();
         assert_eq!(view.min_withdrawal_amount(), 999_999);
         assert_eq!(view.turn_ttl(), 86_400_000);
         assert_eq!(view.covenant_id(), &cov_id);
@@ -205,10 +207,10 @@ mod tests {
     #[test]
     fn schnorr_rejects_wrong_length() {
         let buf = vec![0u8; CONFIG_HEADER_LEN + 31];
-        assert!(ConfigView::from_bytes(&buf).is_err());
+        assert!(ConfigBody::from_bytes(&buf).is_err());
 
         let buf = vec![0u8; CONFIG_HEADER_LEN - 1];
-        assert!(ConfigView::from_bytes(&buf).is_err());
+        assert!(ConfigBody::from_bytes(&buf).is_err());
     }
 
     // Multisig layout
@@ -235,7 +237,7 @@ mod tests {
         let mut buf = vec![0u8; total];
         write_config(&mut buf, 42, 3_600_000, &cov_id, &lock).unwrap();
 
-        let view = ConfigView::from_bytes(&buf).unwrap();
+        let view = ConfigBody::from_bytes(&buf).unwrap();
         assert_eq!(view.min_withdrawal_amount(), 42);
         assert_eq!(view.turn_ttl(), 3_600_000);
         assert_eq!(view.covenant_id(), &cov_id);
@@ -264,7 +266,7 @@ mod tests {
         // pks: 0x05 then 0x03, descending
         buf[CONFIG_HEADER_LEN + 2..CONFIG_HEADER_LEN + 34].copy_from_slice(&pk(0x05));
         buf[CONFIG_HEADER_LEN + 34..CONFIG_HEADER_LEN + 66].copy_from_slice(&pk(0x03));
-        assert!(ConfigView::from_bytes(&buf).is_err());
+        assert!(ConfigBody::from_bytes(&buf).is_err());
     }
 
     #[test]
@@ -274,7 +276,7 @@ mod tests {
         buf[CONFIG_HEADER_LEN] = 0; // threshold = 0 → invalid
         buf[CONFIG_HEADER_LEN + 1] = 1;
         buf[CONFIG_HEADER_LEN + 2..CONFIG_HEADER_LEN + 34].copy_from_slice(&pk(0x42));
-        assert!(ConfigView::from_bytes(&buf).is_err());
+        assert!(ConfigBody::from_bytes(&buf).is_err());
     }
 
     #[test]
@@ -284,7 +286,7 @@ mod tests {
         buf[CONFIG_HEADER_LEN] = 2; // threshold = 2
         buf[CONFIG_HEADER_LEN + 1] = 1; // n = 1 → threshold > n
         buf[CONFIG_HEADER_LEN + 2..CONFIG_HEADER_LEN + 34].copy_from_slice(&pk(0x42));
-        assert!(ConfigView::from_bytes(&buf).is_err());
+        assert!(ConfigBody::from_bytes(&buf).is_err());
     }
 
     #[test]
@@ -295,8 +297,8 @@ mod tests {
         buf[CONFIG_HEADER_LEN] = 1;
         buf[CONFIG_HEADER_LEN + 1] = 2; // n = 2
         buf[CONFIG_HEADER_LEN + 2..CONFIG_HEADER_LEN + 34].copy_from_slice(&pk(0x01));
-        // Missing the second pk. ConfigView should reject.
-        assert!(ConfigView::from_bytes(&buf).is_err());
+        // Missing the second pk. ConfigBody should reject.
+        assert!(ConfigBody::from_bytes(&buf).is_err());
     }
 
     // Unlocked layout
@@ -311,7 +313,7 @@ mod tests {
         let mut buf = vec![0u8; total];
         write_config(&mut buf, 7, 60_000, &cov_id, &lock).unwrap();
 
-        let view = ConfigView::from_bytes(&buf).unwrap();
+        let view = ConfigBody::from_bytes(&buf).unwrap();
         assert_eq!(view.min_withdrawal_amount(), 7);
         assert_eq!(view.covenant_id(), &cov_id);
         assert!(matches!(view.lock(), LockEnum::Unlocked(_)));
@@ -322,7 +324,7 @@ mod tests {
         let mut buf = vec![0u8; CONFIG_HEADER_LEN + 4];
         buf[CONFIG_HEADER_LEN - 1] = UnlockedLockView::TAG;
         // 4 spurious tail bytes must be rejected.
-        assert!(ConfigView::from_bytes(&buf).is_err());
+        assert!(ConfigBody::from_bytes(&buf).is_err());
     }
 
     // Tag dispatch
@@ -331,7 +333,7 @@ mod tests {
     fn rejects_unknown_lock_tag() {
         let mut buf = vec![0u8; CONFIG_HEADER_LEN];
         buf[CONFIG_HEADER_LEN - 1] = 0xFF;
-        assert!(ConfigView::from_bytes(&buf).is_err());
+        assert!(ConfigBody::from_bytes(&buf).is_err());
     }
 
     #[test]
@@ -344,7 +346,7 @@ mod tests {
         let mut buf = vec![0u8; config_total_len(&lock)];
         write_config(&mut buf, 1, 60_000, &covenant_id(0x44), &lock).unwrap();
         buf[0] = 0xFE; // not Kind::Config
-        assert!(ConfigView::from_bytes(&buf).is_err());
+        assert!(ConfigBody::from_bytes(&buf).is_err());
     }
 
     // Mutable in-place updates
@@ -357,14 +359,14 @@ mod tests {
         write_config(&mut buf, 100, 60_000, &covenant_id(0x33), &lock).unwrap();
 
         {
-            let mv = ConfigView::from_bytes_mut(&mut buf).unwrap();
+            let mv = ConfigBody::from_bytes_mut(&mut buf).unwrap();
             mv.set_min_withdrawal_amount(200);
             mv.set_turn_ttl(120_000);
             mv.set_covenant_id(&covenant_id(0x66));
             mv.lock_body_mut().copy_from_slice(&pk(0x22));
         }
 
-        let view = ConfigView::from_bytes(&buf).unwrap();
+        let view = ConfigBody::from_bytes(&buf).unwrap();
         assert_eq!(view.min_withdrawal_amount(), 200);
         assert_eq!(view.turn_ttl(), 120_000);
         assert_eq!(view.covenant_id(), &covenant_id(0x66));

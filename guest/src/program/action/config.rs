@@ -4,7 +4,7 @@ use vprogs_zk_backend_risc0_runtime_processor::lifecycle::Lifecycle;
 use super::ApplyContext;
 use crate::{
     program::resources::{
-        config::{ConfigView, config_total_len, write_config},
+        config::{ConfigBody, config_total_len, write_config},
         id::config_resource_id,
     },
     runtime::{
@@ -42,7 +42,7 @@ pub(super) fn apply_update<'a>(
     // The kind check inside `from_bytes` rejects any slot that is not the
     // config: `Init` is its only birth path, and it enforces the derived id,
     // so a live config-kind slot is the singleton.
-    let cur = ConfigView::from_bytes(target.data()).map_err(|m| AbiError::Decode(m.into()))?;
+    let cur = ConfigBody::from_bytes(target.data()).map_err(|m| AbiError::Decode(m.into()))?;
     if new_covenant_id != cur.covenant_id() {
         return Err(AbiError::Decode("update: covenant_id is immutable after init".into()));
     }

@@ -6,7 +6,7 @@
 //! choke point through which all action writes pass. Read-only (`view_*`) combinators accept
 //! both modes.
 //!
-//! Liveness and kind fold into the views' validating `from_bytes`: it rejects empty data (a
+//! Liveness and kind fold into the bodies' validating `from_bytes`: it rejects empty data (a
 //! `New` slot has nothing yet, a `Deleted` one was emptied on teardown) and any slot whose
 //! payload is not of the view's kind, so `None` means "not a live resource of that kind".
 //! The lifecycle machinery itself lives in `ApplyContext`.
@@ -16,9 +16,9 @@ use vprogs_zk_abi::transaction_processor::Resource;
 
 use crate::{
     program::resources::{
-        config::{CONFIG_HEADER_LEN, ConfigView, config_total_len, write_config},
-        game::{Cell, GAME_WIRE_LEN, GameView, write_game},
-        user::{GameStats, USER_HEADER_LEN, UserView, user_total_len, write_user},
+        config::{CONFIG_HEADER_LEN, ConfigBody, config_total_len, write_config},
+        game::{Cell, GAME_WIRE_LEN, GameBody, write_game},
+        user::{GameStats, USER_HEADER_LEN, UserBody, user_total_len, write_user},
     },
     runtime::lock::LockEnum,
 };
@@ -31,18 +31,18 @@ fn is_writable(r: &Resource<'_>) -> bool {
 /// Extension trait over `Resource<'a>`; see module docs.
 pub trait ResourceExt {
     /// Runs `f` on the config payload; `None` when the slot holds no live config.
-    fn view_config<R>(&self, f: impl FnOnce(&ConfigView) -> R) -> Option<R>;
+    fn view_config<R>(&self, f: impl FnOnce(&ConfigBody) -> R) -> Option<R>;
     /// Runs `f` on the user payload; `None` when the slot holds no live user.
-    fn view_user<R>(&self, f: impl FnOnce(&UserView) -> R) -> Option<R>;
+    fn view_user<R>(&self, f: impl FnOnce(&UserBody) -> R) -> Option<R>;
     /// Runs `f` on the game payload; `None` when the slot holds no live game.
-    fn view_game<R>(&self, f: impl FnOnce(&GameView) -> R) -> Option<R>;
+    fn view_game<R>(&self, f: impl FnOnce(&GameBody) -> R) -> Option<R>;
 
     /// Mutably runs `f` on the config payload; `None` when not live or not declared writable.
-    fn modify_config<R>(&mut self, f: impl FnOnce(&mut ConfigView) -> R) -> Option<R>;
+    fn modify_config<R>(&mut self, f: impl FnOnce(&mut ConfigBody) -> R) -> Option<R>;
     /// Mutably runs `f` on the user payload; `None` when not live or not declared writable.
-    fn modify_user<R>(&mut self, f: impl FnOnce(&mut UserView) -> R) -> Option<R>;
+    fn modify_user<R>(&mut self, f: impl FnOnce(&mut UserBody) -> R) -> Option<R>;
     /// Mutably runs `f` on the game payload; `None` when not live or not declared writable.
-    fn modify_game<R>(&mut self, f: impl FnOnce(&mut GameView) -> R) -> Option<R>;
+    fn modify_game<R>(&mut self, f: impl FnOnce(&mut GameBody) -> R) -> Option<R>;
 
     /// Creates the config payload in an empty writable slot.
     fn init_config(
@@ -75,39 +75,39 @@ pub trait ResourceExt {
 }
 
 impl ResourceExt for Resource<'_> {
-    fn view_config<R>(&self, f: impl FnOnce(&ConfigView) -> R) -> Option<R> {
-        Some(f(ConfigView::from_bytes(self.data()).ok()?))
+    fn view_config<R>(&self, f: impl FnOnce(&ConfigBody) -> R) -> Option<R> {
+        Some(f(ConfigBody::from_bytes(self.data()).ok()?))
     }
 
-    fn view_user<R>(&self, f: impl FnOnce(&UserView) -> R) -> Option<R> {
-        Some(f(UserView::from_bytes(self.data()).ok()?))
+    fn view_user<R>(&self, f: impl FnOnce(&UserBody) -> R) -> Option<R> {
+        Some(f(UserBody::from_bytes(self.data()).ok()?))
     }
 
-    fn view_game<R>(&self, f: impl FnOnce(&GameView) -> R) -> Option<R> {
-        Some(f(GameView::from_bytes(self.data()).ok()?))
+    fn view_game<R>(&self, f: impl FnOnce(&GameBody) -> R) -> Option<R> {
+        Some(f(GameBody::from_bytes(self.data()).ok()?))
     }
 
-    fn modify_config<R>(&mut self, f: impl FnOnce(&mut ConfigView) -> R) -> Option<R> {
+    fn modify_config<R>(&mut self, f: impl FnOnce(&mut ConfigBody) -> R) -> Option<R> {
         if !is_writable(self) {
             return None;
         }
-        let mv = ConfigView::from_bytes_mut(self.data_mut()).ok()?;
+        let mv = ConfigBody::from_bytes_mut(self.data_mut()).ok()?;
         Some(f(mv))
     }
 
-    fn modify_user<R>(&mut self, f: impl FnOnce(&mut UserView) -> R) -> Option<R> {
+    fn modify_user<R>(&mut self, f: impl FnOnce(&mut UserBody) -> R) -> Option<R> {
         if !is_writable(self) {
             return None;
         }
-        let mv = UserView::from_bytes_mut(self.data_mut()).ok()?;
+        let mv = UserBody::from_bytes_mut(self.data_mut()).ok()?;
         Some(f(mv))
     }
 
-    fn modify_game<R>(&mut self, f: impl FnOnce(&mut GameView) -> R) -> Option<R> {
+    fn modify_game<R>(&mut self, f: impl FnOnce(&mut GameBody) -> R) -> Option<R> {
         if !is_writable(self) {
             return None;
         }
-        let mv = GameView::from_bytes_mut(self.data_mut()).ok()?;
+        let mv = GameBody::from_bytes_mut(self.data_mut()).ok()?;
         Some(f(mv))
     }
 
@@ -171,7 +171,7 @@ impl ResourceExt for Resource<'_> {
         // Snapshot fixed-header fields before resize (which would invalidate
         // the existing data slice).
         let (min_withdrawal_amount, turn_ttl, covenant_id) = {
-            let view = ConfigView::from_bytes(self.data())
+            let view = ConfigBody::from_bytes(self.data())
                 .map_err(|_| "set_config_lock: not a config resource")?;
             (view.min_withdrawal_amount(), view.turn_ttl(), *view.covenant_id())
         };
@@ -187,7 +187,7 @@ impl ResourceExt for Resource<'_> {
         // Snapshot the fixed fields (balance + game counters) before resize; the rotation
         // must not reset game history.
         let (balance, stats, ilh) = {
-            let view = UserView::from_bytes(self.data())
+            let view = UserBody::from_bytes(self.data())
                 .map_err(|_| "set_user_lock: not a user resource")?;
             (view.balance(), view.stats(), *view.initial_lock_hash())
         };

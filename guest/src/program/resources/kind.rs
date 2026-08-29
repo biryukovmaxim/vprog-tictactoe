@@ -2,13 +2,28 @@
 //! distinguishes one typed payload from another (config vs user vs game) without
 //! re-hashing the resource id.
 //!
-//! Each payload's `from_bytes` checks this byte against its expected [`Kind`]
-//! before zerocopy-parsing the kindless body that follows, so an action aimed at
-//! the wrong kind of resource never sees a parsed body.
+//! Each payload's `from_bytes` splits this byte off with zerocopy's
+//! `try_from_prefix` (parse plus split in one step) and rejects it unless it
+//! names the expected [`Kind`], before zerocopy-parsing the kindless body that
+//! follows; an action aimed at the wrong kind of resource never sees a parsed
+//! body.
+
+use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
 
 /// The resource kind named by the data's first byte.
 #[repr(u8)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    TryFromBytes,
+    IntoBytes,
+    Immutable,
+    KnownLayout,
+    Unaligned
+)]
 pub enum Kind {
     Config = 0,
     User = 1,
@@ -28,12 +43,6 @@ impl TryFrom<u8> for Kind {
     }
 }
 
-/// The kind byte at offset 0, or `None` if `bytes` is empty or carries an
-/// unknown discriminator.
-pub fn kind_of(bytes: &[u8]) -> Option<Kind> {
-    bytes.first().and_then(|&b| Kind::try_from(b).ok())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -48,8 +57,15 @@ mod tests {
         }
         assert!(Kind::try_from(3).is_err());
         assert!(Kind::try_from(0xFF).is_err());
-        assert_eq!(kind_of(&[2]), Some(Kind::Game));
-        assert_eq!(kind_of(&[3]), None);
-        assert_eq!(kind_of(&[]), None);
+    }
+
+    /// The zerocopy parse accepts exactly the same byte set as `TryFrom<u8>`,
+    /// so prefix splitting and byte conversion cannot disagree.
+    #[test]
+    fn zerocopy_parse_matches_try_from() {
+        for b in 0..=3u8 {
+            let parsed = Kind::try_ref_from_bytes(&[b]).is_ok();
+            assert_eq!(parsed, Kind::try_from(b).is_ok(), "byte {b}");
+        }
     }
 }

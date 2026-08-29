@@ -22,7 +22,7 @@ use withdraw::apply_withdraw;
 pub use crate::runtime::ApplyContext;
 use crate::{
     program::resources::{
-        config::ConfigView, ext::ResourceExt, game::Cell, id::derive_user_resource,
+        config::ConfigBody, ext::ResourceExt, game::Cell, id::derive_user_resource,
     },
     runtime::{
         ix::read_resource_idx,
@@ -375,7 +375,7 @@ pub fn apply_action<'a, P: DepositPolicy<Lock<'a> = LockEnum<'a>>>(
 pub(super) fn view_config_at<R>(
     resources: &[Resource<'_>],
     config_idx: u8,
-    f: impl FnOnce(&ConfigView) -> R,
+    f: impl FnOnce(&ConfigBody) -> R,
 ) -> AbiResult<R> {
     resources[config_idx as usize]
         .view_config(f)

@@ -14,7 +14,7 @@ use super::{ApplyContext, view_config_at};
 use crate::program::{
     resources::{
         ext::ResourceExt,
-        game::{Cell, GameView, State},
+        game::{Cell, GameBody, State},
         id::derive_game_resource,
     },
     rules,
@@ -72,7 +72,8 @@ pub(super) fn apply_create_game(
             let bal = v.balance_mut();
             let new = bal.get().checked_sub(stake).ok_or("create_game: insufficient balance")?;
             bal.set(new);
-            v.games_started_mut().set(games_started + 1);
+            v.games_started_mut()
+                .set(games_started.checked_add(1).ok_or("create_game: games_started overflow")?);
             Ok::<(), &'static str>(())
         })
         .ok_or_else(|| {
@@ -239,10 +240,10 @@ fn settle_match(cx: &mut ApplyContext<'_, '_>, game_idx: u8) -> AbiResult<()> {
                     bal.set(bal.get().checked_add(credit).ok_or("settle: balance overflow")?);
                 }
                 let finished = v.games_finished_mut();
-                finished.set(finished.get() + 1);
+                finished.set(finished.get().checked_add(1).ok_or("settle: stat overflow")?);
                 if won {
                     let won = v.games_won_mut();
-                    won.set(won.get() + 1);
+                    won.set(won.get().checked_add(1).ok_or("settle: stat overflow")?);
                 }
                 Ok::<(), &'static str>(())
             })
@@ -258,7 +259,7 @@ fn settle_match(cx: &mut ApplyContext<'_, '_>, game_idx: u8) -> AbiResult<()> {
 /// returns whether the match just finished. Every check that can fail runs before the first
 /// board or queue write.
 fn play_turn(
-    g: &mut GameView,
+    g: &mut GameBody,
     mover_id: &ResourceId,
     cell: u8,
     now: u64,
@@ -274,7 +275,7 @@ fn play_turn(
 
 /// Lands the explicit turn: on the board when it is the mover's own ply, else queued as the
 /// mover's pre-commit.
-fn commit_explicit(g: &mut GameView, seat: usize, cell: u8, now: u64) -> Result<(), &'static str> {
+fn commit_explicit(g: &mut GameBody, seat: usize, cell: u8, now: u64) -> Result<(), &'static str> {
     if g.board()[cell as usize] != Cell::Empty {
         return Err("turn: cell is occupied");
     }
@@ -290,7 +291,7 @@ fn commit_explicit(g: &mut GameView, seat: usize, cell: u8, now: u64) -> Result<
 /// other seat, whose own head applies next, and so on across round boundaries (queues are
 /// ply-agnostic). Heads naming taken cells are stale and dropped. Every iteration pops exactly
 /// one entry, so the loop terminates.
-fn drain_pending(g: &mut GameView, now: u64) {
+fn drain_pending(g: &mut GameBody, now: u64) {
     while g.state() == State::Playing {
         let seat = to_move(g);
         let Some(cell) = g.pending_mut(seat).peek() else { break };
@@ -304,7 +305,7 @@ fn drain_pending(g: &mut GameView, now: u64) {
 /// Awards the round to the seat not to move when `now` passed `last_move_at + turn_ttl`, and
 /// returns whether the match just finished. The claim itself stamps `last_move_at`, so the
 /// fresh round's clock starts at the claim: a same-tx repeat sees `now < deadline` and rejects.
-fn forfeit_round(g: &mut GameView, turn_ttl: u64, now: u64) -> Result<bool, &'static str> {
+fn forfeit_round(g: &mut GameBody, turn_ttl: u64, now: u64) -> Result<bool, &'static str> {
     if g.state() != State::Playing {
         return Err("timeout: game is not playing");
     }
@@ -316,7 +317,8 @@ fn forfeit_round(g: &mut GameView, turn_ttl: u64, now: u64) -> Result<bool, &'st
         return Err("timeout: turn has not expired");
     }
 
-    let winner = 1 - to_move(g);
+    // XOR flips a 0/1 seat index with no underflow edge.
+    let winner = to_move(g) ^ 1;
     g.round_wins_mut()[winner] += 1;
     g.set_last_move_at(now);
     close_round(g);
@@ -326,7 +328,7 @@ fn forfeit_round(g: &mut GameView, turn_ttl: u64, now: u64) -> Result<bool, &'st
 
 /// Places `seat`'s mark at `cell`, stamps the clock, and closes the round when the move ends it
 /// (a completed line or a full board).
-fn apply_move(g: &mut GameView, seat: usize, cell: u8, now: u64) {
+fn apply_move(g: &mut GameBody, seat: usize, cell: u8, now: u64) {
     let (creator_mark, round) = mark_and_round(g);
     let mark = rules::mark_for_seat(creator_mark, round, seat);
     g.board_mut()[cell as usize] = mark;
@@ -347,14 +349,14 @@ fn apply_move(g: &mut GameView, seat: usize, cell: u8, now: u64) {
 }
 
 /// Resets the board for the next round, then ends the match when the counters decide it.
-fn close_round(g: &mut GameView) {
+fn close_round(g: &mut GameBody) {
     g.board_mut().fill(Cell::Empty);
     end_match_if_decided(g);
 }
 
 /// Ends the match (terminal state, queues zeroed) when the counters decide it: an early clinch
 /// or the final round played.
-fn end_match_if_decided(g: &mut GameView) {
+fn end_match_if_decided(g: &mut GameBody) {
     let outcome = rules::match_outcome(g.rounds_total(), &g.round_wins(), g.draws());
     if let Some(state) = outcome {
         g.set_state(state);
@@ -363,7 +365,7 @@ fn end_match_if_decided(g: &mut GameView) {
 }
 
 /// The mover's seat in the game, or an error when their resource id names neither player.
-fn seat_of(v: &GameView, mover_id: &ResourceId) -> Result<usize, &'static str> {
+fn seat_of(v: &GameBody, mover_id: &ResourceId) -> Result<usize, &'static str> {
     if v.creator() == mover_id {
         Ok(0)
     } else if v.joiner() == Some(mover_id) {
@@ -374,13 +376,13 @@ fn seat_of(v: &GameView, mover_id: &ResourceId) -> Result<usize, &'static str> {
 }
 
 /// The seat whose ply it is on the current board.
-fn to_move(v: &GameView) -> usize {
+fn to_move(v: &GameBody) -> usize {
     let (creator_mark, round) = mark_and_round(v);
     rules::seat_to_move(creator_mark, round, v.board())
 }
 
 /// Creator mark and current round index (rounds played so far, derived from the counters).
-fn mark_and_round(v: &GameView) -> (Cell, u8) {
+fn mark_and_round(v: &GameBody) -> (Cell, u8) {
     let wins = v.round_wins();
     (v.creator_mark(), wins[0] + wins[1] + v.draws())
 }

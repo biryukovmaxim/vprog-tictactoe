@@ -20,7 +20,7 @@
 //! ```
 //!
 //! The kind byte is checked by `from_bytes` before the kindless body is
-//! zerocopy-parsed, so it carries no field of [`GameView`] itself.
+//! zerocopy-parsed, so it carries no field of [`GameBody`] itself.
 //!
 //! Derived, not stored: the current round is `round_wins[0] + round_wins[1] + draws`, the
 //! ply-in-round is the count of marks on the board, and the to-move seat follows from ply
@@ -29,7 +29,7 @@
 //! the mover's own queue instead of rejected, and the queue head auto-applies when its turn
 //! arrives; entries are owned structurally by the queue they sit in. Popped slots linger
 //! (cursors only); the pair is zeroed at game end. Queue mutation belongs to the game
-//! actions, not this view.
+//! actions, not this type.
 
 use vprogs_core_types::ResourceId;
 use zerocopy::{
@@ -37,7 +37,7 @@ use zerocopy::{
     little_endian::U64 as Le64,
 };
 
-use crate::program::resources::kind::{Kind, kind_of};
+use crate::program::resources::kind::Kind;
 
 /// Match lifecycle; the win/draw variants are exactly the finished states.
 #[repr(u8)]
@@ -91,7 +91,7 @@ pub enum Cell {
 pub const PENDING_CAP: usize = 4;
 
 /// Total wire length of a game resource. Fixed: no lock tail, no variable body.
-pub const GAME_WIRE_LEN: usize = 1 + core::mem::size_of::<GameView>();
+pub const GAME_WIRE_LEN: usize = 1 + core::mem::size_of::<GameBody>();
 
 /// One seat's ring of pre-committed cells in insert order: writes at
 /// `(head + count) % PENDING_CAP`, pops at `head`. `count` gates everything (zero-fill is
@@ -165,28 +165,30 @@ struct MatchRaw {
 /// game actions, so no reachable state can carry them wrong.
 #[repr(C)]
 #[derive(FromZeros, IntoBytes, Immutable, KnownLayout, Unaligned)]
-pub struct GameView {
+pub struct GameBody {
     m: MatchRaw,
     board: [Cell; 9],
 }
 
-impl GameView {
-    /// Validates `bytes` (kind byte + body) and returns the read view over them.
+impl GameBody {
+    /// Validates `bytes` (kind byte + body) and returns the read handle over them.
     pub fn from_bytes(bytes: &[u8]) -> Result<&Self, &'static str> {
-        if kind_of(bytes) != Some(Kind::Game) {
+        let (kind, body) = Kind::try_ref_from_prefix(bytes).map_err(|_| "game: wrong kind")?;
+        if !matches!(kind, Kind::Game) {
             return Err("game: wrong kind");
         }
-        Self::try_ref_from_bytes(&bytes[1..]).map_err(|_| "game: invalid layout")
+        Self::try_ref_from_bytes(body).map_err(|_| "game: invalid layout")
     }
 
     /// Mutable counterpart of [`Self::from_bytes`] for in-place updates. Setters do not
     /// re-validate; the writers own every invariant. `stake`, `creator_mark`,
     /// `rounds_total` and seat 0 are create-time only by construction.
     pub fn from_bytes_mut(bytes: &mut [u8]) -> Result<&mut Self, &'static str> {
-        if kind_of(bytes) != Some(Kind::Game) {
+        let (kind, body) = Kind::try_mut_from_prefix(bytes).map_err(|_| "game: wrong kind")?;
+        if !matches!(kind, Kind::Game) {
             return Err("game: wrong kind");
         }
-        Self::try_mut_from_bytes(&mut bytes[1..]).map_err(|_| "game: invalid layout")
+        Self::try_mut_from_bytes(body).map_err(|_| "game: invalid layout")
     }
 
     pub fn state(&self) -> State {
@@ -303,7 +305,7 @@ pub fn write_game(
     if creator_mark == Cell::Empty {
         return Err("game: creator_mark must be X or O");
     }
-    let mut raw = GameView::new_zeroed();
+    let mut raw = GameBody::new_zeroed();
     raw.m.state = State::Open;
     raw.m.creator_mark = creator_mark;
     raw.m.rounds_total = rounds_total;
@@ -339,7 +341,7 @@ mod tests {
         let mut buf = vec![0u8; GAME_WIRE_LEN];
         write_game(&mut buf, &creator, Cell::O, 5_000, 3).unwrap();
 
-        let view = GameView::from_bytes(&buf).unwrap();
+        let view = GameBody::from_bytes(&buf).unwrap();
         assert_eq!(view.state(), State::Open);
         assert_eq!(view.creator_mark(), Cell::O);
         assert_eq!(view.rounds_total(), 3);
@@ -367,7 +369,7 @@ mod tests {
         // 1 is the user kind: not the game discriminator.
         let mut buf = game_buf();
         buf[0] = Kind::User as u8;
-        assert!(GameView::from_bytes(&buf).is_err());
+        assert!(GameBody::from_bytes(&buf).is_err());
     }
 
     /// Kind 0 is the config kind; it must not parse as a game even though the old
@@ -376,27 +378,27 @@ mod tests {
     fn rejects_config_kind_byte() {
         let mut buf = game_buf();
         buf[0] = Kind::Config as u8;
-        assert!(GameView::from_bytes(&buf).is_err());
+        assert!(GameBody::from_bytes(&buf).is_err());
     }
 
     #[test]
     fn rejects_unknown_state() {
         let mut buf = game_buf();
         buf[1] = 5;
-        assert!(GameView::from_bytes(&buf).is_err());
+        assert!(GameBody::from_bytes(&buf).is_err());
     }
 
     #[test]
     fn rejects_wrong_length() {
-        assert!(GameView::from_bytes(&[0u8; GAME_WIRE_LEN + 1]).is_err());
-        assert!(GameView::from_bytes(&[0u8; GAME_WIRE_LEN - 1]).is_err());
+        assert!(GameBody::from_bytes(&[0u8; GAME_WIRE_LEN + 1]).is_err());
+        assert!(GameBody::from_bytes(&[0u8; GAME_WIRE_LEN - 1]).is_err());
     }
 
     #[test]
     fn rejects_bad_board_cell() {
         let mut buf = game_buf();
         buf[BOARD_OFF] = 3;
-        assert!(GameView::from_bytes(&buf).is_err());
+        assert!(GameBody::from_bytes(&buf).is_err());
     }
 
     #[test]
@@ -404,7 +406,7 @@ mod tests {
         let joiner = id(0x22);
         let mut buf = game_buf();
         {
-            let mv = GameView::from_bytes_mut(&mut buf).unwrap();
+            let mv = GameBody::from_bytes_mut(&mut buf).unwrap();
             mv.set_state(State::Playing);
             mv.set_joiner(&joiner);
             mv.round_wins_mut()[1] = 2;
@@ -414,7 +416,7 @@ mod tests {
             mv.board_mut()[4] = Cell::O;
         }
 
-        let view = GameView::from_bytes(&buf).unwrap();
+        let view = GameBody::from_bytes(&buf).unwrap();
         assert_eq!(view.state(), State::Playing);
         assert_eq!(view.joiner(), Some(&joiner));
         assert_eq!(view.round_wins(), [0, 2]);
@@ -425,8 +427,8 @@ mod tests {
         assert!(!view.is_finished());
 
         // A finished state flips the flag.
-        GameView::from_bytes_mut(&mut buf).unwrap().set_state(State::Draw);
-        assert!(GameView::from_bytes(&buf).unwrap().is_finished());
+        GameBody::from_bytes_mut(&mut buf).unwrap().set_state(State::Draw);
+        assert!(GameBody::from_bytes(&buf).unwrap().is_finished());
     }
 
     #[test]
@@ -434,7 +436,7 @@ mod tests {
         let joiner = id(0x22);
         let mut buf = game_buf();
         {
-            let mv = GameView::from_bytes_mut(&mut buf).unwrap();
+            let mv = GameBody::from_bytes_mut(&mut buf).unwrap();
             mv.set_state(State::Playing);
             mv.set_joiner(&joiner);
             mv.round_wins_mut()[0] = 1;
@@ -443,7 +445,7 @@ mod tests {
             mv.board_mut().fill(Cell::Empty);
         }
 
-        let view = GameView::from_bytes(&buf).unwrap();
+        let view = GameBody::from_bytes(&buf).unwrap();
         assert_eq!(view.board(), &[Cell::Empty; 9]);
         assert_eq!(view.round_wins(), [1, 0]);
         assert_eq!(view.joiner(), Some(&joiner));
@@ -511,24 +513,24 @@ mod tests {
     fn view_pending_is_seat_indexed_and_clearable() {
         let mut buf = game_buf();
         {
-            let mv = GameView::from_bytes_mut(&mut buf).unwrap();
+            let mv = GameBody::from_bytes_mut(&mut buf).unwrap();
             mv.pending_mut(0).push(3);
             mv.pending_mut(1).push(5);
             mv.pending_mut(1).push(6);
         }
         {
-            let mv = GameView::from_bytes_mut(&mut buf).unwrap();
+            let mv = GameBody::from_bytes_mut(&mut buf).unwrap();
             assert_eq!(mv.pending_mut(0).pop(), Some(3));
             assert_eq!(mv.pending_mut(1).pop(), Some(5));
             assert_eq!(mv.pending_mut(1).pop(), Some(6));
         }
         {
-            let mv = GameView::from_bytes_mut(&mut buf).unwrap();
+            let mv = GameBody::from_bytes_mut(&mut buf).unwrap();
             mv.pending_mut(0).push(1);
             mv.pending_mut(1).push(2);
             mv.clear_pending();
         }
-        let mv = GameView::from_bytes_mut(&mut buf).unwrap();
+        let mv = GameBody::from_bytes_mut(&mut buf).unwrap();
         assert!(mv.pending_mut(0).is_empty());
         assert!(mv.pending_mut(1).is_empty());
     }

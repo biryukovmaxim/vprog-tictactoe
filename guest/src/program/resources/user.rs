@@ -13,7 +13,7 @@
 //! ```
 //!
 //! The kind byte is checked by `from_bytes` before the kindless body is
-//! zerocopy-parsed, so it carries no field of [`UserView`] itself.
+//! zerocopy-parsed, so it carries no field of [`UserBody`] itself.
 
 use zerocopy::{
     FromZeros, Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned,
@@ -21,7 +21,7 @@ use zerocopy::{
 };
 
 use crate::{
-    program::resources::kind::{Kind, kind_of},
+    program::resources::kind::Kind,
     runtime::{
         lock::LockEnum,
         lock_codec::{decode_lock_body_unchecked, validate_lock_body},
@@ -31,7 +31,7 @@ use crate::{
 /// Fixed-header byte length: `kind (u8) || balance (u64 LE) || games_started (u64 LE) ||
 /// games_won (u64 LE) || games_finished (u64 LE) || initial_lock_hash ([u8; 32]) || lock_tag (u8)`,
 /// derived from the struct layout so the sum can never drift.
-pub const USER_HEADER_LEN: usize = core::mem::offset_of!(UserView, lock_tag) + 2;
+pub const USER_HEADER_LEN: usize = core::mem::offset_of!(UserBody, lock_tag) + 2;
 
 /// Per-player game counters carried by the user resource.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
@@ -49,7 +49,7 @@ pub struct GameStats {
 /// `from_bytes` / `from_bytes_mut`, so accessors are infallible.
 #[repr(C)]
 #[derive(FromZeros, IntoBytes, Immutable, KnownLayout, Unaligned)]
-pub struct UserView {
+pub struct UserBody {
     balance: Le64,
     games_started: Le64,
     games_won: Le64,
@@ -59,13 +59,14 @@ pub struct UserView {
     lock_body: [u8],
 }
 
-impl UserView {
-    /// Validates `bytes` (kind byte + body) and returns the read view over them.
+impl UserBody {
+    /// Validates `bytes` (kind byte + body) and returns the read handle over them.
     pub fn from_bytes(bytes: &[u8]) -> Result<&Self, &'static str> {
-        if kind_of(bytes) != Some(Kind::User) {
+        let (kind, body) = Kind::try_ref_from_prefix(bytes).map_err(|_| "user: wrong kind")?;
+        if !matches!(kind, Kind::User) {
             return Err("user: wrong kind");
         }
-        let v = Self::try_ref_from_bytes(&bytes[1..]).map_err(|_| "user: invalid layout")?;
+        let v = Self::try_ref_from_bytes(body).map_err(|_| "user: invalid layout")?;
         validate_lock_body(v.lock_tag, &v.lock_body)?;
         Ok(v)
     }
@@ -75,10 +76,11 @@ impl UserView {
     /// for keeping tag-implied invariants intact. `initial_lock_hash` is *not*
     /// exposed mutably; it's permanent.
     pub fn from_bytes_mut(bytes: &mut [u8]) -> Result<&mut Self, &'static str> {
-        if kind_of(bytes) != Some(Kind::User) {
+        let (kind, body) = Kind::try_mut_from_prefix(bytes).map_err(|_| "user: wrong kind")?;
+        if !matches!(kind, Kind::User) {
             return Err("user: wrong kind");
         }
-        let v = Self::try_mut_from_bytes(&mut bytes[1..]).map_err(|_| "user: invalid layout")?;
+        let v = Self::try_mut_from_bytes(body).map_err(|_| "user: invalid layout")?;
         validate_lock_body(v.lock_tag, &v.lock_body)?;
         Ok(v)
     }
@@ -177,7 +179,7 @@ pub fn write_user(
         return Err("user: write buffer wrong length");
     }
     out[0] = Kind::User as u8;
-    let v = UserView::try_mut_from_bytes(&mut out[1..]).map_err(|_| "user: invalid layout")?;
+    let v = UserBody::try_mut_from_bytes(&mut out[1..]).map_err(|_| "user: invalid layout")?;
     v.balance = Le64::new(balance);
     v.games_started = Le64::new(stats.started);
     v.games_won = Le64::new(stats.won);
@@ -222,7 +224,7 @@ mod tests {
         write_user(&mut buf, 12_345, GameStats { started: 2, won: 1, finished: 2 }, &ilh, &lock)
             .unwrap();
 
-        let view = UserView::from_bytes(&buf).unwrap();
+        let view = UserBody::from_bytes(&buf).unwrap();
         assert_eq!(view.balance(), 12_345);
         assert_eq!(view.games_started(), 2);
         assert_eq!(view.games_won(), 1);
@@ -242,7 +244,7 @@ mod tests {
         // First, set the kind byte so we exercise the body-length check, not the kind check.
         buf[0] = Kind::User as u8;
         buf[LOCK_TAG_OFFSET] = SchnorrLockView::TAG;
-        assert!(UserView::from_bytes(&buf).is_err());
+        assert!(UserBody::from_bytes(&buf).is_err());
     }
 
     // Multisig layout
@@ -269,7 +271,7 @@ mod tests {
         let mut buf = vec![0u8; total];
         write_user(&mut buf, 42, GameStats::default(), &ilh, &lock).unwrap();
 
-        let view = UserView::from_bytes(&buf).unwrap();
+        let view = UserBody::from_bytes(&buf).unwrap();
         assert_eq!(view.balance(), 42);
         assert_eq!(view.initial_lock_hash(), &ilh);
         match view.lock() {
@@ -293,7 +295,7 @@ mod tests {
         let mut buf = vec![0u8; total];
         write_user(&mut buf, 7, GameStats::default(), &ilh, &lock).unwrap();
 
-        let view = UserView::from_bytes(&buf).unwrap();
+        let view = UserBody::from_bytes(&buf).unwrap();
         assert_eq!(view.balance(), 7);
         assert_eq!(view.initial_lock_hash(), &ilh);
         assert!(matches!(view.lock(), LockEnum::Unlocked(_)));
@@ -307,7 +309,7 @@ mod tests {
         let mut buf = vec![0u8; user_total_len(&lock)];
         write_user(&mut buf, 1, GameStats::default(), &ilh, &lock).unwrap();
         buf[0] = Kind::User as u8 + 7; // bogus
-        assert!(UserView::from_bytes(&buf).is_err());
+        assert!(UserBody::from_bytes(&buf).is_err());
     }
 
     /// Kind 0 is the config kind; it must not parse as a user even though the old
@@ -319,7 +321,7 @@ mod tests {
         let mut buf = vec![0u8; user_total_len(&lock)];
         write_user(&mut buf, 1, GameStats::default(), &hash(0xAA), &lock).unwrap();
         buf[0] = Kind::Config as u8;
-        assert!(UserView::from_bytes(&buf).is_err());
+        assert!(UserBody::from_bytes(&buf).is_err());
     }
 
     #[test]
@@ -327,7 +329,7 @@ mod tests {
         let mut buf = vec![0u8; USER_HEADER_LEN];
         buf[0] = Kind::User as u8;
         buf[LOCK_TAG_OFFSET] = 0xFF;
-        assert!(UserView::from_bytes(&buf).is_err());
+        assert!(UserBody::from_bytes(&buf).is_err());
     }
 
     // Mutable in-place updates
@@ -342,7 +344,7 @@ mod tests {
             .unwrap();
 
         {
-            let mv = UserView::from_bytes_mut(&mut buf).unwrap();
+            let mv = UserBody::from_bytes_mut(&mut buf).unwrap();
             assert_eq!(mv.initial_lock_hash(), &ilh); // permanent
             mv.balance_mut().set(200);
             mv.games_started_mut().set(4);
@@ -351,7 +353,7 @@ mod tests {
             mv.lock_body_mut().copy_from_slice(&pk(0x22));
         }
 
-        let view = UserView::from_bytes(&buf).unwrap();
+        let view = UserBody::from_bytes(&buf).unwrap();
         assert_eq!(view.balance(), 200);
         assert_eq!(view.games_started(), 4);
         assert_eq!(view.games_won(), 3);
