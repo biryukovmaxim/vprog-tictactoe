@@ -2,6 +2,7 @@
 /target
 **/target
 Cargo.lock.bak
+guest/compiled/
 
 # Internal docs (specs, plans, session notes)
 docs/internal/

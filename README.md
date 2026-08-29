@@ -73,7 +73,7 @@ own actions, accounts and game rules.
 - [ ] Guest ELF: Docker reproducible build, genesis env flow (local `just build-guest` works)
 - [ ] vprogs feature: app-level custom journal data via closures (prerequisite for indexes)
 - [ ] Node DA: indexer logic to find open games (rides on the vprogs feature above)
-- [ ] Node `ttd`: runner driver + DA server
+- [x] Node `ttd`: runner driver (execution and proving modes, devmode stub and GPU proving; DA server pending journal feature)
 - [ ] Driver `ttflow`: scripted scenarios
 - [ ] Web frontend: wallet, board, trust ladder (optimistic → L2 → settled → confirmed)
 - [ ] Env-gated L1 e2e against a local testnet-10 fork node
@@ -85,8 +85,19 @@ Requires the [vprogs](../vprogs) clone checked out next to this repo, a Rust nig
 crates land:
 
 ```bash
-just check     # clippy, warnings denied
-just test      # workspace + guest tests
+just check        # clippy, warnings denied
+just test         # workspace + guest tests
+just build-guest  # compile guest ELF to guest/compiled/program.elf
+```
+
+Run the `ttd` node driver (default network `tn10`):
+
+```bash
+TT_WRPC_URL=ws://127.0.0.1:17210 \
+TT_PRIVATE_KEY=<32-byte-hex-key> \
+TT_BATCH_ELF=../vprogs/zk/backend/risc0/batch-processor/compiled/program.elf \
+TT_AGGREGATOR_ELF=../vprogs/zk/backend/risc0/batch-aggregator/compiled/program.elf \
+cargo run -p vprog-tictactoe-node
 ```
 
 ## Documentation
