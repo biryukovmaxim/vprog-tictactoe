@@ -6,7 +6,7 @@ mod withdraw;
 
 use config::{apply_init, apply_update};
 use deposit::apply_deposit;
-use game::{apply_create_game, apply_join_game, apply_turn};
+use game::{apply_create_game, apply_join_game, apply_timeout, apply_turn};
 use user::{apply_transfer, apply_update_user_lock};
 use vprogs_core_codec::{Error, Reader, Result as CodecResult};
 use vprogs_core_types::ResourceId;
@@ -67,6 +67,9 @@ pub enum ActionTag {
     /// Place a mark for a player of a playing game: applied when it is the mover's own ply,
     /// queued as a pre-commit otherwise. Auth: the mover's user lock.
     Turn = 0x09,
+    /// Forfeit a round to the opponent when the to-move player's turn expired
+    /// (`last_move_at + turn_ttl` elapsed). Permissionless: no lock is checked.
+    Timeout = 0x0a,
 }
 
 impl TryFrom<u8> for ActionTag {
@@ -83,6 +86,7 @@ impl TryFrom<u8> for ActionTag {
             0x07 => Ok(Self::CreateGame),
             0x08 => Ok(Self::JoinGame),
             0x09 => Ok(Self::Turn),
+            0x0a => Ok(Self::Timeout),
             _ => Err(()),
         }
     }
@@ -183,6 +187,13 @@ pub enum ActionBody<'a> {
         user_idx: u8,
         /// Board position 0..=8 the mover commits to.
         cell: u8,
+    },
+    Timeout {
+        /// Resource-list index of the game whose to-move player's turn is claimed expired.
+        game_idx: u8,
+        /// Resource-list index of the config resource `turn_ttl` is read from. Must name the
+        /// singleton config resource.
+        config_idx: u8,
     },
 }
 
@@ -287,6 +298,11 @@ pub fn decode_action<'a>(buf: &mut &'a [u8], n_resources: usize) -> CodecResult<
             }
             ActionBody::Turn { game_idx, user_idx, cell }
         }
+        ActionTag::Timeout => {
+            let game_idx = read_resource_idx(buf, "action.timeout.game_idx", n_resources)?;
+            let config_idx = read_resource_idx(buf, "action.timeout.config_idx", n_resources)?;
+            ActionBody::Timeout { game_idx, config_idx }
+        }
     };
     Ok(ActionView { action_tag, body })
 }
@@ -348,6 +364,7 @@ pub fn apply_action<'a, P: DepositPolicy<Lock<'a> = LockEnum<'a>>>(
         ActionBody::Turn { game_idx, user_idx, cell } => {
             apply_turn(*game_idx, *user_idx, *cell, cx)
         }
+        ActionBody::Timeout { game_idx, config_idx } => apply_timeout(*game_idx, *config_idx, cx),
     }
 }
 
@@ -982,9 +999,43 @@ mod tests {
         }
     }
 
+    // Timeout decoder arm
+
+    /// Builds a Timeout action: `tag | game_idx | config_idx`.
+    fn timeout_action(game_idx: u8, config_idx: u8) -> Vec<u8> {
+        vec![ActionTag::Timeout as u8, game_idx, config_idx]
+    }
+
+    #[test]
+    fn decode_timeout_action() {
+        let mut ix = 0u32.to_le_bytes().to_vec();
+        ix.extend_from_slice(&1u32.to_le_bytes());
+        ix.extend_from_slice(&timeout_action(1, 3));
+
+        let decoded = decode_ix(&ix, 4, decode_action).unwrap();
+        match &decoded.actions[0].body {
+            ActionBody::Timeout { game_idx, config_idx } => {
+                assert_eq!(*game_idx, 1);
+                assert_eq!(*config_idx, 3);
+            }
+            _ => panic!("expected Timeout"),
+        }
+    }
+
+    #[test]
+    fn decode_timeout_rejects_out_of_range_idx() {
+        for action in [timeout_action(2, 1), timeout_action(0, 2)] {
+            let mut ix = 0u32.to_le_bytes().to_vec();
+            ix.extend_from_slice(&1u32.to_le_bytes());
+            ix.extend_from_slice(&action);
+
+            assert!(decode_ix(&ix, 2, decode_action).is_err());
+        }
+    }
+
     // ActionTag <-> wire byte
 
-    /// Every variant maps to exactly one wire byte and back; the bounds (0, 0x0A) reject.
+    /// Every variant maps to exactly one wire byte and back; the bounds (0, 0x0B) reject.
     /// A new variant added without a `TryFrom` arm fails here.
     #[test]
     fn action_tag_round_trips_every_variant() {
@@ -998,11 +1049,12 @@ mod tests {
             ActionTag::CreateGame,
             ActionTag::JoinGame,
             ActionTag::Turn,
+            ActionTag::Timeout,
         ] {
             assert_eq!(ActionTag::try_from(tag as u8), Ok(tag));
         }
         assert!(ActionTag::try_from(0x00).is_err());
-        assert!(ActionTag::try_from(0x0A).is_err());
+        assert!(ActionTag::try_from(0x0B).is_err());
         assert!(ActionTag::try_from(0xFF).is_err());
     }
 }

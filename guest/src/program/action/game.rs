@@ -1,15 +1,16 @@
 //! Game actions: `CreateGame` (open a staked match), `JoinGame` (fill the second seat and
-//! start play), and `Turn` (place a mark, run the pre-commit cascade, settle the match).
+//! start play), `Turn` (place a mark, run the pre-commit cascade, settle the match), and
+//! `Timeout` (forfeit a round whose to-move player let the clock expire).
 //!
-//! Game actions read no config: stake and rounds are explicit `CreateGame` parameters, and the
-//! only time-dependent behavior (the turn timeout) belongs to a later action that compares the
-//! mergeset clock against `last_move_at` + `turn_ttl`.
+//! `Timeout` is the only game action that reads config: it compares the mergeset clock against
+//! `last_move_at` + config `turn_ttl`. Stake and rounds are explicit `CreateGame` parameters,
+//! so nothing else needs a config read.
 
 use vprogs_core_types::ResourceId;
 use vprogs_zk_abi::{Error as AbiError, Result as AbiResult, transaction_processor::Resource};
 use vprogs_zk_backend_risc0_runtime_processor::lifecycle::Lifecycle;
 
-use super::ApplyContext;
+use super::{ApplyContext, view_config_at};
 use crate::program::{
     resources::{
         ext::ResourceExt,
@@ -176,39 +177,66 @@ pub(super) fn apply_turn(
     Ok(())
 }
 
+/// Forfeits the current round of a playing game to the seat not to move, once its turn expired:
+/// the mergeset clock reached `last_move_at + turn_ttl` (the config's, read via `config_idx`).
+/// Permissionless: the clock check is the whole authority, so anyone may sweep an expired turn.
+///
+/// The forfeited round closes like a won one (board reset, early-clinch check), and the
+/// winner's queued pre-commits drain into the fresh round, mirroring `Turn`'s cascade. When the
+/// forfeit finishes the match, settlement runs exactly as after a `Turn`.
+pub(super) fn apply_timeout(
+    game_idx: u8,
+    config_idx: u8,
+    cx: &mut ApplyContext<'_, '_>,
+) -> AbiResult<()> {
+    let turn_ttl = view_config_at(cx.resources, config_idx, |c| c.turn_ttl())?;
+    let now = cx.context.timestamp.get();
+
+    let finished = cx.resources[game_idx as usize]
+        .modify_game(|g| forfeit_round(g, turn_ttl, now))
+        .ok_or_else(|| AbiError::Decode("timeout: not a live writable game resource".into()))?
+        .map_err(|m| AbiError::Decode(m.into()))?;
+    if finished {
+        settle_match(cx, game_idx)?;
+    }
+    Ok(())
+}
+
 /// Pays out a just-finished match's pot and bumps both players' stats. Both players' user
 /// resources must be attached to this tx and declared writable, or the settlement rejects the
-/// finalizing turn and the submitter retries with them included.
+/// finalizing action and the submitter retries with them included.
 fn settle_match(cx: &mut ApplyContext<'_, '_>, game_idx: u8) -> AbiResult<()> {
     let (state, players, stake) = {
         let (state, creator, joiner, stake) = cx.resources[game_idx as usize]
             .view_game(|g| (g.state(), *g.creator(), g.joiner().copied(), g.stake()))
-            .ok_or_else(|| AbiError::Decode("turn: not a live game resource".into()))?;
+            .ok_or_else(|| AbiError::Decode("settle: not a live game resource".into()))?;
         match joiner {
             Some(joiner) => (state, [creator, joiner], stake),
-            None => return Err(AbiError::Decode("turn: finished game without a joiner".into())),
+            None => return Err(AbiError::Decode("settle: finished game without a joiner".into())),
         }
     };
 
-    let pot = stake.checked_mul(2).ok_or_else(|| AbiError::Decode("turn: pot overflows".into()))?;
+    let pot =
+        stake.checked_mul(2).ok_or_else(|| AbiError::Decode("settle: pot overflows".into()))?;
     let (credits, winner): ([u64; 2], Option<usize>) = match state {
         State::First => ([pot, 0], Some(0)),
         State::Second => ([0, pot], Some(1)),
         State::Draw => ([stake, stake], None),
         State::Open | State::Playing => {
-            return Err(AbiError::Decode("turn: settlement on an unfinished game".into()));
+            return Err(AbiError::Decode("settle: settlement on an unfinished game".into()));
         }
     };
 
     for (seat, (player, credit)) in players.into_iter().zip(credits).enumerate() {
-        let idx = user_slot_of(cx.resources, &player)
-            .ok_or_else(|| AbiError::Decode("turn: player user resource missing from tx".into()))?;
+        let idx = user_slot_of(cx.resources, &player).ok_or_else(|| {
+            AbiError::Decode("settle: player user resource missing from tx".into())
+        })?;
         let won = winner == Some(seat);
         let update = cx.resources[idx]
             .modify_user(|v| {
                 if credit > 0 {
                     let bal = v.balance_mut();
-                    bal.set(bal.get().checked_add(credit).ok_or("turn: balance overflow")?);
+                    bal.set(bal.get().checked_add(credit).ok_or("settle: balance overflow")?);
                 }
                 let finished = v.games_finished_mut();
                 finished.set(finished.get() + 1);
@@ -219,7 +247,7 @@ fn settle_match(cx: &mut ApplyContext<'_, '_>, game_idx: u8) -> AbiResult<()> {
                 Ok::<(), &'static str>(())
             })
             .ok_or_else(|| {
-                AbiError::Decode("turn: player not a live writable user resource".into())
+                AbiError::Decode("settle: player not a live writable user resource".into())
             })?;
         update.map_err(|m| AbiError::Decode(m.into()))?;
     }
@@ -276,6 +304,30 @@ fn drain_pending(g: &mut GameViewMut<'_>, now: u64) {
             apply_move(g, seat, cell, now);
         }
     }
+}
+
+/// Awards the round to the seat not to move when `now` passed `last_move_at + turn_ttl`, and
+/// returns whether the match just finished. The claim itself stamps `last_move_at`, so the
+/// fresh round's clock starts at the claim: a same-tx repeat sees `now < deadline` and rejects.
+fn forfeit_round(g: &mut GameViewMut<'_>, turn_ttl: u64, now: u64) -> Result<bool, &'static str> {
+    if g.view().state() != State::Playing {
+        return Err("timeout: game is not playing");
+    }
+    let deadline = g
+        .view()
+        .last_move_at()
+        .checked_add(turn_ttl)
+        .ok_or("timeout: last_move_at + turn_ttl overflows")?;
+    if now < deadline {
+        return Err("timeout: turn has not expired");
+    }
+
+    let winner = 1 - to_move(&g.view());
+    g.round_wins_mut()[winner] += 1;
+    g.set_last_move_at(now);
+    close_round(g);
+    drain_pending(g, now);
+    Ok(g.view().is_finished())
 }
 
 /// Places `seat`'s mark at `cell`, stamps the clock, and closes the round when the move ends it

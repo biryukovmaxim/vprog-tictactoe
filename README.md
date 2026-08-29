@@ -8,8 +8,8 @@ own actions, accounts and game rules.
 > **Status: guest crate landed.** The guest's account-model baseline and staked game build and
 > test clean (`just check`, `just test`): resource wire formats, lock/signer set, ix decoding,
 > the config/deposit/transfer/withdraw actions, and the game actions (create, join, turn with
-> pre-commit queues, early-clinch settlement), consuming vprogs' runtime-processor lib as the
-> battery. The turn timeout action, node, driver and web have not landed yet.
+> pre-commit queues, early-clinch settlement, timeout forfeit), consuming vprogs'
+> runtime-processor lib as the battery. Node, driver and web have not landed yet.
 > The checklist below is the source of truth for what works.
 
 ## Architecture (planned)
@@ -57,6 +57,9 @@ own actions, accounts and game rules.
   are dropped). One transaction carries a **list of actions** applied in order, so live moves
   plus pre-commits pack into a single tx: a whole match can play out in about one tx per
   player.
+- **Timeout**: when the to-move player lets `last_move_at + turn_ttl` (config) elapse, anyone
+  can claim the expiry: the round is forfeited to the opponent (board resets, early clinch
+  still applies), and the claim restarts the clock for the next round.
 
 ## Status
 
