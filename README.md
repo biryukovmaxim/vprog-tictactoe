@@ -41,8 +41,9 @@ own actions, accounts and game rules.
 
 ## The game
 
-- A **match** is a fixed number of rounds (default 3). X/O assignment alternates every round:
-  the creator (seat 0) plays X in even rounds, the joiner (seat 1) in odd rounds.
+- A **match** is a fixed number of rounds, chosen by the creator when opening the game. X/O
+  assignment alternates every round: the creator (seat 0) plays their chosen mark in even
+  rounds, the joiner (seat 1) the other mark in odd ones.
 - All rounds are always played. `outcome`: `Pending | First | Second | Draw` by seat.
 - **Stake**: each player locks one stake into the pot (`2 × stake`) at create/join. On the last
   round's completion the seat with more round wins takes the pot; equal wins split it back

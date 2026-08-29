@@ -19,9 +19,9 @@
 //! - `Multisig` (0x02): `u8 threshold || u8 n_pubkeys || n*32 pubkey bytes`
 //! - `Unlocked` (0x03): empty
 //!
-//! `turn_ttl` lands ahead of the game milestone: time-dependent actions compare it against the
-//! mergeset-context clock. The remaining game params (`min_stake`, `max_stake`, `default_rounds`)
-//! join this payload with the game milestone.
+//! `turn_ttl` is the only game-related field: the timeout action compares it against the
+//! mergeset-context clock. Stake and rounds are explicit `CreateGame` parameters, not config
+//! policy.
 
 use zerocopy::{
     FromZeros, Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned,

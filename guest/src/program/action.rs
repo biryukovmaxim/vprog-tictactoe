@@ -1,10 +1,12 @@
 mod config;
 mod deposit;
+mod game;
 mod user;
 mod withdraw;
 
 use config::{apply_init, apply_update};
 use deposit::apply_deposit;
+use game::{apply_create_game, apply_join_game};
 use user::{apply_transfer, apply_update_user_lock};
 use vprogs_core_codec::{Error, Reader, Result as CodecResult};
 use vprogs_core_types::ResourceId;
@@ -22,6 +24,7 @@ use crate::{
     program::resources::{
         config::ConfigView,
         ext::ResourceExt,
+        game::Cell,
         id::{config_resource_id, derive_user_resource},
     },
     runtime::{
@@ -51,11 +54,12 @@ pub const ACTION_TAG_DEPOSIT: u8 = 0x05;
 /// Action variant: debit a user and emit an L2-to-L1 exit to `dest`. Authorized by the user's
 /// current lock; enforces `config.min_withdrawal_amount`.
 pub const ACTION_TAG_WITHDRAW: u8 = 0x06;
-/// Action variant: create an open staked game. Auth: creator's user lock. (Lands with the game
-/// milestone; tag reserved.)
+/// Action variant: create an open staked game, locking `stake` from the creator's balance.
+/// Auth: the creator's user lock. The game slot must be new and carry
+/// `derive_game_resource(creator's initial_lock_hash, games_started)`.
 pub const ACTION_TAG_CREATE_GAME: u8 = 0x07;
-/// Action variant: join an open game, locking the matching stake. Auth: joiner's user lock.
-/// (Reserved.)
+/// Action variant: join an open game, locking the matching stake from the joiner's balance and
+/// starting play. Auth: the joiner's user lock.
 pub const ACTION_TAG_JOIN_GAME: u8 = 0x08;
 /// Action variant: place a mark on the board of a playing game. Auth: the to-move player's lock.
 /// (Reserved.)
@@ -127,6 +131,26 @@ pub enum ActionBody<'a> {
         /// Typed L1 destination for the emitted exit. Length-by-tag prevents the byte-length
         /// foot-gun of a raw script slice.
         dest: StandardSpk<'a>,
+    },
+    CreateGame {
+        /// Resource-list index of the creator's user resource; its lock authorizes the action.
+        creator_idx: u8,
+        /// Resource-list index of the game slot to create. Must be a new slot carrying exactly
+        /// `derive_game_resource(creator's initial_lock_hash, games_started)`.
+        game_idx: u8,
+        /// Stake each seat locks into the pot (`2 x stake`).
+        stake: u64,
+        /// Match length in rounds; at least 1 (enforced at apply).
+        rounds: u8,
+        /// The creator's mark in even rounds; the joiner takes the other. X opens every round.
+        mark: Cell,
+    },
+    JoinGame {
+        /// Resource-list index of the open game being joined.
+        game_idx: u8,
+        /// Resource-list index of the joining user's resource; its lock authorizes the join
+        /// and its id must differ from the creator's.
+        joiner_idx: u8,
     },
 }
 
@@ -200,6 +224,25 @@ pub fn decode_action<'a>(buf: &mut &'a [u8], n_resources: usize) -> CodecResult<
                 .map_err(|_| Error::Decode("action.withdraw: bad dest spk"))?;
             ActionBody::Withdraw { user_idx, config_idx, amount, dest }
         }
+        ACTION_TAG_CREATE_GAME => {
+            let creator_idx =
+                read_resource_idx(buf, "action.create_game.creator_idx", n_resources)?;
+            let game_idx = read_resource_idx(buf, "action.create_game.game_idx", n_resources)?;
+            let stake = buf.le_u64("action.create_game.stake")?;
+            let rounds = buf.byte("action.create_game.rounds")?;
+            // Mark byte mirrors the wire's Cell discriminants; Empty (0) is not choosable.
+            let mark = match buf.byte("action.create_game.mark")? {
+                1 => Cell::X,
+                2 => Cell::O,
+                _ => return Err(Error::Decode("action.create_game: mark must be X or O")),
+            };
+            ActionBody::CreateGame { creator_idx, game_idx, stake, rounds, mark }
+        }
+        ACTION_TAG_JOIN_GAME => {
+            let game_idx = read_resource_idx(buf, "action.join_game.game_idx", n_resources)?;
+            let joiner_idx = read_resource_idx(buf, "action.join_game.joiner_idx", n_resources)?;
+            ActionBody::JoinGame { game_idx, joiner_idx }
+        }
         _ => return Err(Error::Decode("action: unknown tag")),
     };
     Ok(ActionView { action_tag, body })
@@ -252,6 +295,12 @@ pub fn apply_action<'a, P: DepositPolicy<Lock<'a> = LockEnum<'a>>>(
         }
         ActionBody::Withdraw { user_idx, config_idx, amount, dest } => {
             apply_withdraw(*user_idx, *config_idx, *amount, *dest, cx)
+        }
+        ActionBody::CreateGame { creator_idx, game_idx, stake, rounds, mark } => {
+            apply_create_game(*creator_idx, *game_idx, *stake, *rounds, *mark, cx)
+        }
+        ActionBody::JoinGame { game_idx, joiner_idx } => {
+            apply_join_game(*game_idx, *joiner_idx, cx)
         }
     }
 }
@@ -729,5 +778,115 @@ mod tests {
         ix.extend_from_slice(&body);
 
         assert!(decode_ix(&ix, 1, decode_action).is_err());
+    }
+
+    // CreateGame / JoinGame decoder arms
+
+    /// Builds a CreateGame action: `tag | creator_idx | game_idx | stake(8 LE) | rounds | mark`.
+    fn create_game_action(
+        creator_idx: u8,
+        game_idx: u8,
+        stake: u64,
+        rounds: u8,
+        mark: u8,
+    ) -> Vec<u8> {
+        let mut body = Vec::new();
+        body.push(ACTION_TAG_CREATE_GAME);
+        body.push(creator_idx);
+        body.push(game_idx);
+        body.extend_from_slice(&stake.to_le_bytes());
+        body.push(rounds);
+        body.push(mark);
+        body
+    }
+
+    fn join_game_action(game_idx: u8, joiner_idx: u8) -> Vec<u8> {
+        vec![ACTION_TAG_JOIN_GAME, game_idx, joiner_idx]
+    }
+
+    #[test]
+    fn decode_create_game_action() {
+        let mut ix = 0u32.to_le_bytes().to_vec();
+        ix.extend_from_slice(&1u32.to_le_bytes());
+        ix.extend_from_slice(&create_game_action(0, 1, 5_000, 3, 2));
+
+        let decoded = decode_ix(&ix, 2, decode_action).unwrap();
+        match &decoded.actions[0].body {
+            ActionBody::CreateGame { creator_idx, game_idx, stake, rounds, mark } => {
+                assert_eq!(*creator_idx, 0);
+                assert_eq!(*game_idx, 1);
+                assert_eq!(*stake, 5_000);
+                assert_eq!(*rounds, 3);
+                assert_eq!(*mark, Cell::O);
+            }
+            _ => panic!("expected CreateGame"),
+        }
+    }
+
+    #[test]
+    fn decode_create_game_accepts_both_marks() {
+        for (wire, want) in [(1u8, Cell::X), (2u8, Cell::O)] {
+            let mut ix = 0u32.to_le_bytes().to_vec();
+            ix.extend_from_slice(&1u32.to_le_bytes());
+            ix.extend_from_slice(&create_game_action(0, 1, 5_000, 3, wire));
+
+            let decoded = decode_ix(&ix, 2, decode_action).unwrap();
+            match &decoded.actions[0].body {
+                ActionBody::CreateGame { mark, .. } => assert_eq!(*mark, want),
+                _ => panic!("expected CreateGame"),
+            }
+        }
+    }
+
+    #[test]
+    fn decode_create_game_rejects_bad_mark() {
+        // 0 is Empty (not choosable), 3 is not a Cell discriminant.
+        for bad in [0u8, 3u8] {
+            let mut ix = 0u32.to_le_bytes().to_vec();
+            ix.extend_from_slice(&1u32.to_le_bytes());
+            ix.extend_from_slice(&create_game_action(0, 1, 5_000, 3, bad));
+
+            assert!(decode_ix(&ix, 2, decode_action).is_err());
+        }
+    }
+
+    #[test]
+    fn decode_create_game_rejects_out_of_range_idx() {
+        // creator_idx = 2 then game_idx = 2, each with only 2 resources declared.
+        for action in [create_game_action(2, 1, 5_000, 3, 1), create_game_action(0, 2, 5_000, 3, 1)]
+        {
+            let mut ix = 0u32.to_le_bytes().to_vec();
+            ix.extend_from_slice(&1u32.to_le_bytes());
+            ix.extend_from_slice(&action);
+
+            assert!(decode_ix(&ix, 2, decode_action).is_err());
+        }
+    }
+
+    #[test]
+    fn decode_join_game_action() {
+        let mut ix = 0u32.to_le_bytes().to_vec();
+        ix.extend_from_slice(&1u32.to_le_bytes());
+        ix.extend_from_slice(&join_game_action(0, 1));
+
+        let decoded = decode_ix(&ix, 2, decode_action).unwrap();
+        match &decoded.actions[0].body {
+            ActionBody::JoinGame { game_idx, joiner_idx } => {
+                assert_eq!(*game_idx, 0);
+                assert_eq!(*joiner_idx, 1);
+            }
+            _ => panic!("expected JoinGame"),
+        }
+    }
+
+    #[test]
+    fn decode_join_game_rejects_out_of_range_idx() {
+        for action in [join_game_action(2, 1), join_game_action(0, 2)] {
+            let mut ix = 0u32.to_le_bytes().to_vec();
+            ix.extend_from_slice(&1u32.to_le_bytes());
+            ix.extend_from_slice(&action);
+
+            assert!(decode_ix(&ix, 2, decode_action).is_err());
+        }
     }
 }
