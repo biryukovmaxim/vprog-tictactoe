@@ -44,7 +44,7 @@ pub(super) fn apply_withdraw<'a>(
 
     cx.resources[user_idx as usize]
         .modify_user(|v| v.balance_mut().set(new_balance))
-        .ok_or_else(|| AbiError::Decode("withdraw: not a live user resource".into()))?;
+        .ok_or_else(|| AbiError::Decode("withdraw: not a live writable user resource".into()))?;
 
     cx.exits.emit(dest, amount).map_err(|_| AbiError::Decode("withdraw: emit failed".into()))
 }

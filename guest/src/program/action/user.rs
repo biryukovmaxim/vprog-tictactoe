@@ -85,7 +85,9 @@ pub(super) fn apply_transfer<'a, P: DepositPolicy>(
                 bal.set(new);
                 Ok::<(), &'static str>(())
             })
-            .ok_or_else(|| AbiError::Decode("transfer: source not a live user resource".into()))?;
+            .ok_or_else(|| {
+                AbiError::Decode("transfer: source not a live writable user resource".into())
+            })?;
         debit.map_err(|m| AbiError::Decode(m.into()))?;
 
         match create_plan {
@@ -102,7 +104,7 @@ pub(super) fn apply_transfer<'a, P: DepositPolicy>(
                         Ok::<(), &'static str>(())
                     })
                     .ok_or_else(|| {
-                        AbiError::Decode("transfer: dest not a live user resource".into())
+                        AbiError::Decode("transfer: dest not a live writable user resource".into())
                     })?;
                 credit.map_err(|m| AbiError::Decode(m.into()))?;
                 false

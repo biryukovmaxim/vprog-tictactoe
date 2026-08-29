@@ -1,7 +1,12 @@
 //! Closure-based combinators on `Resource<'a>` that layer typed views onto
 //! the byte-backed storage.
+//!
+//! Every mutating combinator requires the tx to have declared the resource `AccessType::Write`:
+//! nothing on the guest path enforces the declared access mode, so this module is the single
+//! choke point through which all action writes pass. Read-only (`view_*`) combinators accept
+//! both modes.
 
-use vprogs_core_types::ResourceId;
+use vprogs_core_types::{AccessType, ResourceId};
 use vprogs_zk_abi::transaction_processor::Resource;
 
 use crate::{
@@ -13,6 +18,11 @@ use crate::{
     },
     runtime::lock::LockEnum,
 };
+
+/// Whether the tx declared this resource writable; the gate every mutating combinator checks.
+fn is_writable(r: &Resource<'_>) -> bool {
+    r.access_type() == AccessType::Write
+}
 
 /// Extension trait over `Resource<'a>`; see module docs.
 pub trait ResourceExt<'a> {
@@ -85,7 +95,7 @@ impl<'a> ResourceExt<'a> for Resource<'a> {
     }
 
     fn modify_config<R>(&mut self, f: impl FnOnce(&mut ConfigViewMut<'_>) -> R) -> Option<R> {
-        if self.kind()? != KIND_CONFIG {
+        if self.kind()? != KIND_CONFIG || !is_writable(self) {
             return None;
         }
         let mut mv = ConfigViewMut::from_bytes_mut(self.data_mut()).ok()?;
@@ -93,7 +103,7 @@ impl<'a> ResourceExt<'a> for Resource<'a> {
     }
 
     fn modify_user<R>(&mut self, f: impl FnOnce(&mut UserViewMut<'_>) -> R) -> Option<R> {
-        if self.kind()? != KIND_USER {
+        if self.kind()? != KIND_USER || !is_writable(self) {
             return None;
         }
         let mut mv = UserViewMut::from_bytes_mut(self.data_mut()).ok()?;
@@ -101,7 +111,7 @@ impl<'a> ResourceExt<'a> for Resource<'a> {
     }
 
     fn modify_game<R>(&mut self, f: impl FnOnce(&mut GameViewMut<'_>) -> R) -> Option<R> {
-        if self.kind()? != KIND_GAME {
+        if self.kind()? != KIND_GAME || !is_writable(self) {
             return None;
         }
         let mut mv = GameViewMut::from_bytes_mut(self.data_mut()).ok()?;
@@ -115,6 +125,9 @@ impl<'a> ResourceExt<'a> for Resource<'a> {
         covenant_id: &[u8; 32],
         lock: &LockEnum<'_>,
     ) -> Result<(), &'static str> {
+        if !is_writable(self) {
+            return Err("init_config: resource not declared writable");
+        }
         if !self.data().is_empty() {
             return Err("init_config: slot is not empty");
         }
@@ -129,6 +142,9 @@ impl<'a> ResourceExt<'a> for Resource<'a> {
         initial_lock_hash: &[u8; 32],
         lock: &LockEnum<'_>,
     ) -> Result<(), &'static str> {
+        if !is_writable(self) {
+            return Err("init_user: resource not declared writable");
+        }
         if !self.data().is_empty() {
             return Err("init_user: slot is not empty");
         }
@@ -145,6 +161,9 @@ impl<'a> ResourceExt<'a> for Resource<'a> {
         stake: u64,
         rounds_total: u8,
     ) -> Result<(), &'static str> {
+        if !is_writable(self) {
+            return Err("init_game: resource not declared writable");
+        }
         if !self.data().is_empty() {
             return Err("init_game: slot is not empty");
         }
@@ -155,6 +174,9 @@ impl<'a> ResourceExt<'a> for Resource<'a> {
     fn set_config_lock(&mut self, new_lock: &LockEnum<'_>) -> Result<(), &'static str> {
         if self.kind() != Some(KIND_CONFIG) {
             return Err("set_config_lock: not a config resource");
+        }
+        if !is_writable(self) {
+            return Err("set_config_lock: resource not declared writable");
         }
         // Snapshot fixed-header fields before resize (which would invalidate
         // the existing data slice).
@@ -170,6 +192,9 @@ impl<'a> ResourceExt<'a> for Resource<'a> {
     fn set_user_lock(&mut self, new_lock: &LockEnum<'_>) -> Result<(), &'static str> {
         if self.kind() != Some(KIND_USER) {
             return Err("set_user_lock: not a user resource");
+        }
+        if !is_writable(self) {
+            return Err("set_user_lock: resource not declared writable");
         }
         // Snapshot the fixed fields (balance + game counters) before resize; the rotation
         // must not reset game history.

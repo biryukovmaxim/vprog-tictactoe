@@ -117,7 +117,7 @@ pub(super) fn apply_deposit<'a, P: DepositPolicy<Lock<'a> = LockEnum<'a>>>(
         }
         CreditKind::CreditExisting(new_balance) => {
             cx.resources[idx].modify_user(|v| v.balance_mut().set(new_balance)).ok_or_else(
-                || AbiError::Decode("deposit: target not a live user resource".into()),
+                || AbiError::Decode("deposit: target not a live writable user resource".into()),
             )?;
         }
     }
