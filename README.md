@@ -75,6 +75,7 @@ own actions, accounts and game rules.
 - [ ] Node DA: indexer logic to find open games (rides on the vprogs feature above)
 - [x] Node `ttd`: runner driver (execution and proving modes, devmode stub and GPU proving; DA server pending journal feature)
 - [x] Driver `ttflow`: scripted scenarios
+- [x] Env-gated L1 e2e against a local simnet
 - [ ] Web frontend: wallet, board, trust ladder (optimistic → L2 → settled → confirmed)
 - [ ] Env-gated L1 e2e against a local testnet-10 fork node
 

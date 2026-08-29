@@ -4,6 +4,10 @@ name    = "vprog-tictactoe-driver"
 publish = false
 version = "0.1.0"
 
+[lib]
+name = "vprog_tictactoe_driver"
+path = "src/lib.rs"
+
 [[bin]]
 name = "ttflow"
 path = "src/main.rs"
@@ -26,3 +30,9 @@ vprogs-l1-wallet                = { path = "../../vprogs/l1/wallet" }
 vprogs-zk-abi                   = { path = "../../vprogs/zk/abi" }
 vprogs-zk-backend-risc0-api     = { path = "../../vprogs/zk/backend/risc0/api" }
 vprogs-zk-backend-risc0-app-kit = { path = "../../vprogs/zk/backend/risc0/app-kit" }
+
+[dev-dependencies]
+tempfile                           = "3"
+vprogs-node-test-utils             = { path = "../../vprogs/node/test-utils" }
+vprogs-runner                      = { path = "../../vprogs/runner" }
+vprogs-zk-backend-risc0-test-suite = { path = "../../vprogs/zk/backend/risc0/test-suite" }

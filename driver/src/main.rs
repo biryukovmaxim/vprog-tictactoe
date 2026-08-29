@@ -3,14 +3,11 @@
 //! Issues signed action carrier transactions (config init, deposits, game lifecycle, moves, and
 //! winner withdrawal) for flow tests and live demos.
 
-mod config;
-pub mod scenario;
-
 use std::{sync::Arc, time::Duration};
 
-use config::Config;
 use kaspa_consensus_core::{config::params::Params, network::NetworkId};
 use kaspa_wrpc_client::prelude::*;
+use vprog_tictactoe_driver::{config::Config, scenario};
 
 /// Connects a Borsh wRPC client to the target node.
 async fn connect_wrpc(url: &str, network_id: NetworkId) -> Arc<KaspaRpcClient> {
