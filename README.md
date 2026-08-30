@@ -60,9 +60,8 @@ own actions, accounts and game rules.
   plus pre-commits pack into a single tx: a whole match can play out in about one tx per
   player.
 - **Timeout**: when the to-move player lets `last_move_at + turn_ttl` (config) elapse on the
-  DAA-score clock (monotonic, unlike block timestamps), anyone can claim the expiry: the round
-  is forfeited to the opponent (board resets, early clinch still applies), and the claim
-  restarts the clock for the next round.
+  DAA-score clock, anyone can claim the expiry: the round is forfeited to the opponent (board
+  resets, early clinch still applies), and the claim restarts the clock for the next round.
 
 ## Status
 
