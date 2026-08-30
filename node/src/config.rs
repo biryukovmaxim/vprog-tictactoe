@@ -26,11 +26,10 @@ impl Config {
         F: Fn(&str) -> Option<String>,
     {
         let wrpc_url = req(&lookup, "TT_WRPC_URL");
-        let private_key = {
-            let hex = req(&lookup, "TT_PRIVATE_KEY");
-            SecretKey::from_str(hex.trim())
+        let private_key = opt(&lookup, "TT_PRIVATE_KEY").map(|s| {
+            SecretKey::from_str(s.trim())
                 .expect("TT_PRIVATE_KEY must be a 32-byte hex secp256k1 key")
-        };
+        });
         let network_id = opt(&lookup, "TT_NETWORK")
             .map(|s| parse_network(&s))
             .unwrap_or_else(|| parse_network("tn10"));
@@ -143,10 +142,18 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "missing required env var TT_PRIVATE_KEY")]
-    fn from_lookup_panics_on_missing_private_key() {
+    fn from_lookup_allows_missing_private_key() {
         let mut env = sample_env();
         env.remove("TT_PRIVATE_KEY");
+        let cfg = Config::from_lookup(|k| env.get(k).cloned());
+        assert!(cfg.runner.private_key.is_none());
+    }
+
+    #[test]
+    #[should_panic(expected = "TT_PRIVATE_KEY must be a 32-byte hex secp256k1 key")]
+    fn from_lookup_panics_on_malformed_private_key() {
+        let mut env = sample_env();
+        env.insert("TT_PRIVATE_KEY", "not-a-valid-hex-key".into());
         Config::from_lookup(|k| env.get(k).cloned());
     }
 
