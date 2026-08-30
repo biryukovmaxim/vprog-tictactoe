@@ -107,6 +107,7 @@ async fn test_e2e_simnet_game_flow() {
         bootstrap_txid: None,
         start_from: None,
         seed_depth: 500,
+        min_confirmations: None,
         prove: false,
         start_mode: Some(StartMode::Fresh),
     };

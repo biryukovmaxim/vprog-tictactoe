@@ -9019,6 +9019,7 @@ dependencies = [
  "kaspa-txscript",
  "secp256k1",
  "tap",
+ "vprogs-core-atomics",
  "vprogs-core-codec",
  "vprogs-core-smt",
  "vprogs-core-types",

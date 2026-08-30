@@ -50,6 +50,8 @@ impl Config {
         let start_from = opt(&lookup, "TT_START_FROM")
             .map(|s| Hash::from_str(s.trim()).expect("TT_START_FROM must be 32-byte hex"));
         let seed_depth = opt_u64(&lookup, "TT_SEED_DEPTH", 500);
+        let min_confirmations = opt(&lookup, "TT_MIN_CONFIRMATIONS")
+            .map(|s| s.parse().expect("TT_MIN_CONFIRMATIONS must be a u64"));
         let prove = opt(&lookup, "TT_PROVE").is_some_and(|s| s != "0");
         let start_mode = opt(&lookup, "TT_START_MODE")
             .map(|s| match s.to_lowercase().as_str() {
@@ -73,6 +75,7 @@ impl Config {
             bootstrap_txid,
             start_from,
             seed_depth,
+            min_confirmations,
             prove,
             start_mode,
         };
