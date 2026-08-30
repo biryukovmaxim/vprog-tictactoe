@@ -96,7 +96,7 @@ async fn test_e2e_simnet_game_flow() {
     let temp_dir = tempfile::tempdir().expect("tempdir");
     let runner_cfg = RunnerConfig {
         wrpc_url: wrpc_url.clone(),
-        private_key: operator_keypair.secret_key(),
+        private_key: Some(operator_keypair.secret_key()),
         network_id,
         program_elf: None,
         batch_elf: None,
