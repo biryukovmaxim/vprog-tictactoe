@@ -18,14 +18,16 @@ hex-literal = "1.1.0"
 risc0-zkvm  = { version = "3.0", default-features = false }
 zerocopy    = { version = "0.8", default-features = false, features = ["derive"] }
 
-# vprogs path pins (../../vprogs, branch guest-batteries); a git or crates.io pin replaces these
-# later without code changes here. Never vendored: only manifests reference vprogs.
-vprogs-core-codec = { path = "../../vprogs/core/codec" }
-vprogs-core-types = { path = "../../vprogs/core/types", default-features = false }
-vprogs-l1-utils = { path = "../../vprogs/l1/utils" }
-vprogs-zk-abi = { path = "../../vprogs/zk/abi", default-features = false }
-vprogs-zk-backend-risc0-api = { path = "../../vprogs/zk/backend/risc0/api", default-features = false, features = [
+# vprogs git pins, declared directly: this crate is excluded from the host
+# workspace, so workspace inheritance is unavailable here. reorg-recovery on
+# the fork is the only branch carrying runtime-processor alongside the rest.
+# Never vendored: only manifests reference vprogs.
+vprogs-core-codec = { git = "https://github.com/biryukovmaxim/vprogs", branch = "reorg-recovery" }
+vprogs-core-types = { git = "https://github.com/biryukovmaxim/vprogs", branch = "reorg-recovery", default-features = false }
+vprogs-l1-utils = { git = "https://github.com/biryukovmaxim/vprogs", branch = "reorg-recovery" }
+vprogs-zk-abi = { git = "https://github.com/biryukovmaxim/vprogs", branch = "reorg-recovery", default-features = false }
+vprogs-zk-backend-risc0-api = { git = "https://github.com/biryukovmaxim/vprogs", branch = "reorg-recovery", default-features = false, features = [
   "guest",
 ] }
 # The battery: runtime-processor's lib is consumed as the reusable guest machinery.
-vprogs-zk-backend-risc0-runtime-processor = { path = "../../vprogs/zk/backend/risc0/runtime-processor", default-features = false }
+vprogs-zk-backend-risc0-runtime-processor = { git = "https://github.com/biryukovmaxim/vprogs", branch = "reorg-recovery", default-features = false }
