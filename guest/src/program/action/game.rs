@@ -5,10 +5,6 @@
 //! `Timeout` is the only game action that reads config: it compares the mergeset DAA score
 //! against `last_move_at + turn_ttl`. Stake and rounds are explicit `CreateGame` parameters,
 //! so nothing else needs a config read.
-//!
-//! The DAA score (not the timestamp) is the clock: it is monotonic in chain progression, while
-//! block timestamps only have to clear the median of past blocks and may move backwards.
-
 use vprogs_core_types::ResourceId;
 use vprogs_zk_abi::{Error as AbiError, Result as AbiResult, transaction_processor::Resource};
 use vprogs_zk_backend_risc0_runtime_processor::lifecycle::Lifecycle;

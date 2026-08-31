@@ -36,7 +36,9 @@ check: fmt-check
 # milestone; this local build is for dev iteration.
 build-guest:
     @cd guest && cargo +risc0 build --release --target riscv32im-risc0-zkvm-elf && \
-        ls -la target/riscv32im-risc0-zkvm-elf/release/vprog-tictactoe-guest
+        mkdir -p compiled && \
+        cp target/riscv32im-risc0-zkvm-elf/release/vprog-tictactoe-guest compiled/program.elf && \
+        ls -la compiled/program.elf
 
 # Find unused dependencies (nightly toolchain required).
 udeps:

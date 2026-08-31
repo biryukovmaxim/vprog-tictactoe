@@ -87,9 +87,8 @@ impl ConfigBody {
         self.min_withdrawal_amount.get()
     }
 
-    /// How long a turn may remain unplayed, in DAA-score units of the mergeset context (the
-    /// monotonic chain clock; block timestamps are not, and are never used), before the game
-    /// can be finished as timed out.
+    /// How long a turn may remain unplayed, in DAA-score units of the mergeset context, before the
+    /// game can be finished as timed out.
     pub fn turn_ttl(&self) -> u64 {
         self.turn_ttl.get()
     }
