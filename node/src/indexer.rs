@@ -1,6 +1,5 @@
 //! Secondary indexes over the game store, maintained by the vprogs write worker inside
-//! the same atomic WriteBatch as the state itself (spec:
-//! docs/internal/specs/2026-08-31-indexer-design.md).
+//! the same atomic WriteBatch as the state itself.
 //!
 //! The store is keyed by game resource id only — every query beyond "fetch this exact
 //! game" would be a full-store scan. Two indexes close the two queries a frontend
