@@ -20,8 +20,7 @@ use secp256k1::Keypair;
 use vprog_tictactoe_driver::{config::Config, scenario};
 use vprog_tictactoe_guest::runtime::genesis::GENESIS_PUBKEY;
 use vprog_tictactoe_node::indexer::{
-    B_FINISHED, B_OPEN, TAG_CREATED, TAG_JOINED, TAG_LOST, TAG_WON, TicTacToeIndexer, scan_bucket,
-    scan_player_events,
+    GameStatus, PlayerEvent, TicTacToeIndexer, scan_games_by_status, scan_player_events,
 };
 use vprogs_node_test_utils::L1Node;
 use vprogs_runner::{Elfs, Indexer, RunnerConfig, StartMode, start_runner};
@@ -188,13 +187,16 @@ async fn test_e2e_simnet_game_flow() {
 
         let a_events = scan_player_events(&*store, &snapshot, &report.player_a_user_id);
         let b_events = scan_player_events(&*store, &snapshot, &report.player_b_user_id);
-        let finished_games = scan_bucket(&*store, &snapshot, B_FINISHED);
-        let open_games = scan_bucket(&*store, &snapshot, B_OPEN);
+        let finished_games = scan_games_by_status(&*store, &snapshot, GameStatus::Finished);
+        let open_games = scan_games_by_status(&*store, &snapshot, GameStatus::Open);
 
-        let has_a_created = a_events.iter().any(|&(t, _, g)| t == TAG_CREATED && g == game_bytes);
-        let has_a_won = a_events.iter().any(|&(t, _, g)| t == TAG_WON && g == game_bytes);
-        let has_b_joined = b_events.iter().any(|&(t, _, g)| t == TAG_JOINED && g == game_bytes);
-        let has_b_lost = b_events.iter().any(|&(t, _, g)| t == TAG_LOST && g == game_bytes);
+        let has_a_created =
+            a_events.iter().any(|&(t, _, g)| t == PlayerEvent::Created && g == game_bytes);
+        let has_a_won = a_events.iter().any(|&(t, _, g)| t == PlayerEvent::Won && g == game_bytes);
+        let has_b_joined =
+            b_events.iter().any(|&(t, _, g)| t == PlayerEvent::Joined && g == game_bytes);
+        let has_b_lost =
+            b_events.iter().any(|&(t, _, g)| t == PlayerEvent::Lost && g == game_bytes);
         let has_finished = finished_games.iter().any(|&(_, g)| g == game_bytes);
         let not_open = !open_games.iter().any(|&(_, g)| g == game_bytes);
 
@@ -211,42 +213,42 @@ async fn test_e2e_simnet_game_flow() {
     let snapshot = store.canonical_chain().snapshot();
     let a_events = scan_player_events(&*store, &snapshot, &report.player_a_user_id);
     let b_events = scan_player_events(&*store, &snapshot, &report.player_b_user_id);
-    let finished_games = scan_bucket(&*store, &snapshot, B_FINISHED);
-    let open_games = scan_bucket(&*store, &snapshot, B_OPEN);
+    let finished_games = scan_games_by_status(&*store, &snapshot, GameStatus::Finished);
+    let open_games = scan_games_by_status(&*store, &snapshot, GameStatus::Open);
 
     let a_created = a_events
         .iter()
-        .find(|&&(t, _, g)| t == TAG_CREATED && g == game_bytes)
-        .expect("player A must have TAG_CREATED event for game");
-    assert!(snapshot.is_canonical(a_created.1), "TAG_CREATED version must be canonical");
+        .find(|&&(t, _, g)| t == PlayerEvent::Created && g == game_bytes)
+        .expect("player A must have a Created event for game");
+    assert!(snapshot.is_canonical(a_created.1), "Created version must be canonical");
 
     let a_won = a_events
         .iter()
-        .find(|&&(t, _, g)| t == TAG_WON && g == game_bytes)
-        .expect("player A must have TAG_WON event for game");
-    assert!(snapshot.is_canonical(a_won.1), "TAG_WON version must be canonical");
+        .find(|&&(t, _, g)| t == PlayerEvent::Won && g == game_bytes)
+        .expect("player A must have a Won event for game");
+    assert!(snapshot.is_canonical(a_won.1), "Won version must be canonical");
 
     let b_joined = b_events
         .iter()
-        .find(|&&(t, _, g)| t == TAG_JOINED && g == game_bytes)
-        .expect("player B must have TAG_JOINED event for game");
-    assert!(snapshot.is_canonical(b_joined.1), "TAG_JOINED version must be canonical");
+        .find(|&&(t, _, g)| t == PlayerEvent::Joined && g == game_bytes)
+        .expect("player B must have a Joined event for game");
+    assert!(snapshot.is_canonical(b_joined.1), "Joined version must be canonical");
 
     let b_lost = b_events
         .iter()
-        .find(|&&(t, _, g)| t == TAG_LOST && g == game_bytes)
-        .expect("player B must have TAG_LOST event for game");
-    assert!(snapshot.is_canonical(b_lost.1), "TAG_LOST version must be canonical");
+        .find(|&&(t, _, g)| t == PlayerEvent::Lost && g == game_bytes)
+        .expect("player B must have a Lost event for game");
+    assert!(snapshot.is_canonical(b_lost.1), "Lost version must be canonical");
 
     let finished_entry = finished_games
         .iter()
         .find(|&&(_, g)| g == game_bytes)
-        .expect("game must appear in B_FINISHED bucket");
-    assert!(snapshot.is_canonical(finished_entry.0), "B_FINISHED version must be canonical");
+        .expect("game must appear in the Finished status index");
+    assert!(snapshot.is_canonical(finished_entry.0), "Finished version must be canonical");
 
     assert!(
         !open_games.iter().any(|&(_, g)| g == game_bytes),
-        "game must not appear in B_OPEN bucket"
+        "game must not appear in the Open status index"
     );
 
     // Stop background miner and cleanup.

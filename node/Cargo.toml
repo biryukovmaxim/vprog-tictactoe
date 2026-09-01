@@ -30,6 +30,7 @@ vprogs-scheduling-scheduler    = { workspace = true }
 vprogs-storage-canonical-chain = { workspace = true }
 vprogs-storage-types           = { workspace = true }
 vprogs-zk-backend-risc0-api    = { workspace = true }
+zerocopy                       = { version = "0.8", default-features = false, features = ["derive"] }
 
 [dev-dependencies]
 tempfile                     = { workspace = true }

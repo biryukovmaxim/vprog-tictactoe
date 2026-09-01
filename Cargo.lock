@@ -8508,6 +8508,7 @@ dependencies = [
  "vprogs-storage-rocksdb-store",
  "vprogs-storage-types",
  "vprogs-zk-backend-risc0-api",
+ "zerocopy",
 ]
 
 [[package]]
