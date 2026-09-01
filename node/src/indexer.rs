@@ -242,7 +242,8 @@ pub fn scan_player_events<S: Store>(
     store
         .prefix_iter(StateSpace::Index, player.as_slice())
         .filter_map(|(k, _)| {
-            let key = PlayerEventKey::parse(&k)?;
+            let key = PlayerEventKey::parse(&k)
+                .unwrap_or_else(|| panic!("malformed player-event key in index: {k:02x?}"));
             (key.player == **player && snapshot.is_canonical(key.version.get())).then_some((
                 key.event,
                 key.version.get(),
@@ -262,11 +263,13 @@ pub fn scan_games_by_status<S: Store>(
     let mut results: Vec<(u64, [u8; 32])> = store
         .prefix_iter_rev(StateSpace::Index, status.as_bytes())
         .filter_map(|(k, v)| {
-            let key = GameStatusKey::parse(&k)?;
-            if v.len() != 8 {
-                return None;
-            }
-            let version = u64::from_be_bytes(v.as_slice().try_into().ok()?);
+            let key = GameStatusKey::parse(&k)
+                .unwrap_or_else(|| panic!("malformed game-status key in index: {k:02x?}"));
+            let version = u64::from_be_bytes(
+                v.as_slice()
+                    .try_into()
+                    .unwrap_or_else(|_| panic!("malformed game-status value in index: {v:02x?}")),
+            );
             snapshot.is_canonical(version).then_some((version, key.game))
         })
         .collect();
