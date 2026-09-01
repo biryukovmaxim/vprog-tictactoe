@@ -185,20 +185,48 @@ async fn test_e2e_simnet_game_flow() {
     while start_time.elapsed() < poll_timeout {
         let snapshot = store.canonical_chain().snapshot();
 
-        let a_events = scan_player_events(&*store, &snapshot, &report.player_a_user_id);
-        let b_events = scan_player_events(&*store, &snapshot, &report.player_b_user_id);
-        let finished_games = scan_games_by_status(&*store, &snapshot, GameStatus::Finished);
-        let open_games = scan_games_by_status(&*store, &snapshot, GameStatus::Open);
+        let a_created = scan_player_events(
+            &*store,
+            &snapshot,
+            &report.player_a_user_id,
+            PlayerEvent::Created,
+            None,
+            100,
+        );
+        let a_won = scan_player_events(
+            &*store,
+            &snapshot,
+            &report.player_a_user_id,
+            PlayerEvent::Won,
+            None,
+            100,
+        );
+        let b_joined = scan_player_events(
+            &*store,
+            &snapshot,
+            &report.player_b_user_id,
+            PlayerEvent::Joined,
+            None,
+            100,
+        );
+        let b_lost = scan_player_events(
+            &*store,
+            &snapshot,
+            &report.player_b_user_id,
+            PlayerEvent::Lost,
+            None,
+            100,
+        );
+        let finished_games =
+            scan_games_by_status(&*store, &snapshot, GameStatus::Finished, None, 100);
+        let open_games = scan_games_by_status(&*store, &snapshot, GameStatus::Open, None, 100);
 
-        let has_a_created =
-            a_events.iter().any(|&(t, _, g)| t == PlayerEvent::Created && g == game_bytes);
-        let has_a_won = a_events.iter().any(|&(t, _, g)| t == PlayerEvent::Won && g == game_bytes);
-        let has_b_joined =
-            b_events.iter().any(|&(t, _, g)| t == PlayerEvent::Joined && g == game_bytes);
-        let has_b_lost =
-            b_events.iter().any(|&(t, _, g)| t == PlayerEvent::Lost && g == game_bytes);
-        let has_finished = finished_games.iter().any(|&(_, g)| g == game_bytes);
-        let not_open = !open_games.iter().any(|&(_, g)| g == game_bytes);
+        let has_a_created = a_created.iter().any(|&(_, g)| g == game_bytes);
+        let has_a_won = a_won.iter().any(|&(_, g)| g == game_bytes);
+        let has_b_joined = b_joined.iter().any(|&(_, g)| g == game_bytes);
+        let has_b_lost = b_lost.iter().any(|&(_, g)| g == game_bytes);
+        let has_finished = finished_games.contains(&game_bytes);
+        let not_open = !open_games.contains(&game_bytes);
 
         if has_a_created && has_a_won && has_b_joined && has_b_lost && has_finished && not_open {
             indexed = true;
@@ -211,45 +239,68 @@ async fn test_e2e_simnet_game_flow() {
     assert!(indexed, "timed out waiting for secondary index entries after completed match");
 
     let snapshot = store.canonical_chain().snapshot();
-    let a_events = scan_player_events(&*store, &snapshot, &report.player_a_user_id);
-    let b_events = scan_player_events(&*store, &snapshot, &report.player_b_user_id);
-    let finished_games = scan_games_by_status(&*store, &snapshot, GameStatus::Finished);
-    let open_games = scan_games_by_status(&*store, &snapshot, GameStatus::Open);
+    let a_created_events = scan_player_events(
+        &*store,
+        &snapshot,
+        &report.player_a_user_id,
+        PlayerEvent::Created,
+        None,
+        100,
+    );
+    let a_won_events = scan_player_events(
+        &*store,
+        &snapshot,
+        &report.player_a_user_id,
+        PlayerEvent::Won,
+        None,
+        100,
+    );
+    let b_joined_events = scan_player_events(
+        &*store,
+        &snapshot,
+        &report.player_b_user_id,
+        PlayerEvent::Joined,
+        None,
+        100,
+    );
+    let b_lost_events = scan_player_events(
+        &*store,
+        &snapshot,
+        &report.player_b_user_id,
+        PlayerEvent::Lost,
+        None,
+        100,
+    );
+    let finished_games = scan_games_by_status(&*store, &snapshot, GameStatus::Finished, None, 100);
+    let open_games = scan_games_by_status(&*store, &snapshot, GameStatus::Open, None, 100);
 
-    let a_created = a_events
-        .iter()
-        .find(|&&(t, _, g)| t == PlayerEvent::Created && g == game_bytes)
-        .expect("player A must have a Created event for game");
-    assert!(snapshot.is_canonical(a_created.1), "Created version must be canonical");
-
-    let a_won = a_events
-        .iter()
-        .find(|&&(t, _, g)| t == PlayerEvent::Won && g == game_bytes)
-        .expect("player A must have a Won event for game");
-    assert!(snapshot.is_canonical(a_won.1), "Won version must be canonical");
-
-    let b_joined = b_events
-        .iter()
-        .find(|&&(t, _, g)| t == PlayerEvent::Joined && g == game_bytes)
-        .expect("player B must have a Joined event for game");
-    assert!(snapshot.is_canonical(b_joined.1), "Joined version must be canonical");
-
-    let b_lost = b_events
-        .iter()
-        .find(|&&(t, _, g)| t == PlayerEvent::Lost && g == game_bytes)
-        .expect("player B must have a Lost event for game");
-    assert!(snapshot.is_canonical(b_lost.1), "Lost version must be canonical");
-
-    let finished_entry = finished_games
+    let a_created = a_created_events
         .iter()
         .find(|&&(_, g)| g == game_bytes)
-        .expect("game must appear in the Finished status index");
-    assert!(snapshot.is_canonical(finished_entry.0), "Finished version must be canonical");
+        .expect("player A must have a Created event for game");
+    assert!(snapshot.is_canonical(a_created.0), "Created version must be canonical");
 
-    assert!(
-        !open_games.iter().any(|&(_, g)| g == game_bytes),
-        "game must not appear in the Open status index"
-    );
+    let a_won = a_won_events
+        .iter()
+        .find(|&&(_, g)| g == game_bytes)
+        .expect("player A must have a Won event for game");
+    assert!(snapshot.is_canonical(a_won.0), "Won version must be canonical");
+
+    let b_joined = b_joined_events
+        .iter()
+        .find(|&&(_, g)| g == game_bytes)
+        .expect("player B must have a Joined event for game");
+    assert!(snapshot.is_canonical(b_joined.0), "Joined version must be canonical");
+
+    let b_lost = b_lost_events
+        .iter()
+        .find(|&&(_, g)| g == game_bytes)
+        .expect("player B must have a Lost event for game");
+    assert!(snapshot.is_canonical(b_lost.0), "Lost version must be canonical");
+
+    assert!(finished_games.contains(&game_bytes), "game must appear in the Finished status index");
+
+    assert!(!open_games.contains(&game_bytes), "game must not appear in the Open status index");
 
     // Stop background miner and cleanup.
     mining_stop.notify_one();
