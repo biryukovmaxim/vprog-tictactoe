@@ -29,6 +29,8 @@ vprogs-l1-wallet                   = { git = "https://github.com/biryukovmaxim/v
 vprogs-node-test-utils             = { git = "https://github.com/biryukovmaxim/vprogs", branch = "indexer-hook" }
 vprogs-runner                      = { git = "https://github.com/biryukovmaxim/vprogs", branch = "indexer-hook" }
 vprogs-scheduling-scheduler        = { git = "https://github.com/biryukovmaxim/vprogs", branch = "indexer-hook" }
+vprogs-storage-canonical-chain     = { git = "https://github.com/biryukovmaxim/vprogs", branch = "indexer-hook" }
+vprogs-storage-rocksdb-store       = { git = "https://github.com/biryukovmaxim/vprogs", branch = "indexer-hook" }
 vprogs-storage-types               = { git = "https://github.com/biryukovmaxim/vprogs", branch = "indexer-hook" }
 vprogs-zk-abi                      = { git = "https://github.com/biryukovmaxim/vprogs", branch = "indexer-hook" }
 vprogs-zk-backend-risc0-api        = { git = "https://github.com/biryukovmaxim/vprogs", branch = "indexer-hook" }
@@ -39,4 +41,5 @@ vprogs-zk-backend-risc0-test-suite = { git = "https://github.com/biryukovmaxim/v
 ctrlc     = { version = "3", features = ["termination"] }
 log       = "0.4"
 secp256k1 = { version = "0.29.1", features = ["rand-std"] }
+tempfile  = "3"
 tokio     = { version = "1", features = ["full"] }

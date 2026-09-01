@@ -4,6 +4,7 @@
 //! app-specific state transitions and rules live entirely in the guest ELF.
 
 mod config;
+mod indexer;
 
 use config::Config;
 use kaspa_consensus_core::config::params::Params;

@@ -8494,8 +8494,15 @@ dependencies = [
  "kaspa-hashes",
  "log",
  "secp256k1",
+ "tempfile",
  "tokio",
+ "vprog-tictactoe-guest",
+ "vprogs-core-types",
  "vprogs-runner",
+ "vprogs-scheduling-scheduler",
+ "vprogs-storage-canonical-chain",
+ "vprogs-storage-rocksdb-store",
+ "vprogs-storage-types",
  "vprogs-zk-backend-risc0-api",
 ]
 

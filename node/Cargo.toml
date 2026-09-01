@@ -12,12 +12,22 @@ path = "src/main.rs"
 cuda = ["vprogs-runner/cuda"]
 
 [dependencies]
-ctrlc                       = { workspace = true }
-kaspa-consensus-core        = { workspace = true }
-kaspa-core                  = { workspace = true }
-kaspa-hashes                = { workspace = true }
-log                         = { workspace = true }
-secp256k1                   = { workspace = true }
-tokio                       = { workspace = true }
-vprogs-runner               = { workspace = true }
-vprogs-zk-backend-risc0-api = { workspace = true }
+ctrlc                          = { workspace = true }
+kaspa-consensus-core           = { workspace = true }
+kaspa-core                     = { workspace = true }
+kaspa-hashes                   = { workspace = true }
+log                            = { workspace = true }
+secp256k1                      = { workspace = true }
+tokio                          = { workspace = true }
+vprog-tictactoe-guest          = { path = "../guest" }
+vprogs-core-types              = { workspace = true }
+vprogs-runner                  = { workspace = true }
+vprogs-scheduling-scheduler    = { workspace = true }
+vprogs-storage-canonical-chain = { workspace = true }
+vprogs-storage-types           = { workspace = true }
+vprogs-zk-backend-risc0-api    = { workspace = true }
+
+[dev-dependencies]
+tempfile                     = { workspace = true }
+vprogs-core-types            = { workspace = true, features = ["test-utils"] }
+vprogs-storage-rocksdb-store = { workspace = true }
