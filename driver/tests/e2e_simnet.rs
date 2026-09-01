@@ -19,8 +19,13 @@ use kaspa_hashes::Hash;
 use secp256k1::Keypair;
 use vprog_tictactoe_driver::{config::Config, scenario};
 use vprog_tictactoe_guest::runtime::genesis::GENESIS_PUBKEY;
+use vprog_tictactoe_node::indexer::{
+    B_FINISHED, B_OPEN, TAG_CREATED, TAG_JOINED, TAG_LOST, TAG_WON, TicTacToeIndexer, scan_bucket,
+    scan_player_events,
+};
 use vprogs_node_test_utils::L1Node;
-use vprogs_runner::{Elfs, RunnerConfig, StartMode, start_runner};
+use vprogs_runner::{Elfs, Indexer, RunnerConfig, StartMode, start_runner};
+use vprogs_storage_types::Store;
 use vprogs_zk_backend_risc0_api::delegate_entry_spk_hash;
 use vprogs_zk_backend_risc0_app_kit::dev_genesis_keypair;
 use vprogs_zk_backend_risc0_test_suite::{
@@ -112,9 +117,16 @@ async fn test_e2e_simnet_game_flow() {
         start_mode: Some(StartMode::Fresh),
     };
 
-    let handles = start_runner(&runner_cfg, &arc_client, &params, elfs, delegate_entry_spk_hash, None)
-        .await
-        .expect("start_runner failed");
+    let handles = start_runner(
+        &runner_cfg,
+        &arc_client,
+        &params,
+        elfs,
+        delegate_entry_spk_hash,
+        Some(Indexer(Arc::new(TicTacToeIndexer))),
+    )
+    .await
+    .expect("start_runner failed");
 
     // Mine covenant bootstrap transaction.
     l1.mine_blocks(2).await;
@@ -161,6 +173,81 @@ async fn test_e2e_simnet_game_flow() {
     assert_ne!(report.turn_a_txid, Hash::default());
     assert_ne!(report.turn_b_txid, Hash::default());
     assert_ne!(report.withdraw_txid, Hash::default());
+
+    // 9. Poll until secondary index updates commit and assert canonical scans.
+    let store = handles.node.api().storage().store().clone();
+    let game_bytes: [u8; 32] = report.game_id.as_slice().try_into().unwrap();
+
+    let poll_timeout = Duration::from_secs(30);
+    let poll_interval = Duration::from_millis(250);
+    let start_time = tokio::time::Instant::now();
+
+    let mut indexed = false;
+    while start_time.elapsed() < poll_timeout {
+        let snapshot = store.canonical_chain().snapshot();
+
+        let a_events = scan_player_events(&*store, &snapshot, &report.player_a_user_id);
+        let b_events = scan_player_events(&*store, &snapshot, &report.player_b_user_id);
+        let finished_games = scan_bucket(&*store, &snapshot, B_FINISHED);
+        let open_games = scan_bucket(&*store, &snapshot, B_OPEN);
+
+        let has_a_created = a_events.iter().any(|&(t, _, g)| t == TAG_CREATED && g == game_bytes);
+        let has_a_won = a_events.iter().any(|&(t, _, g)| t == TAG_WON && g == game_bytes);
+        let has_b_joined = b_events.iter().any(|&(t, _, g)| t == TAG_JOINED && g == game_bytes);
+        let has_b_lost = b_events.iter().any(|&(t, _, g)| t == TAG_LOST && g == game_bytes);
+        let has_finished = finished_games.iter().any(|&(_, g)| g == game_bytes);
+        let not_open = !open_games.iter().any(|&(_, g)| g == game_bytes);
+
+        if has_a_created && has_a_won && has_b_joined && has_b_lost && has_finished && not_open {
+            indexed = true;
+            break;
+        }
+
+        tokio::time::sleep(poll_interval).await;
+    }
+
+    assert!(indexed, "timed out waiting for secondary index entries after completed match");
+
+    let snapshot = store.canonical_chain().snapshot();
+    let a_events = scan_player_events(&*store, &snapshot, &report.player_a_user_id);
+    let b_events = scan_player_events(&*store, &snapshot, &report.player_b_user_id);
+    let finished_games = scan_bucket(&*store, &snapshot, B_FINISHED);
+    let open_games = scan_bucket(&*store, &snapshot, B_OPEN);
+
+    let a_created = a_events
+        .iter()
+        .find(|&&(t, _, g)| t == TAG_CREATED && g == game_bytes)
+        .expect("player A must have TAG_CREATED event for game");
+    assert!(snapshot.is_canonical(a_created.1), "TAG_CREATED version must be canonical");
+
+    let a_won = a_events
+        .iter()
+        .find(|&&(t, _, g)| t == TAG_WON && g == game_bytes)
+        .expect("player A must have TAG_WON event for game");
+    assert!(snapshot.is_canonical(a_won.1), "TAG_WON version must be canonical");
+
+    let b_joined = b_events
+        .iter()
+        .find(|&&(t, _, g)| t == TAG_JOINED && g == game_bytes)
+        .expect("player B must have TAG_JOINED event for game");
+    assert!(snapshot.is_canonical(b_joined.1), "TAG_JOINED version must be canonical");
+
+    let b_lost = b_events
+        .iter()
+        .find(|&&(t, _, g)| t == TAG_LOST && g == game_bytes)
+        .expect("player B must have TAG_LOST event for game");
+    assert!(snapshot.is_canonical(b_lost.1), "TAG_LOST version must be canonical");
+
+    let finished_entry = finished_games
+        .iter()
+        .find(|&&(_, g)| g == game_bytes)
+        .expect("game must appear in B_FINISHED bucket");
+    assert!(snapshot.is_canonical(finished_entry.0), "B_FINISHED version must be canonical");
+
+    assert!(
+        !open_games.iter().any(|&(_, g)| g == game_bytes),
+        "game must not appear in B_OPEN bucket"
+    );
 
     // Stop background miner and cleanup.
     mining_stop.notify_one();
