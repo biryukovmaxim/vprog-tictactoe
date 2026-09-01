@@ -14,10 +14,10 @@ use zerocopy::{
     Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned, big_endian::U64 as Be64,
 };
 
-/// Discriminator prefix byte for index A (player event log) keys.
+/// Discriminator prefix byte for player-event-log keys.
 pub const PLAYER_EVENT_DISCRIMINATOR: u8 = 0x01;
 
-/// Discriminator prefix byte for index B (game status) keys.
+/// Discriminator prefix byte for game-status keys.
 pub const GAME_STATUS_DISCRIMINATOR: u8 = 0x02;
 
 /// Player-event-log entry kind: one immutable fact per (player, game, version).
@@ -204,7 +204,7 @@ impl ResourceIndexer for TicTacToeIndexer {
     ) {
         let (old_g, new_g) = (game(old), game(new));
 
-        // Index A: forward player events.
+        // Player event log: forward player events.
         for (player, event) in forward_events(old_g, new_g) {
             wb.put(
                 StateSpace::Index,
@@ -213,7 +213,7 @@ impl ResourceIndexer for TicTacToeIndexer {
             );
         }
 
-        // Index B: game status.
+        // Game status index: move the game to its new bucket on status change.
         let old_s = old_g.map(|g| status_of(g.state()));
         let new_s = new_g.map(|g| status_of(g.state()));
         if new_s != old_s {
@@ -241,7 +241,7 @@ impl ResourceIndexer for TicTacToeIndexer {
     ) {
         let (written_g, restored_g) = (game(written), game(restored));
 
-        // Index A: delete entries the reverted diff inserted at reverted_version.
+        // Player event log: delete entries the reverted diff inserted at reverted_version.
         for (player, event) in forward_events(restored_g, written_g) {
             wb.delete(
                 StateSpace::Index,
@@ -249,7 +249,7 @@ impl ResourceIndexer for TicTacToeIndexer {
             );
         }
 
-        // Index B: clear all status keys and restore the prior status if any.
+        // Game status index: clear all status keys and restore the prior status if any.
         for status in [GameStatus::Open, GameStatus::Playing, GameStatus::Finished] {
             wb.delete(StateSpace::Index, GameStatusKey::new(status, id).as_bytes());
         }
@@ -405,11 +405,14 @@ mod tests {
         indexer.index_diff(&game_id, None, Some(&game_bytes), 1, &mut wb);
         store.commit(wb);
 
-        let a = PlayerEventKey::new(&creator, PlayerEvent::Created, 1, &game_id);
-        assert_eq!(store.get(StateSpace::Index, a.as_bytes()), Some(vec![]));
+        let created_key = PlayerEventKey::new(&creator, PlayerEvent::Created, 1, &game_id);
+        assert_eq!(store.get(StateSpace::Index, created_key.as_bytes()), Some(vec![]));
 
-        let b = GameStatusKey::new(GameStatus::Open, &game_id);
-        assert_eq!(store.get(StateSpace::Index, b.as_bytes()), Some(1u64.to_be_bytes().to_vec()));
+        let status_open = GameStatusKey::new(GameStatus::Open, &game_id);
+        assert_eq!(
+            store.get(StateSpace::Index, status_open.as_bytes()),
+            Some(1u64.to_be_bytes().to_vec())
+        );
     }
 
     #[test]
@@ -439,18 +442,18 @@ mod tests {
         store.commit(wb);
 
         // Player event log: joiner entry.
-        let a = PlayerEventKey::new(&joiner, PlayerEvent::Joined, 2, &game_id);
-        assert_eq!(store.get(StateSpace::Index, a.as_bytes()), Some(vec![]));
+        let joined_key = PlayerEventKey::new(&joiner, PlayerEvent::Joined, 2, &game_id);
+        assert_eq!(store.get(StateSpace::Index, joined_key.as_bytes()), Some(vec![]));
 
         // Status index: Playing present with version 2, Open cleared.
-        let b_playing = GameStatusKey::new(GameStatus::Playing, &game_id);
+        let status_playing = GameStatusKey::new(GameStatus::Playing, &game_id);
         assert_eq!(
-            store.get(StateSpace::Index, b_playing.as_bytes()),
+            store.get(StateSpace::Index, status_playing.as_bytes()),
             Some(2u64.to_be_bytes().to_vec())
         );
 
-        let b_open = GameStatusKey::new(GameStatus::Open, &game_id);
-        assert_eq!(store.get(StateSpace::Index, b_open.as_bytes()), None);
+        let status_open = GameStatusKey::new(GameStatus::Open, &game_id);
+        assert_eq!(store.get(StateSpace::Index, status_open.as_bytes()), None);
     }
 
     #[test]
@@ -485,21 +488,22 @@ mod tests {
             store.commit(wb);
 
             // Player event log: outcome entries.
-            let a_creator = PlayerEventKey::new(&creator, expected_creator_event, 3, &game_id);
-            assert_eq!(store.get(StateSpace::Index, a_creator.as_bytes()), Some(vec![]));
+            let creator_event_key =
+                PlayerEventKey::new(&creator, expected_creator_event, 3, &game_id);
+            assert_eq!(store.get(StateSpace::Index, creator_event_key.as_bytes()), Some(vec![]));
 
-            let a_joiner = PlayerEventKey::new(&joiner, expected_joiner_event, 3, &game_id);
-            assert_eq!(store.get(StateSpace::Index, a_joiner.as_bytes()), Some(vec![]));
+            let joiner_event_key = PlayerEventKey::new(&joiner, expected_joiner_event, 3, &game_id);
+            assert_eq!(store.get(StateSpace::Index, joiner_event_key.as_bytes()), Some(vec![]));
 
             // Status index: Finished present with version 3, Playing cleared.
-            let b_finished = GameStatusKey::new(GameStatus::Finished, &game_id);
+            let status_finished = GameStatusKey::new(GameStatus::Finished, &game_id);
             assert_eq!(
-                store.get(StateSpace::Index, b_finished.as_bytes()),
+                store.get(StateSpace::Index, status_finished.as_bytes()),
                 Some(3u64.to_be_bytes().to_vec())
             );
 
-            let b_playing = GameStatusKey::new(GameStatus::Playing, &game_id);
-            assert_eq!(store.get(StateSpace::Index, b_playing.as_bytes()), None);
+            let status_playing = GameStatusKey::new(GameStatus::Playing, &game_id);
+            assert_eq!(store.get(StateSpace::Index, status_playing.as_bytes()), None);
         }
     }
 
@@ -530,14 +534,14 @@ mod tests {
         }
 
         // Status index: Finished present with version 1, Open absent.
-        let b_finished = GameStatusKey::new(GameStatus::Finished, &game_id);
+        let status_finished = GameStatusKey::new(GameStatus::Finished, &game_id);
         assert_eq!(
-            store.get(StateSpace::Index, b_finished.as_bytes()),
+            store.get(StateSpace::Index, status_finished.as_bytes()),
             Some(1u64.to_be_bytes().to_vec())
         );
 
-        let b_open = GameStatusKey::new(GameStatus::Open, &game_id);
-        assert_eq!(store.get(StateSpace::Index, b_open.as_bytes()), None);
+        let status_open = GameStatusKey::new(GameStatus::Open, &game_id);
+        assert_eq!(store.get(StateSpace::Index, status_open.as_bytes()), None);
     }
 
     #[test]
@@ -587,9 +591,9 @@ mod tests {
         store.commit(wb);
 
         // Key value untouched at version 2.
-        let b_key = GameStatusKey::new(GameStatus::Playing, &game_id);
+        let status_key = GameStatusKey::new(GameStatus::Playing, &game_id);
         assert_eq!(
-            store.get(StateSpace::Index, b_key.as_bytes()),
+            store.get(StateSpace::Index, status_key.as_bytes()),
             Some(2u64.to_be_bytes().to_vec())
         );
     }
@@ -789,17 +793,17 @@ mod tests {
         }
 
         // Wire layouts are pinned to the documented byte offsets.
-        let a = PlayerEventKey::new(&player, PlayerEvent::Won, version, &game);
-        assert_eq!(a.as_bytes()[0], PLAYER_EVENT_DISCRIMINATOR);
-        assert_eq!(&a.as_bytes()[1..33], player.as_slice());
-        assert_eq!(a.as_bytes()[33], PlayerEvent::Won as u8);
-        assert_eq!(&a.as_bytes()[34..42], &version.to_be_bytes()[..]);
-        assert_eq!(&a.as_bytes()[42..74], game.as_slice());
+        let event_key = PlayerEventKey::new(&player, PlayerEvent::Won, version, &game);
+        assert_eq!(event_key.as_bytes()[0], PLAYER_EVENT_DISCRIMINATOR);
+        assert_eq!(&event_key.as_bytes()[1..33], player.as_slice());
+        assert_eq!(event_key.as_bytes()[33], PlayerEvent::Won as u8);
+        assert_eq!(&event_key.as_bytes()[34..42], &version.to_be_bytes()[..]);
+        assert_eq!(&event_key.as_bytes()[42..74], game.as_slice());
 
-        let b = GameStatusKey::new(GameStatus::Playing, &game);
-        assert_eq!(b.as_bytes()[0], GAME_STATUS_DISCRIMINATOR);
-        assert_eq!(b.as_bytes()[1], GameStatus::Playing as u8);
-        assert_eq!(&b.as_bytes()[2..34], game.as_slice());
+        let status_key = GameStatusKey::new(GameStatus::Playing, &game);
+        assert_eq!(status_key.as_bytes()[0], GAME_STATUS_DISCRIMINATOR);
+        assert_eq!(status_key.as_bytes()[1], GameStatus::Playing as u8);
+        assert_eq!(&status_key.as_bytes()[2..34], game.as_slice());
 
         // Invalid lengths.
         assert_eq!(PlayerEventKey::parse(&[0u8; 73]), None);
@@ -808,24 +812,24 @@ mod tests {
         assert_eq!(GameStatusKey::parse(&[0u8; 35]), None);
 
         // Invalid discriminator byte.
-        let mut invalid_disc_a = a.as_bytes().to_vec();
-        invalid_disc_a[0] = 0x00;
-        assert_eq!(PlayerEventKey::parse(&invalid_disc_a), None);
-        let mut invalid_disc_b = b.as_bytes().to_vec();
-        invalid_disc_b[0] = 0x01;
-        assert_eq!(GameStatusKey::parse(&invalid_disc_b), None);
+        let mut event_key_bad_disc = event_key.as_bytes().to_vec();
+        event_key_bad_disc[0] = 0x00;
+        assert_eq!(PlayerEventKey::parse(&event_key_bad_disc), None);
+        let mut status_key_bad_disc = status_key.as_bytes().to_vec();
+        status_key_bad_disc[0] = 0x01;
+        assert_eq!(GameStatusKey::parse(&status_key_bad_disc), None);
 
         // Invalid event byte.
-        let mut invalid_a = a.as_bytes().to_vec();
-        invalid_a[33] = 0;
-        assert_eq!(PlayerEventKey::parse(&invalid_a), None);
-        invalid_a[33] = 6;
-        assert_eq!(PlayerEventKey::parse(&invalid_a), None);
+        let mut event_key_bad_event = event_key.as_bytes().to_vec();
+        event_key_bad_event[33] = 0;
+        assert_eq!(PlayerEventKey::parse(&event_key_bad_event), None);
+        event_key_bad_event[33] = 6;
+        assert_eq!(PlayerEventKey::parse(&event_key_bad_event), None);
 
         // Invalid status byte.
-        let mut invalid_b = b.as_bytes().to_vec();
-        invalid_b[1] = 3;
-        assert_eq!(GameStatusKey::parse(&invalid_b), None);
+        let mut status_key_bad_status = status_key.as_bytes().to_vec();
+        status_key_bad_status[1] = 3;
+        assert_eq!(GameStatusKey::parse(&status_key_bad_status), None);
     }
 
     #[test]
@@ -978,8 +982,8 @@ mod tests {
         let store: RocksDbStore = RocksDbStore::open(dir.path());
         let indexer = TicTacToeIndexer;
 
-        // Player ID begins with 0x01 (same as Playing status byte, but index A discriminator is
-        // 0x01, B is 0x02).
+        // Player ID begins with 0x01 (same as the Playing status byte; the player-event-log
+        // discriminator is 0x01, the game-status one 0x02).
         let player = rid(0x01);
         let joiner = rid(0x20);
         let game_id = rid(0x01);
@@ -989,8 +993,8 @@ mod tests {
 
         // Seed an event-log key for player and initial status entry.
         let mut wb0 = store.write_batch();
-        let a_created = PlayerEventKey::new(&player, PlayerEvent::Created, 1, &game_id);
-        wb0.put(StateSpace::Index, a_created.as_bytes(), &[]);
+        let created_key = PlayerEventKey::new(&player, PlayerEvent::Created, 1, &game_id);
+        wb0.put(StateSpace::Index, created_key.as_bytes(), &[]);
         wb0.put(
             StateSpace::Index,
             GameStatusKey::new(GameStatus::Open, &game_id).as_bytes(),
@@ -1004,7 +1008,7 @@ mod tests {
         store.commit(wb);
 
         // The event-log key must survive.
-        assert_eq!(store.get(StateSpace::Index, a_created.as_bytes()), Some(vec![]));
+        assert_eq!(store.get(StateSpace::Index, created_key.as_bytes()), Some(vec![]));
         // Open is gone, Playing is present.
         assert_eq!(
             store.get(StateSpace::Index, GameStatusKey::new(GameStatus::Open, &game_id).as_bytes()),
