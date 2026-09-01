@@ -5,7 +5,8 @@
 //! through the guest lib's codec so the layout has one source of truth.
 //!
 //! Key and value layouts:
-//! - Index A (player event log): `player[32] || tag[1] || version_be[8] || game[32]` (73 bytes), value empty.
+//! - Index A (player event log): `player[32] || tag[1] || version_be[8] || game[32]` (73 bytes),
+//!   value empty.
 //! - Index B (state bucket): `bucket[1] || game[32]` (33 bytes), value `version_be[8]`.
 
 use vprog_tictactoe_guest::program::resources::game::{GameBody, State};
@@ -172,7 +173,8 @@ pub fn scan_player_events<S: Store>(
         .collect()
 }
 
-/// Bucket B-scan: `(version, game)` pairs in `bucket`, canonical versions only, sorted newest-first (version descending).
+/// Bucket B-scan: `(version, game)` pairs in `bucket`, canonical versions only, sorted newest-first
+/// (version descending).
 ///
 /// Ordering is computed in-memory by sorting on the 8-byte version stored in the value,
 /// since B-keys are indexed by `bucket || game_id`.
@@ -198,10 +200,11 @@ pub fn scan_bucket<S: Store>(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use tempfile::TempDir;
     use vprogs_storage_canonical_chain::CanonicalChainManager;
     use vprogs_storage_rocksdb_store::RocksDbStore;
+
+    use super::*;
 
     fn make_game_bytes(state: State, creator: &ResourceId, joiner: Option<&ResourceId>) -> Vec<u8> {
         let mut bytes = vec![0u8; 108];
