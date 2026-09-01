@@ -7,15 +7,16 @@
 
 use vprogs_core_codec::{Error, Reader, Result as CodecResult};
 use vprogs_zk_backend_risc0_runtime_processor::signer_trait::Signer;
-// The app's supported signer set: battery impls for the standard kinds.
+// The app's supported signer set: battery impls for witness kinds.
 pub use vprogs_zk_backend_risc0_runtime_processor::signer_variants::{
-    MultisigPrevTxV1WitnessSigner, MultisigSchnorrSigPtrSigner, PrevTxV1WitnessSigner,
-    SchnorrSigPtrSigner,
+    MultisigPrevTxV1WitnessSigner, PrevTxV1WitnessSigner,
 };
 
 use crate::runtime::ix::read_resource_idx;
-// The env-genesis variant is app-defined; re-exported alongside for one import site.
-pub use crate::runtime::signer_variants::GenesisSchnorrSigPtrSigner;
+// Lock-reading and env-genesis variants are app-defined to match this app's resource wire layouts.
+pub use crate::runtime::signer_variants::{
+    GenesisSchnorrSigPtrSigner, MultisigSchnorrSigPtrSigner, SchnorrSigPtrSigner,
+};
 
 /// All known signer kinds. Each variant's `resolve` produces an `Unlocker` of
 /// some concrete type; `program::run::resolve_signers` routes the result into the
