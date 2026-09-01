@@ -112,7 +112,7 @@ async fn test_e2e_simnet_game_flow() {
         start_mode: Some(StartMode::Fresh),
     };
 
-    let handles = start_runner(&runner_cfg, &arc_client, &params, elfs, delegate_entry_spk_hash)
+    let handles = start_runner(&runner_cfg, &arc_client, &params, elfs, delegate_entry_spk_hash, None)
         .await
         .expect("start_runner failed");
 

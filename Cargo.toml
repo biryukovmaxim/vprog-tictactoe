@@ -21,17 +21,19 @@ kaspa-rpc-core       = { git = "https://github.com/kaspanet/rusty-kaspa", branch
 kaspa-txscript       = { git = "https://github.com/kaspanet/rusty-kaspa", branch = "master" }
 kaspa-wrpc-client    = { git = "https://github.com/kaspanet/rusty-kaspa", branch = "master" }
 
-# vprogs stack. reorg-recovery on the fork is the only branch carrying app-kit
-# and runtime-processor alongside the rest; flip to kaspanet/vprogs once the
-# branches merge.
-vprogs-core-types                  = { git = "https://github.com/biryukovmaxim/vprogs", branch = "reorg-recovery" }
-vprogs-l1-wallet                   = { git = "https://github.com/biryukovmaxim/vprogs", branch = "reorg-recovery" }
-vprogs-node-test-utils             = { git = "https://github.com/biryukovmaxim/vprogs", branch = "reorg-recovery" }
-vprogs-runner                      = { git = "https://github.com/biryukovmaxim/vprogs", branch = "reorg-recovery" }
-vprogs-zk-abi                      = { git = "https://github.com/biryukovmaxim/vprogs", branch = "reorg-recovery" }
-vprogs-zk-backend-risc0-api        = { git = "https://github.com/biryukovmaxim/vprogs", branch = "reorg-recovery" }
-vprogs-zk-backend-risc0-app-kit    = { git = "https://github.com/biryukovmaxim/vprogs", branch = "reorg-recovery" }
-vprogs-zk-backend-risc0-test-suite = { git = "https://github.com/biryukovmaxim/vprogs", branch = "reorg-recovery" }
+# vprogs stack. indexer-hook on the fork (rebased on reorg-recovery) carries
+# app-kit, runtime-processor, and indexer hooks; flip to kaspanet/vprogs once
+# the branches merge.
+vprogs-core-types                  = { git = "https://github.com/biryukovmaxim/vprogs", branch = "indexer-hook" }
+vprogs-l1-wallet                   = { git = "https://github.com/biryukovmaxim/vprogs", branch = "indexer-hook" }
+vprogs-node-test-utils             = { git = "https://github.com/biryukovmaxim/vprogs", branch = "indexer-hook" }
+vprogs-runner                      = { git = "https://github.com/biryukovmaxim/vprogs", branch = "indexer-hook" }
+vprogs-scheduling-scheduler        = { git = "https://github.com/biryukovmaxim/vprogs", branch = "indexer-hook" }
+vprogs-storage-types               = { git = "https://github.com/biryukovmaxim/vprogs", branch = "indexer-hook" }
+vprogs-zk-abi                      = { git = "https://github.com/biryukovmaxim/vprogs", branch = "indexer-hook" }
+vprogs-zk-backend-risc0-api        = { git = "https://github.com/biryukovmaxim/vprogs", branch = "indexer-hook" }
+vprogs-zk-backend-risc0-app-kit    = { git = "https://github.com/biryukovmaxim/vprogs", branch = "indexer-hook" }
+vprogs-zk-backend-risc0-test-suite = { git = "https://github.com/biryukovmaxim/vprogs", branch = "indexer-hook" }
 
 # Shared host deps.
 ctrlc     = { version = "3", features = ["termination"] }

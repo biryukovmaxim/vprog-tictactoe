@@ -25,7 +25,7 @@ async fn main() {
     log::info!("connected to {}", cfg.runner.wrpc_url);
 
     let handles =
-        start_runner(&cfg.runner, &client, &params, elfs.as_elfs(), delegate_entry_spk_hash)
+        start_runner(&cfg.runner, &client, &params, elfs.as_elfs(), delegate_entry_spk_hash, None)
             .await
             .unwrap_or_else(|e| panic!("runner start failed: {e}"));
 
