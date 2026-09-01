@@ -33,6 +33,10 @@ vprogs-zk-backend-risc0-app-kit = { workspace = true }
 
 [dev-dependencies]
 tempfile                           = "3"
+vprog-tictactoe-node               = { path = "../node" }
 vprogs-node-test-utils             = { workspace = true }
 vprogs-runner                      = { workspace = true }
+vprogs-scheduling-scheduler        = { workspace = true }
+vprogs-storage-canonical-chain     = { workspace = true }
+vprogs-storage-types               = { workspace = true }
 vprogs-zk-backend-risc0-test-suite = { workspace = true }

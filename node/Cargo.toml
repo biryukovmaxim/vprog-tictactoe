@@ -4,6 +4,10 @@ name    = "vprog-tictactoe-node"
 publish = false
 version = "0.1.0"
 
+[lib]
+name = "vprog_tictactoe_node"
+path = "src/lib.rs"
+
 [[bin]]
 name = "ttd"
 path = "src/main.rs"

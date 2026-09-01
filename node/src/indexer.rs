@@ -8,8 +8,6 @@
 //! - Index A (player event log): `player[32] || tag[1] || version_be[8] || game[32]` (73 bytes), value empty.
 //! - Index B (state bucket): `bucket[1] || game[32]` (33 bytes), value `version_be[8]`.
 
-#![allow(dead_code)]
-
 use vprog_tictactoe_guest::program::resources::game::{GameBody, State};
 use vprogs_core_types::ResourceId;
 use vprogs_scheduling_scheduler::ResourceIndexer;
@@ -152,11 +150,7 @@ impl ResourceIndexer for TicTacToeIndexer {
             wb.delete(StateSpace::Index, &b_key(bucket, id));
         }
         if let Some(g) = game(restored) {
-            wb.put(
-                StateSpace::Index,
-                &b_key(bucket_of(g.state()), id),
-                &version.to_be_bytes(),
-            );
+            wb.put(StateSpace::Index, &b_key(bucket_of(g.state()), id), &version.to_be_bytes());
         }
     }
 }
@@ -321,7 +315,10 @@ mod tests {
 
             // B: FINISHED key present with version 3
             let b_finished = b_key(B_FINISHED, &game_id);
-            assert_eq!(store.get(StateSpace::Index, &b_finished), Some(3u64.to_be_bytes().to_vec()));
+            assert_eq!(
+                store.get(StateSpace::Index, &b_finished),
+                Some(3u64.to_be_bytes().to_vec())
+            );
 
             // B: old PLAYING key cleared
             let b_playing = b_key(B_PLAYING, &game_id);
@@ -438,7 +435,10 @@ mod tests {
 
         assert_eq!(store.get(StateSpace::Index, &b_key(B_FINISHED, &game_id)), None);
         assert_eq!(store.get(StateSpace::Index, &b_key(B_OPEN, &game_id)), None);
-        assert_eq!(store.get(StateSpace::Index, &b_key(B_PLAYING, &game_id)), Some(2u64.to_be_bytes().to_vec()));
+        assert_eq!(
+            store.get(StateSpace::Index, &b_key(B_PLAYING, &game_id)),
+            Some(2u64.to_be_bytes().to_vec())
+        );
 
         // Case 7b: revert to None (game never existed before this fork)
         let mut wb2 = store.write_batch();
@@ -551,8 +551,14 @@ mod tests {
         indexer.index_state(&game2, None, Some(&open_bytes2), 1, &mut wb0);
         store.commit(wb0);
 
-        assert_eq!(store.get(StateSpace::Index, &b_key(B_OPEN, &game1)), Some(1u64.to_be_bytes().to_vec()));
-        assert_eq!(store.get(StateSpace::Index, &b_key(B_OPEN, &game2)), Some(1u64.to_be_bytes().to_vec()));
+        assert_eq!(
+            store.get(StateSpace::Index, &b_key(B_OPEN, &game1)),
+            Some(1u64.to_be_bytes().to_vec())
+        );
+        assert_eq!(
+            store.get(StateSpace::Index, &b_key(B_OPEN, &game2)),
+            Some(1u64.to_be_bytes().to_vec())
+        );
 
         // Transition only game 1: Open -> Playing at version 2
         let mut wb = store.write_batch();
@@ -561,10 +567,16 @@ mod tests {
 
         // Game 1's old B_OPEN entry is gone, B_PLAYING entry is present
         assert_eq!(store.get(StateSpace::Index, &b_key(B_OPEN, &game1)), None);
-        assert_eq!(store.get(StateSpace::Index, &b_key(B_PLAYING, &game1)), Some(2u64.to_be_bytes().to_vec()));
+        assert_eq!(
+            store.get(StateSpace::Index, &b_key(B_PLAYING, &game1)),
+            Some(2u64.to_be_bytes().to_vec())
+        );
 
         // Game 2's B_OPEN entry is untouched!
-        assert_eq!(store.get(StateSpace::Index, &b_key(B_OPEN, &game2)), Some(1u64.to_be_bytes().to_vec()));
+        assert_eq!(
+            store.get(StateSpace::Index, &b_key(B_OPEN, &game2)),
+            Some(1u64.to_be_bytes().to_vec())
+        );
     }
 
     #[test]
@@ -597,6 +609,9 @@ mod tests {
         assert_eq!(store.get(StateSpace::Index, &a_created), Some(vec![]));
         // B_OPEN is gone, B_PLAYING is present
         assert_eq!(store.get(StateSpace::Index, &b_key(B_OPEN, &game_id)), None);
-        assert_eq!(store.get(StateSpace::Index, &b_key(B_PLAYING, &game_id)), Some(2u64.to_be_bytes().to_vec()));
+        assert_eq!(
+            store.get(StateSpace::Index, &b_key(B_PLAYING, &game_id)),
+            Some(2u64.to_be_bytes().to_vec())
+        );
     }
 }

@@ -4,11 +4,13 @@
 //! app-specific state transitions and rules live entirely in the guest ELF.
 
 mod config;
-mod indexer;
+
+use std::sync::Arc;
 
 use config::Config;
 use kaspa_consensus_core::config::params::Params;
-use vprogs_runner::{connect_wrpc, start_runner};
+use vprog_tictactoe_node::indexer::TicTacToeIndexer;
+use vprogs_runner::{Indexer, connect_wrpc, start_runner};
 use vprogs_zk_backend_risc0_api::delegate_entry_spk_hash;
 
 #[tokio::main(flavor = "multi_thread")]
@@ -25,10 +27,16 @@ async fn main() {
     let client = connect_wrpc(&cfg.runner.wrpc_url, network_id).await;
     log::info!("connected to {}", cfg.runner.wrpc_url);
 
-    let handles =
-        start_runner(&cfg.runner, &client, &params, elfs.as_elfs(), delegate_entry_spk_hash, None)
-            .await
-            .unwrap_or_else(|e| panic!("runner start failed: {e}"));
+    let handles = start_runner(
+        &cfg.runner,
+        &client,
+        &params,
+        elfs.as_elfs(),
+        delegate_entry_spk_hash,
+        Some(Indexer(Arc::new(TicTacToeIndexer))),
+    )
+    .await
+    .unwrap_or_else(|e| panic!("runner start failed: {e}"));
 
     println!("== ttd node: lane={} ==", handles.lane_id);
     println!("watch RUST_LOG trace for vprogs_node_framework and vprogs_zk_vm");
