@@ -3,6 +3,10 @@
 //! Pure functions of resource bytes + batch version, executed inside the state WriteBatch
 //! (see the spec: docs/internal/specs/2026-08-31-indexer-design.md). Wire decoding goes
 //! through the guest lib's codec so the layout has one source of truth.
+//!
+//! Key and value layouts:
+//! - Index A (player event log): `player[32] || tag[1] || version_be[8] || game[32]` (73 bytes), value empty.
+//! - Index B (state bucket): `bucket[1] || game[32]` (33 bytes), value `version_be[8]`.
 
 #![allow(dead_code)]
 
@@ -32,12 +36,11 @@ pub fn a_key(player: &ResourceId, tag: u8, version: u64, game: &ResourceId) -> [
     key
 }
 
-/// B-key codec: `bucket[1] || version_be[8] || game[32]`.
-pub fn b_key(bucket: u8, version: u64, game: &ResourceId) -> [u8; 41] {
-    let mut key = [0u8; 41];
+/// B-key codec: `bucket[1] || game[32]`.
+pub fn b_key(bucket: u8, game: &ResourceId) -> [u8; 33] {
+    let mut key = [0u8; 33];
     key[0] = bucket;
-    key[1..9].copy_from_slice(&version.to_be_bytes());
-    key[9..41].copy_from_slice(game.as_slice());
+    key[1..33].copy_from_slice(game.as_slice());
     key
 }
 
@@ -56,28 +59,17 @@ pub fn parse_a_key(key: &[u8]) -> Option<([u8; 32], u8, u64, [u8; 32])> {
     Some((player, tag, version, game))
 }
 
-/// Parses a B-key into `(bucket, version, game)`.
-pub fn parse_b_key(key: &[u8]) -> Option<(u8, u64, [u8; 32])> {
-    if key.len() != 41 {
+/// Parses a B-key into `(bucket, game)`.
+pub fn parse_b_key(key: &[u8]) -> Option<(u8, [u8; 32])> {
+    if key.len() != 33 {
         return None;
     }
     let bucket = key[0];
     if !(B_OPEN..=B_FINISHED).contains(&bucket) {
         return None;
     }
-    let version = u64::from_be_bytes(key[1..9].try_into().ok()?);
-    let game: [u8; 32] = key[9..41].try_into().ok()?;
-    Some((bucket, version, game))
-}
-
-/// Deletes `game`'s entry (any version) from `bucket`. The end bound appends one byte past
-/// the largest possible key of this game in this bucket, a correct half-open end for any
-/// game id.
-fn clear_bucket(wb: &mut dyn WriteBatch, bucket: u8, game: &ResourceId) {
-    let start = b_key(bucket, 0, game);
-    let mut end = b_key(bucket, u64::MAX, game).to_vec();
-    end.push(0);
-    wb.delete_range(StateSpace::Index, &start, &end);
+    let game: [u8; 32] = key[1..33].try_into().ok()?;
+    Some((bucket, game))
 }
 
 pub struct TicTacToeIndexer;
@@ -142,10 +134,10 @@ impl ResourceIndexer for TicTacToeIndexer {
             return;
         }
         if let Some(old_b) = old_b {
-            clear_bucket(wb, old_b, id);
+            wb.delete(StateSpace::Index, &b_key(old_b, id));
         }
         if let Some(new_b) = new_b {
-            wb.put(StateSpace::Index, &b_key(new_b, version, id), &[]);
+            wb.put(StateSpace::Index, &b_key(new_b, id), &version.to_be_bytes());
         }
     }
 
@@ -157,10 +149,14 @@ impl ResourceIndexer for TicTacToeIndexer {
         wb: &mut dyn WriteBatch,
     ) {
         for bucket in [B_OPEN, B_PLAYING, B_FINISHED] {
-            clear_bucket(wb, bucket, id);
+            wb.delete(StateSpace::Index, &b_key(bucket, id));
         }
         if let Some(g) = game(restored) {
-            wb.put(StateSpace::Index, &b_key(bucket_of(g.state()), version, id), &[]);
+            wb.put(
+                StateSpace::Index,
+                &b_key(bucket_of(g.state()), id),
+                &version.to_be_bytes(),
+            );
         }
     }
 }
@@ -182,19 +178,28 @@ pub fn scan_player_events<S: Store>(
         .collect()
 }
 
-/// Bucket B-scan: `(version, game)` pairs in `bucket`, canonical versions only, newest first.
+/// Bucket B-scan: `(version, game)` pairs in `bucket`, canonical versions only, sorted newest-first (version descending).
+///
+/// Ordering is computed in-memory by sorting on the 8-byte version stored in the value,
+/// since B-keys are indexed by `bucket || game_id`.
 pub fn scan_bucket<S: Store>(
     store: &S,
     snapshot: &CanonicalChainSnapshot,
     bucket: u8,
 ) -> Vec<(u64, [u8; 32])> {
-    store
+    let mut results: Vec<(u64, [u8; 32])> = store
         .prefix_iter_rev(StateSpace::Index, &[bucket])
-        .filter_map(|(k, _)| {
-            let (b, version, game) = parse_b_key(&k)?;
-            (b == bucket && snapshot.is_canonical(version)).then_some((version, game))
+        .filter_map(|(k, v)| {
+            let (b, game) = parse_b_key(&k)?;
+            if b != bucket || v.len() != 8 {
+                return None;
+            }
+            let version = u64::from_be_bytes(v.as_slice().try_into().ok()?);
+            snapshot.is_canonical(version).then_some((version, game))
         })
-        .collect()
+        .collect();
+    results.sort_by_key(|a| std::cmp::Reverse(a.0));
+    results
 }
 
 #[cfg(test)]
@@ -239,8 +244,8 @@ mod tests {
         let a = a_key(&creator, TAG_CREATED, 1, &game_id);
         assert_eq!(store.get(StateSpace::Index, &a), Some(vec![]));
 
-        let b = b_key(B_OPEN, 1, &game_id);
-        assert_eq!(store.get(StateSpace::Index, &b), Some(vec![]));
+        let b = b_key(B_OPEN, &game_id);
+        assert_eq!(store.get(StateSpace::Index, &b), Some(1u64.to_be_bytes().to_vec()));
     }
 
     #[test]
@@ -258,7 +263,7 @@ mod tests {
 
         // Prior open state in store
         let mut wb0 = store.write_batch();
-        wb0.put(StateSpace::Index, &b_key(B_OPEN, 1, &game_id), &[]);
+        wb0.put(StateSpace::Index, &b_key(B_OPEN, &game_id), &1u64.to_be_bytes());
         store.commit(wb0);
 
         let mut wb = store.write_batch();
@@ -270,12 +275,12 @@ mod tests {
         let a = a_key(&joiner, TAG_JOINED, 2, &game_id);
         assert_eq!(store.get(StateSpace::Index, &a), Some(vec![]));
 
-        // B: PLAYING key present
-        let b_playing = b_key(B_PLAYING, 2, &game_id);
-        assert_eq!(store.get(StateSpace::Index, &b_playing), Some(vec![]));
+        // B: PLAYING key present with version 2
+        let b_playing = b_key(B_PLAYING, &game_id);
+        assert_eq!(store.get(StateSpace::Index, &b_playing), Some(2u64.to_be_bytes().to_vec()));
 
         // B: OPEN key cleared
-        let b_open = b_key(B_OPEN, 1, &game_id);
+        let b_open = b_key(B_OPEN, &game_id);
         assert_eq!(store.get(StateSpace::Index, &b_open), None);
     }
 
@@ -299,7 +304,7 @@ mod tests {
 
             // Seed prior playing state in B
             let mut wb0 = store.write_batch();
-            wb0.put(StateSpace::Index, &b_key(B_PLAYING, 2, &game_id), &[]);
+            wb0.put(StateSpace::Index, &b_key(B_PLAYING, &game_id), &2u64.to_be_bytes());
             store.commit(wb0);
 
             let mut wb = store.write_batch();
@@ -314,12 +319,12 @@ mod tests {
             let a_joiner = a_key(&joiner, expected_joiner_tag, 3, &game_id);
             assert_eq!(store.get(StateSpace::Index, &a_joiner), Some(vec![]));
 
-            // B: FINISHED key present
-            let b_finished = b_key(B_FINISHED, 3, &game_id);
-            assert_eq!(store.get(StateSpace::Index, &b_finished), Some(vec![]));
+            // B: FINISHED key present with version 3
+            let b_finished = b_key(B_FINISHED, &game_id);
+            assert_eq!(store.get(StateSpace::Index, &b_finished), Some(3u64.to_be_bytes().to_vec()));
 
             // B: old PLAYING key cleared
-            let b_playing = b_key(B_PLAYING, 2, &game_id);
+            let b_playing = b_key(B_PLAYING, &game_id);
             assert_eq!(store.get(StateSpace::Index, &b_playing), None);
         }
     }
@@ -354,11 +359,11 @@ mod tests {
         let a_lost = a_key(&joiner, TAG_LOST, 1, &game_id);
         assert_eq!(store.get(StateSpace::Index, &a_lost), Some(vec![]));
 
-        // B: FINISHED present, OPEN absent
-        let b_finished = b_key(B_FINISHED, 1, &game_id);
-        assert_eq!(store.get(StateSpace::Index, &b_finished), Some(vec![]));
+        // B: FINISHED present with version 1, OPEN absent
+        let b_finished = b_key(B_FINISHED, &game_id);
+        assert_eq!(store.get(StateSpace::Index, &b_finished), Some(1u64.to_be_bytes().to_vec()));
 
-        let b_open = b_key(B_OPEN, 1, &game_id);
+        let b_open = b_key(B_OPEN, &game_id);
         assert_eq!(store.get(StateSpace::Index, &b_open), None);
     }
 
@@ -398,18 +403,16 @@ mod tests {
 
         // Seed store with initial Playing key at version 2
         let mut wb0 = store.write_batch();
-        wb0.put(StateSpace::Index, &b_key(B_PLAYING, 2, &game_id), &[]);
+        wb0.put(StateSpace::Index, &b_key(B_PLAYING, &game_id), &2u64.to_be_bytes());
         store.commit(wb0);
 
         let mut wb = store.write_batch();
         indexer.index_state(&game_id, Some(&playing1), Some(&playing2), 3, &mut wb);
         store.commit(wb);
 
-        // Old key untouched, no new key at version 3
-        let b_old = b_key(B_PLAYING, 2, &game_id);
-        assert_eq!(store.get(StateSpace::Index, &b_old), Some(vec![]));
-        let b_new = b_key(B_PLAYING, 3, &game_id);
-        assert_eq!(store.get(StateSpace::Index, &b_new), None);
+        // Key value untouched at version 2
+        let b_key = b_key(B_PLAYING, &game_id);
+        assert_eq!(store.get(StateSpace::Index, &b_key), Some(2u64.to_be_bytes().to_vec()));
     }
 
     #[test]
@@ -425,24 +428,24 @@ mod tests {
         // Case 7a: revert to Some(playing)
         let playing = make_game_bytes(State::Playing, &creator, Some(&joiner));
         let mut wb0 = store.write_batch();
-        wb0.put(StateSpace::Index, &b_key(B_FINISHED, 3, &game_id), &[]);
-        wb0.put(StateSpace::Index, &b_key(B_OPEN, 1, &game_id), &[]);
+        wb0.put(StateSpace::Index, &b_key(B_FINISHED, &game_id), &3u64.to_be_bytes());
+        wb0.put(StateSpace::Index, &b_key(B_OPEN, &game_id), &1u64.to_be_bytes());
         store.commit(wb0);
 
         let mut wb = store.write_batch();
         indexer.revert_state(&game_id, Some(&playing), 2, &mut wb);
         store.commit(wb);
 
-        assert_eq!(store.get(StateSpace::Index, &b_key(B_FINISHED, 3, &game_id)), None);
-        assert_eq!(store.get(StateSpace::Index, &b_key(B_OPEN, 1, &game_id)), None);
-        assert_eq!(store.get(StateSpace::Index, &b_key(B_PLAYING, 2, &game_id)), Some(vec![]));
+        assert_eq!(store.get(StateSpace::Index, &b_key(B_FINISHED, &game_id)), None);
+        assert_eq!(store.get(StateSpace::Index, &b_key(B_OPEN, &game_id)), None);
+        assert_eq!(store.get(StateSpace::Index, &b_key(B_PLAYING, &game_id)), Some(2u64.to_be_bytes().to_vec()));
 
         // Case 7b: revert to None (game never existed before this fork)
         let mut wb2 = store.write_batch();
         indexer.revert_state(&game_id, None, 0, &mut wb2);
         store.commit(wb2);
 
-        assert_eq!(store.get(StateSpace::Index, &b_key(B_PLAYING, 2, &game_id)), None);
+        assert_eq!(store.get(StateSpace::Index, &b_key(B_PLAYING, &game_id)), None);
     }
 
     #[test]
@@ -459,17 +462,17 @@ mod tests {
         }
 
         for bucket in B_OPEN..=B_FINISHED {
-            let key = b_key(bucket, version, &game);
-            assert_eq!(key.len(), 41);
+            let key = b_key(bucket, &game);
+            assert_eq!(key.len(), 33);
             let parsed = parse_b_key(&key);
-            assert_eq!(parsed, Some((bucket, version, *game)));
+            assert_eq!(parsed, Some((bucket, *game)));
         }
 
         // Invalid lengths
         assert_eq!(parse_a_key(&[0u8; 72]), None);
         assert_eq!(parse_a_key(&[0u8; 74]), None);
-        assert_eq!(parse_b_key(&[0u8; 40]), None);
-        assert_eq!(parse_b_key(&[0u8; 42]), None);
+        assert_eq!(parse_b_key(&[0u8; 32]), None);
+        assert_eq!(parse_b_key(&[0u8; 34]), None);
 
         // Invalid tag
         let mut invalid_a = a_key(&player, 0, version, &game);
@@ -479,7 +482,7 @@ mod tests {
         assert_eq!(parse_a_key(&invalid_a), None);
 
         // Invalid bucket
-        let mut invalid_b = b_key(0, version, &game);
+        let mut invalid_b = b_key(0, &game);
         invalid_b[0] = 3;
         assert_eq!(parse_b_key(&invalid_b), None);
     }
@@ -513,9 +516,9 @@ mod tests {
         wb.put(StateSpace::Index, &a_key(&player, TAG_WON, 3, &game3), &[]);
 
         // B keys for bucket B_OPEN
-        wb.put(StateSpace::Index, &b_key(B_OPEN, 1, &game1), &[]);
-        wb.put(StateSpace::Index, &b_key(B_OPEN, 2, &game2), &[]);
-        wb.put(StateSpace::Index, &b_key(B_OPEN, 3, &game3), &[]);
+        wb.put(StateSpace::Index, &b_key(B_OPEN, &game1), &1u64.to_be_bytes());
+        wb.put(StateSpace::Index, &b_key(B_OPEN, &game2), &2u64.to_be_bytes());
+        wb.put(StateSpace::Index, &b_key(B_OPEN, &game3), &3u64.to_be_bytes());
         store.commit(wb);
 
         // Scan player events: should return (TAG_CREATED, 1, game1) and (TAG_WON, 3, game3)
@@ -525,5 +528,75 @@ mod tests {
         // Scan bucket: should return (3, game3) and (1, game1) in newest-first order
         let bucket_games = scan_bucket(&store, &snapshot, B_OPEN);
         assert_eq!(bucket_games, vec![(3, *game3), (1, *game1),]);
+    }
+
+    #[test]
+    fn test_b_transition_spares_other_games() {
+        let dir = TempDir::new().unwrap();
+        let store: RocksDbStore = RocksDbStore::open(dir.path());
+        let indexer = TicTacToeIndexer;
+
+        let creator = rid(0x10);
+        let joiner = rid(0x20);
+        let game1 = rid(0x01);
+        let game2 = rid(0x02);
+
+        let open_bytes1 = make_game_bytes(State::Open, &creator, None);
+        let playing_bytes1 = make_game_bytes(State::Playing, &creator, Some(&joiner));
+        let open_bytes2 = make_game_bytes(State::Open, &creator, None);
+
+        // Seed store with both games in B_OPEN
+        let mut wb0 = store.write_batch();
+        indexer.index_state(&game1, None, Some(&open_bytes1), 1, &mut wb0);
+        indexer.index_state(&game2, None, Some(&open_bytes2), 1, &mut wb0);
+        store.commit(wb0);
+
+        assert_eq!(store.get(StateSpace::Index, &b_key(B_OPEN, &game1)), Some(1u64.to_be_bytes().to_vec()));
+        assert_eq!(store.get(StateSpace::Index, &b_key(B_OPEN, &game2)), Some(1u64.to_be_bytes().to_vec()));
+
+        // Transition only game 1: Open -> Playing at version 2
+        let mut wb = store.write_batch();
+        indexer.index_state(&game1, Some(&open_bytes1), Some(&playing_bytes1), 2, &mut wb);
+        store.commit(wb);
+
+        // Game 1's old B_OPEN entry is gone, B_PLAYING entry is present
+        assert_eq!(store.get(StateSpace::Index, &b_key(B_OPEN, &game1)), None);
+        assert_eq!(store.get(StateSpace::Index, &b_key(B_PLAYING, &game1)), Some(2u64.to_be_bytes().to_vec()));
+
+        // Game 2's B_OPEN entry is untouched!
+        assert_eq!(store.get(StateSpace::Index, &b_key(B_OPEN, &game2)), Some(1u64.to_be_bytes().to_vec()));
+    }
+
+    #[test]
+    fn test_b_maintenance_spares_a_keys() {
+        let dir = TempDir::new().unwrap();
+        let store: RocksDbStore = RocksDbStore::open(dir.path());
+        let indexer = TicTacToeIndexer;
+
+        // Player ID begins with 0x01 (same as B_PLAYING byte)
+        let player = rid(0x01);
+        let joiner = rid(0x20);
+        let game_id = rid(0x01);
+
+        let open_bytes = make_game_bytes(State::Open, &player, None);
+        let playing_bytes = make_game_bytes(State::Playing, &player, Some(&joiner));
+
+        // Seed an A key for player and initial B entry
+        let mut wb0 = store.write_batch();
+        let a_created = a_key(&player, TAG_CREATED, 1, &game_id);
+        wb0.put(StateSpace::Index, &a_created, &[]);
+        wb0.put(StateSpace::Index, &b_key(B_OPEN, &game_id), &1u64.to_be_bytes());
+        store.commit(wb0);
+
+        // Transition B: Open -> Playing
+        let mut wb = store.write_batch();
+        indexer.index_state(&game_id, Some(&open_bytes), Some(&playing_bytes), 2, &mut wb);
+        store.commit(wb);
+
+        // The A key must survive
+        assert_eq!(store.get(StateSpace::Index, &a_created), Some(vec![]));
+        // B_OPEN is gone, B_PLAYING is present
+        assert_eq!(store.get(StateSpace::Index, &b_key(B_OPEN, &game_id)), None);
+        assert_eq!(store.get(StateSpace::Index, &b_key(B_PLAYING, &game_id)), Some(2u64.to_be_bytes().to_vec()));
     }
 }
