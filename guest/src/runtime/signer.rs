@@ -13,7 +13,8 @@ pub use vprogs_zk_backend_risc0_runtime_processor::signer_variants::{
 };
 
 use crate::runtime::ix::read_resource_idx;
-// Lock-reading and env-genesis variants are app-defined to match this app's resource wire layouts.
+// Lock-reading and env-genesis variants are app-defined to match this app's resource wire
+// layouts.
 pub use crate::runtime::signer_variants::{
     GenesisSchnorrSigPtrSigner, MultisigSchnorrSigPtrSigner, SchnorrSigPtrSigner,
 };

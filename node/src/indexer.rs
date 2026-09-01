@@ -1,26 +1,9 @@
-//! Secondary indexes over the game store, maintained by the vprogs write worker inside
-//! the same atomic WriteBatch as the state itself.
+//! Secondary indexes over the game store, so common queries don't scan every game:
 //!
-//! The store is keyed by game resource id only — every query beyond "fetch this exact
-//! game" would be a full-store scan. Two indexes close the two queries a frontend
-//! actually needs:
-//!
-//! - **Player event log** ([`PlayerEventKey`]): append-only `player -> (event, version, game)`
-//!   facts — created, joined, won, lost, draw. Needed for per-player views ("my games", "games I
-//!   won", activity feeds): one prefix scan per player instead of walking every game. Entries are
-//!   immutable facts about the version they were written at, so they are never rewritten on reorgs
-//!   or prunes; losing-fork entries stay on disk and are filtered out at scan time by canonical
-//!   version. `game` is the last key field so a batch that creates *and* finishes a game yields
-//!   distinct keys instead of colliding on `(player, version)`.
-//! - **Game status index** ([`GameStatusKey`]): current lifecycle bucket per game — open / playing
-//!   / finished, exactly one live entry per game, value = the batch version that moved it there.
-//!   Needed for lobby views ("open games to join", "recently finished") without reading any game
-//!   bodies. Each status transition is an exact delete of the old-bucket key plus a put of the new
-//!   one; rollback clears all three bucket keys and re-puts the restored one, so the index always
-//!   mirrors the game's latest state.
-//!
-//! Wire decoding goes through the guest lib's codec so the game-byte layout has one
-//! source of truth. Keys are zerocopy structs; their byte layouts are pinned by test.
+//! - **Player event log** ([`PlayerEventKey`]): append-only per-player facts (created, joined, won,
+//!   lost, drawn) for "my games" style views.
+//! - **Game status index** ([`GameStatusKey`]): one live entry per game in its current bucket
+//!   (open, playing, finished) for lobby and recent-finish views.
 
 use vprog_tictactoe_guest::program::resources::game::{GameBody, State};
 use vprogs_core_types::ResourceId;
@@ -32,7 +15,7 @@ use zerocopy::{
 };
 
 /// Player-event-log entry kind: one immutable fact per (player, game, version).
-/// Discriminants are the on-disk key bytes — append-only, never renumber.
+/// Discriminants are the on-disk key bytes; append-only, never renumber.
 #[repr(u8)]
 #[derive(
     Copy,
@@ -47,22 +30,21 @@ use zerocopy::{
     Unaligned
 )]
 pub enum PlayerEvent {
-    /// Game created by this player (creator side).
+    /// Game created by this player.
     Created = 1,
-    /// Game joined by this player (joiner side, emitted when the empty joiner seat fills).
+    /// Game joined by this player.
     Joined = 2,
-    /// Game won by this player at termination.
+    /// Game won by this player.
     Won = 3,
-    /// Game lost by this player at termination.
+    /// Game lost by this player.
     Lost = 4,
-    /// Game drawn (both players get this).
+    /// Game drawn by this player.
     Draw = 5,
 }
 
-/// Game-status bucket: the lifecycle phase a game is currently in. Discriminants are
-/// the on-disk key bytes. `Finished` folds the guest's three terminal states
-/// (`First`/`Second`/`Draw`) — the winner detail lives in the game body and the
-/// player-event log.
+/// Game-status bucket: the game's current lifecycle phase. Discriminants are the
+/// on-disk key bytes. `Finished` covers all terminal states; the winner detail lives
+/// in the game body and the player-event log.
 #[repr(u8)]
 #[derive(
     Copy,
@@ -79,14 +61,14 @@ pub enum PlayerEvent {
 pub enum GameStatus {
     /// Waiting for a joiner.
     Open = 0,
-    /// Both seats filled, moves in progress.
+    /// Moves in progress.
     Playing = 1,
-    /// Terminal (won either way or drawn).
+    /// Terminal: won or drawn.
     Finished = 2,
 }
 
-/// Player-event-log key: `player[32] || event[1] || version_be[8] || game[32]`
-/// (73 bytes, value empty).
+/// Player-event-log key: `player[32] || event[1] || version_be[8] || game[32]`; the
+/// value is empty.
 #[repr(C)]
 #[derive(
     Copy,
@@ -108,6 +90,7 @@ pub struct PlayerEventKey {
 }
 
 impl PlayerEventKey {
+    /// Creates a key from its parts.
     pub fn new(player: &ResourceId, event: PlayerEvent, version: u64, game: &ResourceId) -> Self {
         Self { player: **player, event, version: Be64::new(version), game: **game }
     }
@@ -118,7 +101,7 @@ impl PlayerEventKey {
     }
 }
 
-/// Game-status key: `status[1] || game[32]` (33 bytes, value `version_be[8]`).
+/// Game-status key: `status[1] || game[32]`; the value is the version that wrote it.
 #[repr(C)]
 #[derive(
     Copy,
@@ -138,6 +121,7 @@ pub struct GameStatusKey {
 }
 
 impl GameStatusKey {
+    /// Creates a key from its parts.
     pub fn new(status: GameStatus, game: &ResourceId) -> Self {
         Self { status, game: **game }
     }
@@ -148,12 +132,15 @@ impl GameStatusKey {
     }
 }
 
+/// Maintains both indexes as game resources change.
 pub struct TicTacToeIndexer;
 
+/// Decodes an optional raw game body; `None` for non-game bytes.
 fn game(bytes: Option<&[u8]>) -> Option<&GameBody> {
     bytes.and_then(|b| GameBody::from_bytes(b).ok())
 }
 
+/// Maps a game state to its status bucket.
 fn status_of(state: State) -> GameStatus {
     match state {
         State::Open => GameStatus::Open,
@@ -266,10 +253,7 @@ pub fn scan_player_events<S: Store>(
 }
 
 /// Game-status scan: `(version, game)` pairs in `status`, canonical versions only,
-/// sorted newest-first (version descending).
-///
-/// Ordering is computed in-memory by sorting on the 8-byte version stored in the
-/// value, since keys are ordered by `status || game_id`.
+/// sorted newest-first.
 pub fn scan_games_by_status<S: Store>(
     store: &S,
     snapshot: &CanonicalChainSnapshot,
