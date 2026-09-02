@@ -6,6 +6,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use vprogs_runner::ExitLeaf;
 use vprogs_storage_types::{StateSpace, Store, WriteBatch};
 use vprogs_zk_abi::withdrawal::StandardSpk;
+use vprogs_zk_backend_risc0_api::PermissionTreeView;
 
 /// Discriminator prefix byte for exit records and spent marks in `StateSpace::Index`.
 pub const EXITS_DISCRIMINANT: u8 = 0x03;
@@ -75,6 +76,21 @@ pub struct SpentMark {
     pub deduct: u64,
     /// Successor permission tree root after this spend.
     pub new_root: [u8; 32],
+}
+
+/// Materialized Merkle-path view of a settled exit bundle with per-leaf spend marks.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExitView {
+    /// Permission SPK hash root of the exit tree.
+    pub root: [u8; 32],
+    /// Stored exit bundle record.
+    pub record: ExitRecord,
+    /// Per-leaf spend markers indexed by leaf position; `None` if unspent.
+    pub spent: Vec<Option<SpentMark>>,
+    /// Depth of the padded permission tree.
+    pub depth: usize,
+    /// Sibling hashes for each leaf in `record.leaves`, indexed by leaf position.
+    pub siblings: Vec<Vec<[u8; 32]>>,
 }
 
 /// Builds the 33-byte key for an exit record: `0x03 || root[32]`.
@@ -148,10 +164,26 @@ pub fn leaf_spent<S: Store>(store: &S, root: &[u8; 32], leaf_index: usize) -> Op
     borsh::from_slice(&val).ok()
 }
 
+/// Materializes all stored exit records into Merkle-path views with per-leaf spend marks.
+pub fn exit_views<S: Store>(store: &S) -> Vec<ExitView> {
+    exit_roots(store)
+        .into_iter()
+        .filter_map(|root| {
+            let record = get_exit_record(store, &root)?;
+            let tree = PermissionTreeView::from_leaves(&record.leaves);
+            let depth = tree.depth();
+            let spent = (0..record.leaves.len()).map(|i| leaf_spent(store, &root, i)).collect();
+            let siblings = (0..record.leaves.len()).map(|i| tree.siblings(i)).collect();
+            Some(ExitView { root, record, spent, depth, siblings })
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use tempfile::TempDir;
     use vprogs_storage_rocksdb_store::RocksDbStore;
+    use vprogs_zk_backend_risc0_api::{PermissionTreeAccumulator, PermissionTreeView};
 
     use super::*;
 
@@ -243,5 +275,100 @@ mod tests {
         expected.sort();
 
         assert_eq!(roots, expected);
+    }
+
+    #[test]
+    fn test_exit_views_reconstructs_merkle_paths_and_spent_marks() {
+        let dir = TempDir::new().unwrap();
+        let store: RocksDbStore = RocksDbStore::open(dir.path());
+
+        let pk0 = [0x11u8; 32];
+        let pk1 = [0x22u8; 32];
+        let leaves1 = vec![
+            ExitLeaf::from_pair(StandardSpk::PubKey(&pk0), 50_000_000),
+            ExitLeaf::from_pair(StandardSpk::PubKey(&pk1), 25_000_000),
+        ];
+        let tree1 = PermissionTreeView::from_leaves(&leaves1);
+        let root1 = tree1.root();
+        let rec1 = ExitRecord {
+            settlement_txid: [0xaa; 32],
+            outpoint_index: 1,
+            daa_score: 100,
+            unclaimed: 2,
+            rent: 50_000_000,
+            leaves: leaves1,
+        };
+
+        let pk2 = [0x33u8; 32];
+        let pk3 = [0x44u8; 32];
+        let leaves2 = vec![
+            ExitLeaf::from_pair(StandardSpk::PubKey(&pk2), 70_000_000),
+            ExitLeaf::from_pair(StandardSpk::PubKey(&pk3), 30_000_000),
+        ];
+        let tree2 = PermissionTreeView::from_leaves(&leaves2);
+        let root2 = tree2.root();
+        let rec2 = ExitRecord {
+            settlement_txid: [0xbb; 32],
+            outpoint_index: 1,
+            daa_score: 200,
+            unclaimed: 2,
+            rent: 50_000_000,
+            leaves: leaves2,
+        };
+
+        let mark = SpentMark { spend_txid: [0xcc; 32], deduct: 50_000_000, new_root: [0xdd; 32] };
+
+        let mut wb = store.write_batch();
+        put_exit_record(&mut wb, &root1, &rec1);
+        put_exit_record(&mut wb, &root2, &rec2);
+        mark_leaf_spent(&mut wb, &root1, 0, &mark);
+        store.commit(wb);
+
+        let views = exit_views(&store);
+        assert_eq!(views.len(), 2);
+
+        let view1 = views.iter().find(|v| v.root == root1).expect("view1 present");
+        assert_eq!(view1.record, rec1);
+        assert_eq!(view1.depth, PermissionTreeAccumulator::required_depth(rec1.leaves.len()));
+        assert_eq!(view1.depth, tree1.depth());
+        assert_eq!(view1.spent, vec![Some(mark), None]);
+        assert_eq!(view1.siblings.len(), rec1.leaves.len());
+        for i in 0..rec1.leaves.len() {
+            assert_eq!(view1.siblings[i], tree1.siblings(i));
+            let leaf = &rec1.leaves[i];
+            let leaf_hash =
+                PermissionTreeAccumulator::hash_leaf(leaf.to_standard_spk(), leaf.amount);
+            let mut curr = leaf_hash;
+            for (level, sib) in view1.siblings[i].iter().enumerate() {
+                if (i >> level) & 1 == 0 {
+                    curr = PermissionTreeAccumulator::hash_branch(&curr, sib);
+                } else {
+                    curr = PermissionTreeAccumulator::hash_branch(sib, &curr);
+                }
+            }
+            assert_eq!(curr, view1.root);
+        }
+
+        let view2 = views.iter().find(|v| v.root == root2).expect("view2 present");
+        assert_eq!(view2.record, rec2);
+        assert_eq!(view2.depth, PermissionTreeAccumulator::required_depth(rec2.leaves.len()));
+        assert_eq!(view2.depth, tree2.depth());
+        assert_eq!(view2.spent, vec![None, None]);
+        assert_eq!(view2.siblings.len(), rec2.leaves.len());
+        for i in 0..rec2.leaves.len() {
+            assert_eq!(view2.siblings[i], tree2.siblings(i));
+            let leaf = &rec2.leaves[i];
+            let leaf_hash =
+                PermissionTreeAccumulator::hash_leaf(leaf.to_standard_spk(), leaf.amount);
+            let mut curr = leaf_hash;
+            for (level, sib) in view2.siblings[i].iter().enumerate() {
+                if (i >> level) & 1 == 0 {
+                    curr = PermissionTreeAccumulator::hash_branch(&curr, sib);
+                } else {
+                    curr = PermissionTreeAccumulator::hash_branch(sib, &curr);
+                }
+            }
+            assert_eq!(curr, view2.root);
+        }
     }
 }
