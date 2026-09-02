@@ -14,6 +14,9 @@ pub const EXITS_DISCRIMINANT: u8 = 0x03;
 /// Delimiter byte separating exit root from leaf index in spent mark keys.
 pub const SPENT_MARK_DELIMITER: u8 = 0xFF;
 
+/// Reserved marker byte identifying the single latest-settlement key.
+pub const LATEST_SETTLEMENT_MARKER: u8 = 0xFE;
+
 /// Record of an on-chain settled exit bundle indexed by its permission SPK hash root.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExitRecord {
@@ -78,6 +81,19 @@ pub struct SpentMark {
     pub new_root: [u8; 32],
 }
 
+/// Latest paired settlement; a single row overwritten on every committed exit bundle.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+pub struct LatestSettlement {
+    /// L2 SMT state root after the settled bundle.
+    pub state_root: [u8; 32],
+    /// Permission SPK hash root of the settled bundle's exit tree.
+    pub permission_root: [u8; 32],
+    /// L1 transaction id of the settlement.
+    pub txid: [u8; 32],
+    /// DAA score of the block containing the settlement.
+    pub daa_score: u64,
+}
+
 /// Materialized Merkle-path view of a settled exit bundle with per-leaf spend marks.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExitView {
@@ -109,6 +125,15 @@ fn spent_mark_key(root: &[u8; 32], leaf_index: usize) -> [u8; 38] {
     key[33] = SPENT_MARK_DELIMITER;
     key[34..38].copy_from_slice(&(leaf_index as u32).to_be_bytes());
     key
+}
+
+/// Builds the 2-byte key for the latest settlement: `0x03 || 0xFE`.
+///
+/// The exit keyspace holds records (`0x03 || root[32]`, 33 bytes) and spent marks (`0x03 ||
+/// root[32] || 0xFF || index_be_u32`, 38 bytes); this key's reserved marker byte and 2-byte length
+/// keep it distinct from both, so `exit_roots` skips it when scanning.
+fn latest_settlement_key() -> [u8; 2] {
+    [EXITS_DISCRIMINANT, LATEST_SETTLEMENT_MARKER]
 }
 
 /// Stores an exit record in the index keyspace under its permission root.
@@ -160,6 +185,20 @@ pub fn mark_leaf_spent(
 /// Reads the spent mark for a leaf, or `None` if unspent.
 pub fn leaf_spent<S: Store>(store: &S, root: &[u8; 32], leaf_index: usize) -> Option<SpentMark> {
     let key = spent_mark_key(root, leaf_index);
+    let val = store.get(StateSpace::Index, &key)?;
+    borsh::from_slice(&val).ok()
+}
+
+/// Stores the latest settlement, overwriting any previous one.
+pub fn put_latest_settlement(wb: &mut dyn WriteBatch, rec: &LatestSettlement) {
+    let key = latest_settlement_key();
+    let val = borsh::to_vec(rec).expect("LatestSettlement borsh serialization should not fail");
+    wb.put(StateSpace::Index, &key, &val);
+}
+
+/// Reads the latest settlement, or `None` if no bundle has settled yet.
+pub fn latest_settlement<S: Store>(store: &S) -> Option<LatestSettlement> {
+    let key = latest_settlement_key();
     let val = store.get(StateSpace::Index, &key)?;
     borsh::from_slice(&val).ok()
 }

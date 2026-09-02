@@ -25,9 +25,14 @@ use vprogs_state_ptr_latest::StatePtrLatest;
 use vprogs_state_version::StateVersion;
 use vprogs_storage_rocksdb_store::RocksDbStore;
 use vprogs_storage_types::{ReadStore, Store};
-use vprogs_zk_backend_risc0_api::delegate_entry_spk_hash;
+use vprogs_zk_backend_risc0_api::{
+    PermissionTreeAccumulator, PermissionTreeView, delegate_entry_spk_hash,
+};
 
-use crate::indexer::{GameStatus, scan_games_by_status};
+use crate::{
+    da_store::{ExitView, exit_views, latest_settlement},
+    indexer::{GameStatus, scan_games_by_status},
+};
 
 /// Shared DA server state.
 #[derive(Clone)]
@@ -55,8 +60,6 @@ pub struct SettlementInfo {
     pub txid: String,
     /// DAA score at which settlement occurred.
     pub daa_score: u64,
-    /// Confirmation count on L1.
-    pub confirmations: u64,
 }
 
 /// Response payload for `GET /api/state`.
@@ -121,8 +124,13 @@ async fn get_state(State(state): State<DaState>) -> Json<StateResponse> {
     let entry_spk_hash = delegate_entry_spk_hash(&state.covenant_id);
     let deposit_address = Address::new(prefix, Version::ScriptHash, &entry_spk_hash).to_string();
 
-    // TODO(task-4): wire settlement source once exposed on RunnerHandles
-    let settled: Option<SettlementInfo> = None;
+    let settled: Option<SettlementInfo> =
+        latest_settlement(state.store.as_ref()).map(|s| SettlementInfo {
+            state_root: faster_hex::hex_string(&s.state_root),
+            permission_root: faster_hex::hex_string(&s.permission_root),
+            txid: faster_hex::hex_string(&s.txid),
+            daa_score: s.daa_score,
+        });
 
     Json(StateResponse {
         l2_tip,
@@ -161,6 +169,60 @@ async fn get_config(State(state): State<DaState>) -> Json<ConfigResponse> {
             lock_tag: None,
         }),
     }
+}
+
+/// Builds the canonical exit-leaf JSON object from a view, its leaf position, and the post-claim
+/// root.
+fn exit_leaf_json(view: &ExitView, index: usize, new_root: [u8; 32]) -> serde_json::Value {
+    let leaf = &view.record.leaves[index];
+    let spent = match &view.spent[index] {
+        Some(mark) => serde_json::json!({
+            "spend_txid": faster_hex::hex_string(&mark.spend_txid),
+            "deduct": mark.deduct,
+        }),
+        None => serde_json::Value::Null,
+    };
+    serde_json::json!({
+        "index": index,
+        "spk_hex": faster_hex::hex_string(leaf.script_bytes()),
+        "amount": leaf.amount,
+        "spent": spent,
+        "siblings": view.siblings[index]
+            .iter()
+            .map(|s| faster_hex::hex_string(s))
+            .collect::<Vec<String>>(),
+        "full_claim": {
+            "new_root": faster_hex::hex_string(&new_root),
+            "new_unclaimed": view.record.unclaimed - 1,
+        },
+    })
+}
+
+/// Builds the canonical exit-root JSON object from a materialized view.
+///
+/// `full_claim` models a full-leaf deduct (the demo lock: full claims only).
+fn exit_root_json(view: &ExitView) -> serde_json::Value {
+    let rec = &view.record;
+    let tree = PermissionTreeView::from_leaves(&rec.leaves);
+    let empty = PermissionTreeAccumulator::hash_empty();
+    let leaves: Vec<serde_json::Value> = (0..rec.leaves.len())
+        .map(|i| exit_leaf_json(view, i, tree.root_with_leaf(i, empty)))
+        .collect();
+    serde_json::json!({
+        "root": faster_hex::hex_string(&view.root),
+        "settlement_txid": faster_hex::hex_string(&rec.settlement_txid),
+        "outpoint_index": rec.outpoint_index,
+        "daa_score": rec.daa_score,
+        "unclaimed": rec.unclaimed,
+        "leaves": leaves,
+    })
+}
+
+/// Handler for `GET /api/exits`.
+async fn get_exits(State(state): State<DaState>) -> Json<serde_json::Value> {
+    let views = exit_views(state.store.as_ref());
+    let roots: Vec<serde_json::Value> = views.iter().map(exit_root_json).collect();
+    Json(serde_json::json!({"roots": roots}))
 }
 
 /// Maps a [`GameState`] to its string name.
@@ -318,6 +380,7 @@ pub fn router(state: DaState) -> Router {
     let api = Router::new()
         .route("/api/state", get(get_state))
         .route("/api/config", get(get_config))
+        .route("/api/exits", get(get_exits))
         .route("/api/games", get(get_games))
         .route("/api/games/{id}", get(get_game))
         .route("/api/accounts/{id}", get(get_account))
@@ -343,11 +406,19 @@ mod tests {
         },
         runtime::lock::{LockEnum, UnlockedLockView},
     };
+    use vprogs_l1_types::{SettlementInfo as L1SettlementInfo, TransactionId};
+    use vprogs_runner::{ExitIndexer, ExitLeaf, ExitsForBundle};
     use vprogs_storage_types::{StateSpace, WriteBatch};
-    use zerocopy::IntoBytes;
+    use vprogs_zk_abi::withdrawal::StandardSpk;
+    use vprogs_zk_backend_risc0_api::{PermissionTreeAccumulator, PermissionTreeView};
+    use zerocopy::{IntoBytes, little_endian::U64};
 
     use super::*;
-    use crate::indexer::{GameStatus, GameStatusKey};
+    use crate::{
+        da_store::{ExitRecord, SpentMark, mark_leaf_spent, put_exit_record},
+        exit_index::TicTacToeExitIndexer,
+        indexer::{GameStatus, GameStatusKey},
+    };
 
     #[tokio::test]
     async fn test_api_config_uninitialized_then_initialized() {
@@ -664,5 +735,177 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         let games = json["games"].as_array().unwrap();
         assert!(games.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_api_exits_lists_views_with_spent_state() {
+        let dir = TempDir::new().unwrap();
+        let store = Arc::new(RocksDbStore::open(dir.path()));
+        let state = DaState {
+            store: store.clone(),
+            covenant_id: [0x11; 32],
+            lane_subnet: vec![1, 2, 3, 4],
+            network_prefix: "kaspasim".to_string(),
+            web_dir: None,
+        };
+
+        // Empty store: no roots.
+        let app = router(state.clone());
+        let req = Request::builder().uri("/api/exits").body(Body::empty()).unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json, serde_json::json!({"roots": []}));
+
+        // Two roots; root1 has two leaves with leaf 0 spent, root2 has one leaf.
+        let seed_leaves1 = vec![
+            ExitLeaf::from_pair(StandardSpk::PubKey(&[0x11; 32]), 50_000_000),
+            ExitLeaf::from_pair(StandardSpk::PubKey(&[0x22; 32]), 25_000_000),
+        ];
+        let tree1 = PermissionTreeView::from_leaves(&seed_leaves1);
+        let root1 = tree1.root();
+        let rec1 = ExitRecord {
+            settlement_txid: [0xaa; 32],
+            outpoint_index: 1,
+            daa_score: 100,
+            unclaimed: 2,
+            rent: 50_000_000,
+            leaves: seed_leaves1,
+        };
+
+        let seed_leaves2 = vec![ExitLeaf::from_pair(StandardSpk::PubKey(&[0x33; 32]), 70_000_000)];
+        let tree2 = PermissionTreeView::from_leaves(&seed_leaves2);
+        let root2 = tree2.root();
+        let rec2 = ExitRecord {
+            settlement_txid: [0xbb; 32],
+            outpoint_index: 0,
+            daa_score: 200,
+            unclaimed: 1,
+            rent: 50_000_000,
+            leaves: seed_leaves2,
+        };
+
+        let mark = SpentMark { spend_txid: [0xcc; 32], deduct: 50_000_000, new_root: [0xdd; 32] };
+
+        let mut wb = store.write_batch();
+        put_exit_record(&mut wb, &root1, &rec1);
+        put_exit_record(&mut wb, &root2, &rec2);
+        mark_leaf_spent(&mut wb, &root1, 0, &mark);
+        store.commit(wb);
+
+        let app = router(state);
+        let req = Request::builder().uri("/api/exits").body(Body::empty()).unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let roots = json["roots"].as_array().unwrap();
+        assert_eq!(roots.len(), 2);
+
+        let root1_hex = faster_hex::hex_string(&root1);
+        let v1 = roots.iter().find(|r| r["root"] == root1_hex).expect("root1 present");
+        assert_eq!(v1["settlement_txid"], faster_hex::hex_string(&[0xaa; 32]));
+        assert_eq!(v1["outpoint_index"], 1);
+        assert_eq!(v1["daa_score"], 100);
+        assert_eq!(v1["unclaimed"], 2);
+
+        let leaves1 = v1["leaves"].as_array().unwrap();
+        assert_eq!(leaves1.len(), 2);
+
+        // Leaf 0: spent object carries only spend_txid and deduct; siblings match the view.
+        let empty = PermissionTreeAccumulator::hash_empty();
+        assert_eq!(
+            leaves1[0]["spent"],
+            serde_json::json!({
+                "spend_txid": faster_hex::hex_string(&[0xcc; 32]),
+                "deduct": 50_000_000,
+            })
+        );
+        assert_eq!(leaves1[0]["index"], 0);
+        assert_eq!(leaves1[0]["spk_hex"], faster_hex::hex_string(rec1.leaves[0].script_bytes()));
+        assert_eq!(leaves1[0]["amount"], 50_000_000);
+        let sib0: Vec<String> =
+            tree1.siblings(0).iter().map(|s| faster_hex::hex_string(s)).collect();
+        assert_eq!(leaves1[0]["siblings"], serde_json::json!(sib0));
+        assert_eq!(leaves1[0]["siblings"].as_array().unwrap().len(), tree1.depth());
+        assert_eq!(
+            leaves1[0]["full_claim"],
+            serde_json::json!({
+                "new_root": faster_hex::hex_string(&tree1.root_with_leaf(0, empty)),
+                "new_unclaimed": 1,
+            })
+        );
+
+        // Leaf 1: unspent.
+        assert_eq!(leaves1[1]["index"], 1);
+        assert!(leaves1[1]["spent"].is_null());
+        assert_eq!(
+            leaves1[1]["full_claim"]["new_root"],
+            faster_hex::hex_string(&tree1.root_with_leaf(1, empty))
+        );
+        assert_eq!(leaves1[1]["full_claim"]["new_unclaimed"], 1);
+
+        // Root 2: single leaf, depth 0, empty siblings, unspent.
+        let root2_hex = faster_hex::hex_string(&root2);
+        let v2 = roots.iter().find(|r| r["root"] == root2_hex).expect("root2 present");
+        let leaves2 = v2["leaves"].as_array().unwrap();
+        assert_eq!(leaves2.len(), 1);
+        assert!(leaves2[0]["spent"].is_null());
+        assert_eq!(leaves2[0]["siblings"], serde_json::json!([]));
+        assert_eq!(
+            leaves2[0]["full_claim"],
+            serde_json::json!({
+                "new_root": faster_hex::hex_string(&tree2.root_with_leaf(0, empty)),
+                "new_unclaimed": 0,
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn test_api_state_settled_from_latest_settlement_record() {
+        let dir = TempDir::new().unwrap();
+        let store = Arc::new(RocksDbStore::open(dir.path()));
+        let state = DaState {
+            store: store.clone(),
+            covenant_id: [0x33; 32],
+            lane_subnet: vec![1, 2, 3, 4],
+            network_prefix: "kaspasim".to_string(),
+            web_dir: None,
+        };
+
+        // Drive the exit indexer handler exactly as the runner does.
+        let bundle = ExitsForBundle {
+            new_state: [0xaa; 32],
+            permission_spk_hash: [0xbb; 32],
+            leaves: Arc::new(vec![ExitLeaf::from_pair(
+                StandardSpk::PubKey(&[0x12; 32]),
+                50_000_000,
+            )]),
+        };
+        let settlement = L1SettlementInfo {
+            tx_id: TransactionId::from_bytes([0xcc; 32]),
+            daa_score: U64::new(789_101),
+            ..Default::default()
+        };
+        let mut wb = store.write_batch();
+        TicTacToeExitIndexer.on_exits_committed(&bundle, &settlement, &mut wb);
+        store.commit(wb);
+
+        let app = router(state);
+        let req = Request::builder().uri("/api/state").body(Body::empty()).unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            json["settled"],
+            serde_json::json!({
+                "state_root": faster_hex::hex_string(&[0xaa; 32]),
+                "permission_root": faster_hex::hex_string(&[0xbb; 32]),
+                "txid": faster_hex::hex_string(&[0xcc; 32]),
+                "daa_score": 789_101,
+            })
+        );
     }
 }
