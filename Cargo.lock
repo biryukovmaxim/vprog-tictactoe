@@ -8520,6 +8520,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "vprog-tictactoe-encoder-wasm"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "faster-hex",
+ "getrandom 0.3.4",
+ "kaspa-addresses",
+ "kaspa-consensus-core",
+ "kaspa-hashes",
+ "kaspa-txscript",
+ "ring",
+ "secp256k1",
+ "vprog-tictactoe-guest",
+ "vprogs-core-types",
+ "vprogs-zk-abi",
+ "vprogs-zk-backend-risc0-api",
+ "vprogs-zk-backend-risc0-app-kit",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "vprog-tictactoe-guest"
 version = "0.1.0"
 dependencies = [

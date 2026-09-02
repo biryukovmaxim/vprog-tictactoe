@@ -19,11 +19,16 @@ own actions, accounts and game rules.
   or proving loops.
 - **Scenario driver (`driver/`, `ttflow`)**: Standalone issuer sample composing guest action encoders,
   `vprogs-zk-backend-risc0-app-kit` payload assembly, and L1 wallet carrier submission.
+- **Web encoder (`encoder-wasm/`)**: Pure build/sign surface for the browser over the guest
+  encoders and app-kit; wasm-pack output is vendored at `web/src/wasm`.
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │ web/          frontend: board UI, simple privkey wallet,         │
 │               submits action carrier txs to L1 (Kaspa) directly  │
+├──────────────────────────────────────────────────────────────────┤
+│ encoder-wasm/ pure build/sign surface for the web over guest     │
+│ encoders + app-kit; vendored to web/src/wasm                     │
 ├──────────────────────────────────────────────────────────────────┤
 │ driver/       `ttflow`: scripted scenario issuer; composes guest │
 │               encoders, app-kit payload assembly, and wallet     │

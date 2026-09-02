@@ -1,0 +1,15 @@
+{
+  "name": "vprog-tictactoe-encoder-wasm",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "vprog_tictactoe_encoder_wasm_bg.wasm",
+    "vprog_tictactoe_encoder_wasm.js",
+    "vprog_tictactoe_encoder_wasm.d.ts"
+  ],
+  "main": "vprog_tictactoe_encoder_wasm.js",
+  "types": "vprog_tictactoe_encoder_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

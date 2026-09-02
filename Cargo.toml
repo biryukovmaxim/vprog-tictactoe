@@ -1,6 +1,6 @@
 [workspace]
 exclude  = ["guest"]
-members  = ["driver", "node"]
+members  = ["driver", "encoder-wasm", "node"]
 resolver = "3"
 
 # Crate layout:

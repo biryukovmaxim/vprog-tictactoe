@@ -1,0 +1,34 @@
+[package]
+edition = "2024"
+name    = "vprog-tictactoe-encoder-wasm"
+publish = false
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+name       = "vprog_tictactoe_encoder_wasm"
+path       = "src/lib.rs"
+
+[dependencies]
+borsh                           = { workspace = true }
+faster-hex                      = { workspace = true }
+kaspa-addresses                 = { workspace = true }
+kaspa-consensus-core            = { workspace = true }
+kaspa-hashes                    = { workspace = true }
+secp256k1                       = { workspace = true }
+vprog-tictactoe-guest           = { path = "../guest" }
+vprogs-core-types               = { workspace = true }
+vprogs-zk-abi                   = { workspace = true }
+vprogs-zk-backend-risc0-app-kit = { workspace = true }
+wasm-bindgen                    = "0.2"
+
+# The wasm32 build blockers across the dependency tree: rand (via secp256k1) needs
+# a getrandom backend, and rustls (pulled by vprogs-l1-types through app-kit's zk-abi
+# host feature) needs ring's wasm32 JS backend.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.3", features = ["wasm_js"] }
+ring      = { version = "0.17", features = ["wasm32_unknown_unknown_js"] }
+
+[dev-dependencies]
+kaspa-txscript              = { workspace = true }
+vprogs-zk-backend-risc0-api = { workspace = true }
