@@ -11,6 +11,10 @@ use vprogs_runner::{RunnerConfig, StartMode};
 pub struct Config {
     /// The engine configuration handed to the runner.
     pub runner: RunnerConfig,
+    /// The bind address for the DA HTTP server.
+    pub da_bind: String,
+    /// Optional directory holding static web frontend assets to serve.
+    pub web_dir: Option<String>,
 }
 
 impl Config {
@@ -79,7 +83,10 @@ impl Config {
             start_mode,
         };
 
-        Self { runner }
+        let da_bind = opt(&lookup, "TT_DA_BIND").unwrap_or_else(|| "127.0.0.1:9880".into());
+        let web_dir = opt(&lookup, "TT_WEB_DIR");
+
+        Self { runner, da_bind, web_dir }
     }
 }
 
@@ -186,6 +193,18 @@ mod tests {
         assert!(!cfg.runner.prove);
         assert_eq!(cfg.runner.network_id, parse_network("tn10"));
         assert!(cfg.runner.start_mode.is_none());
+        assert_eq!(cfg.da_bind, "127.0.0.1:9880");
+        assert_eq!(cfg.web_dir, None);
+    }
+
+    #[test]
+    fn from_lookup_reads_da_bind_and_web_dir() {
+        let mut env = sample_env();
+        env.insert("TT_DA_BIND", "0.0.0.0:8080".into());
+        env.insert("TT_WEB_DIR", "/var/www".into());
+        let cfg = Config::from_lookup(|k| env.get(k).cloned());
+        assert_eq!(cfg.da_bind, "0.0.0.0:8080");
+        assert_eq!(cfg.web_dir, Some("/var/www".into()));
     }
 
     #[test]
