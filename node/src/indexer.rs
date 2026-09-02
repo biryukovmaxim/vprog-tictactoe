@@ -263,28 +263,36 @@ impl ResourceIndexer for TicTacToeIndexer {
     }
 }
 
-/// Event stream for one (player, event): (version, game), ascending,
-/// canonical versions only. `after` is an exclusive cursor (the last entry
-/// seen); `limit` bounds the page.
+/// One entry of a player-event stream: the version that produced the event
+/// and the game it names. Doubles as the exclusive pagination cursor (the
+/// last entry seen).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PlayerEventCursor {
+    pub version: u64,
+    pub game: [u8; 32],
+}
+
+/// Event stream for one (player, event), ascending, canonical versions only.
+/// `after` is an exclusive cursor (the last entry seen); `limit` bounds the page.
 pub fn scan_player_events<S: Store>(
     store: &S,
     snapshot: &CanonicalChainSnapshot,
     player: &ResourceId,
     event: PlayerEvent,
-    after: Option<(u64, [u8; 32])>,
+    after: Option<PlayerEventCursor>,
     limit: usize,
-) -> Vec<(u64, [u8; 32])> {
+) -> Vec<PlayerEventCursor> {
     if limit == 0 {
         return Vec::new();
     }
     let (start, end) = match after {
-        Some((version, game)) => {
+        Some(cursor) => {
             let key = PlayerEventKey {
                 discriminator: PLAYER_EVENT_DISCRIMINATOR,
                 player: **player,
                 event,
-                version: Be64::new(version),
-                game,
+                version: Be64::new(cursor.version),
+                game: cursor.game,
             };
             let mut start = Vec::with_capacity(75);
             start.extend_from_slice(key.as_bytes());
@@ -314,7 +322,10 @@ pub fn scan_player_events<S: Store>(
         .filter_map(|(k, _)| {
             let key = PlayerEventKey::parse(&k)
                 .unwrap_or_else(|| panic!("malformed player-event key in index: {k:02x?}"));
-            snapshot.is_canonical(key.version.get()).then_some((key.version.get(), key.game))
+            snapshot.is_canonical(key.version.get()).then_some(PlayerEventCursor {
+                version: key.version.get(),
+                game: key.game,
+            })
         })
         .take(limit)
         .collect()
@@ -389,6 +400,10 @@ mod tests {
 
     fn rid(val: u8) -> ResourceId {
         ResourceId::from([val; 32])
+    }
+
+    fn entry(version: u64, game: &ResourceId) -> PlayerEventCursor {
+        PlayerEventCursor { version, game: **game }
     }
 
     #[test]
@@ -892,12 +907,12 @@ mod tests {
 
         // Player-event scan: all canonical events.
         let events = scan_player_events(&store, &snapshot, &player, PlayerEvent::Created, None, 10);
-        assert_eq!(events, vec![(1, *game1), (3, *game3)]);
+        assert_eq!(events, vec![entry(1, &game1), entry(3, &game3)]);
 
         // Player-event cursor pagination:
         // First page.
         let p1 = scan_player_events(&store, &snapshot, &player, PlayerEvent::Created, None, 1);
-        assert_eq!(p1, vec![(1, *game1)]);
+        assert_eq!(p1, vec![entry(1, &game1)]);
 
         // Middle page after (1, game1) -> skips orphaned version 2 and returns (3, game3).
         let p2 = scan_player_events(
@@ -905,10 +920,10 @@ mod tests {
             &snapshot,
             &player,
             PlayerEvent::Created,
-            Some((1, *game1)),
+            Some(entry(1, &game1)),
             1,
         );
-        assert_eq!(p2, vec![(3, *game3)]);
+        assert_eq!(p2, vec![entry(3, &game3)]);
 
         // Exhausted after (3, game3).
         let p3 = scan_player_events(
@@ -916,7 +931,7 @@ mod tests {
             &snapshot,
             &player,
             PlayerEvent::Created,
-            Some((3, *game3)),
+            Some(entry(3, &game3)),
             1,
         );
         assert!(p3.is_empty());

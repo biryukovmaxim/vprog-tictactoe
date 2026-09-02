@@ -222,10 +222,10 @@ async fn test_e2e_simnet_game_flow() {
             scan_games_by_status(&*store, &snapshot, GameStatus::Finished, None, 100);
         let open_games = scan_games_by_status(&*store, &snapshot, GameStatus::Open, None, 100);
 
-        let has_a_created = a_created.iter().any(|&(_, g)| g == game_bytes);
-        let has_a_won = a_won.iter().any(|&(_, g)| g == game_bytes);
-        let has_b_joined = b_joined.iter().any(|&(_, g)| g == game_bytes);
-        let has_b_lost = b_lost.iter().any(|&(_, g)| g == game_bytes);
+        let has_a_created = a_created.iter().any(|e| e.game == game_bytes);
+        let has_a_won = a_won.iter().any(|e| e.game == game_bytes);
+        let has_b_joined = b_joined.iter().any(|e| e.game == game_bytes);
+        let has_b_lost = b_lost.iter().any(|e| e.game == game_bytes);
         let has_finished = finished_games.contains(&game_bytes);
         let not_open = !open_games.contains(&game_bytes);
 
@@ -281,8 +281,11 @@ async fn test_e2e_simnet_game_flow() {
         [("A Created", &a_created), ("A Won", &a_won), ("B Joined", &b_joined), ("B Lost", &b_lost)]
     {
         assert_eq!(stream.len(), 1, "player {label} stream must hold exactly one entry");
-        assert_eq!(stream[0].1, game_bytes, "player {label} entry must name the game");
-        assert!(snapshot.is_canonical(stream[0].0), "player {label} version must be canonical");
+        assert_eq!(stream[0].game, game_bytes, "player {label} entry must name the game");
+        assert!(
+            snapshot.is_canonical(stream[0].version),
+            "player {label} version must be canonical"
+        );
     }
 
     // 9c. Status buckets: the lone game ended terminal, so it lives in Finished and only there.
