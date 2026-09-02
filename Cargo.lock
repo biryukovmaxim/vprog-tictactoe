@@ -8492,6 +8492,7 @@ dependencies = [
 name = "vprog-tictactoe-node"
 version = "0.1.0"
 dependencies = [
+ "borsh",
  "ctrlc",
  "kaspa-consensus-core",
  "kaspa-core",
@@ -8507,6 +8508,7 @@ dependencies = [
  "vprogs-storage-canonical-chain",
  "vprogs-storage-rocksdb-store",
  "vprogs-storage-types",
+ "vprogs-zk-abi",
  "vprogs-zk-backend-risc0-api",
  "zerocopy",
 ]
@@ -8514,7 +8516,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-atomics"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "arc-swap",
  "crossbeam-queue",
@@ -8528,7 +8530,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-codec"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "thiserror 2.0.18",
  "zerocopy",
@@ -8537,7 +8539,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-hashing"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "blake3",
  "sha2",
@@ -8546,7 +8548,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-macros"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -8556,7 +8558,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-merkle-tree"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "vprogs-core-hashing",
 ]
@@ -8564,7 +8566,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-smt"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "tap",
  "vprogs-core-codec",
@@ -8576,7 +8578,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-types"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "borsh",
  "rkyv",
@@ -8587,7 +8589,7 @@ dependencies = [
 [[package]]
 name = "vprogs-l1-bridge"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "arc-swap",
  "crossbeam-queue",
@@ -8596,6 +8598,7 @@ dependencies = [
  "kaspa-notify",
  "kaspa-rpc-core",
  "kaspa-seq-commit",
+ "kaspa-txscript",
  "kaspa-wrpc-client",
  "log",
  "tap",
@@ -8605,13 +8608,15 @@ dependencies = [
  "vprogs-core-macros",
  "vprogs-core-types",
  "vprogs-l1-types",
+ "vprogs-zk-abi",
+ "vprogs-zk-backend-risc0-api",
  "workflow-core",
 ]
 
 [[package]]
 name = "vprogs-l1-types"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "borsh",
  "kaspa-consensus-core",
@@ -8626,7 +8631,7 @@ dependencies = [
 [[package]]
 name = "vprogs-l1-utils"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "blake3",
 ]
@@ -8634,7 +8639,7 @@ dependencies = [
 [[package]]
 name = "vprogs-l1-wallet"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "kaspa-addresses",
  "kaspa-consensus-core",
@@ -8652,7 +8657,7 @@ dependencies = [
 [[package]]
 name = "vprogs-node-framework"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "log",
  "tap",
@@ -8672,7 +8677,7 @@ dependencies = [
 [[package]]
 name = "vprogs-node-test-utils"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "kaspa-addresses",
  "kaspa-consensus-core",
@@ -8703,8 +8708,9 @@ dependencies = [
 [[package]]
 name = "vprogs-runner"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
+ "borsh",
  "clap",
  "ctrlc",
  "fastrand",
@@ -8730,6 +8736,8 @@ dependencies = [
  "vprogs-scheduling-scheduler",
  "vprogs-storage-manager",
  "vprogs-storage-rocksdb-store",
+ "vprogs-storage-types",
+ "vprogs-zk-abi",
  "vprogs-zk-aggregate-prover",
  "vprogs-zk-backend-risc0-api",
  "vprogs-zk-backend-risc0-settler",
@@ -8741,7 +8749,7 @@ dependencies = [
 [[package]]
 name = "vprogs-scheduling-execution-workers"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "crossbeam-deque",
  "crossbeam-queue",
@@ -8756,7 +8764,7 @@ dependencies = [
 [[package]]
 name = "vprogs-scheduling-scheduler"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "arc-swap",
  "borsh",
@@ -8788,7 +8796,7 @@ dependencies = [
 [[package]]
 name = "vprogs-state-batch-metadata"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "borsh",
  "vprogs-core-types",
@@ -8798,7 +8806,7 @@ dependencies = [
 [[package]]
 name = "vprogs-state-metadata"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "borsh",
  "vprogs-core-smt",
@@ -8809,7 +8817,7 @@ dependencies = [
 [[package]]
 name = "vprogs-state-proof-receipt"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "borsh",
  "vprogs-storage-types",
@@ -8819,7 +8827,7 @@ dependencies = [
 [[package]]
 name = "vprogs-state-ptr-latest"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "borsh",
  "vprogs-core-types",
@@ -8829,7 +8837,7 @@ dependencies = [
 [[package]]
 name = "vprogs-state-ptr-rollback"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "borsh",
  "vprogs-core-types",
@@ -8840,7 +8848,7 @@ dependencies = [
 [[package]]
 name = "vprogs-state-version"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "borsh",
  "tap",
@@ -8854,7 +8862,7 @@ dependencies = [
 [[package]]
 name = "vprogs-storage-canonical-chain"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "arc-swap",
  "vprogs-core-atomics",
@@ -8864,7 +8872,7 @@ dependencies = [
 [[package]]
 name = "vprogs-storage-manager"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "crossbeam-queue",
  "crossbeam-utils",
@@ -8875,7 +8883,7 @@ dependencies = [
 [[package]]
 name = "vprogs-storage-rocksdb-store"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "num_cpus",
  "rocksdb",
@@ -8890,7 +8898,7 @@ dependencies = [
 [[package]]
 name = "vprogs-storage-types"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "borsh",
  "vprogs-core-smt",
@@ -8901,7 +8909,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-abi"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "borsh",
  "kaspa-consensus-core",
@@ -8925,7 +8933,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-aggregate-prover"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "arc-swap",
  "kaspa-hashes",
@@ -8943,12 +8951,13 @@ dependencies = [
  "vprogs-zk-abi",
  "vprogs-zk-batch-prover",
  "vprogs-zk-transaction-prover",
+ "zerocopy",
 ]
 
 [[package]]
 name = "vprogs-zk-backend-risc0-api"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "ark-bn254 0.6.0",
  "ark-groth16 0.6.0",
@@ -8973,7 +8982,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-app-kit"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "kaspa-addresses",
  "kaspa-consensus-core",
@@ -8996,7 +9005,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-covenant"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "ark-bn254 0.6.0",
  "ark-groth16 0.6.0",
@@ -9015,7 +9024,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-runtime-processor"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "k256",
  "risc0-zkvm",
@@ -9031,7 +9040,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-settler"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "kaspa-addresses",
  "kaspa-consensus-core",
@@ -9054,7 +9063,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-test-suite"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "kaspa-addresses",
  "kaspa-consensus-core",
@@ -9088,7 +9097,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-batch-prover"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "kaspa-grpc-client",
  "kaspa-hashes",
@@ -9109,7 +9118,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-transaction-prover"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "borsh",
  "tap",
@@ -9125,7 +9134,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-vm"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=indexer-hook#f0218bbfbfc102580c8a0351f556f88dd70f0930"
+source = "git+https://github.com/biryukovmaxim/vprogs?branch=exit-index#eef23259a6633d9c15b1c7db1d86f90b1d2c0561"
 dependencies = [
  "faster-hex",
  "log",

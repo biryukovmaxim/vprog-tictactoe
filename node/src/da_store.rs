@@ -1,0 +1,247 @@
+//! App-side exit-record store tracking settled exit bundles and L1 spent marks.
+
+use std::io::{Read, Write};
+
+use borsh::{BorshDeserialize, BorshSerialize};
+use vprogs_runner::ExitLeaf;
+use vprogs_storage_types::{StateSpace, Store, WriteBatch};
+use vprogs_zk_abi::withdrawal::StandardSpk;
+
+/// Discriminator prefix byte for exit records and spent marks in `StateSpace::Index`.
+pub const EXITS_DISCRIMINANT: u8 = 0x03;
+
+/// Delimiter byte separating exit root from leaf index in spent mark keys.
+pub const SPENT_MARK_DELIMITER: u8 = 0xFF;
+
+/// Record of an on-chain settled exit bundle indexed by its permission SPK hash root.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExitRecord {
+    /// L1 transaction id of the settlement.
+    pub settlement_txid: [u8; 32],
+    /// Outpoint index of the permission UTXO in the settlement transaction.
+    pub outpoint_index: u32,
+    /// DAA score of the block containing the settlement.
+    pub daa_score: u64,
+    /// Number of unclaimed exits at settlement time.
+    pub unclaimed: u64,
+    /// Sompi rent reserved for the continuation UTXO.
+    pub rent: u64,
+    /// Ordered list of exit leaves in canonical order.
+    pub leaves: Vec<ExitLeaf>,
+}
+
+impl BorshSerialize for ExitRecord {
+    fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        self.settlement_txid.serialize(writer)?;
+        self.outpoint_index.serialize(writer)?;
+        self.daa_score.serialize(writer)?;
+        self.unclaimed.serialize(writer)?;
+        self.rent.serialize(writer)?;
+        (self.leaves.len() as u32).serialize(writer)?;
+        for leaf in &self.leaves {
+            leaf.script_bytes().serialize(writer)?;
+            leaf.amount.serialize(writer)?;
+        }
+        Ok(())
+    }
+}
+
+impl BorshDeserialize for ExitRecord {
+    fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
+        let settlement_txid = BorshDeserialize::deserialize_reader(reader)?;
+        let outpoint_index = BorshDeserialize::deserialize_reader(reader)?;
+        let daa_score = BorshDeserialize::deserialize_reader(reader)?;
+        let unclaimed = BorshDeserialize::deserialize_reader(reader)?;
+        let rent = BorshDeserialize::deserialize_reader(reader)?;
+        let num_leaves = u32::deserialize_reader(reader)?;
+        let mut leaves = Vec::with_capacity(num_leaves as usize);
+        for _ in 0..num_leaves {
+            let script_bytes: Vec<u8> = BorshDeserialize::deserialize_reader(reader)?;
+            let amount: u64 = BorshDeserialize::deserialize_reader(reader)?;
+            let spk = StandardSpk::from_script(&script_bytes)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+            leaves.push(ExitLeaf::from_pair(spk, amount));
+        }
+        Ok(Self { settlement_txid, outpoint_index, daa_score, unclaimed, rent, leaves })
+    }
+}
+
+/// Marker recording an L1 spend against a specific exit leaf.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+pub struct SpentMark {
+    /// L1 transaction id that spent the leaf.
+    pub spend_txid: [u8; 32],
+    /// Sompi amount deducted by the claim.
+    pub deduct: u64,
+    /// Successor permission tree root after this spend.
+    pub new_root: [u8; 32],
+}
+
+/// Builds the 33-byte key for an exit record: `0x03 || root[32]`.
+fn exit_record_key(root: &[u8; 32]) -> [u8; 33] {
+    let mut key = [0u8; 33];
+    key[0] = EXITS_DISCRIMINANT;
+    key[1..33].copy_from_slice(root);
+    key
+}
+
+/// Builds the 38-byte key for a leaf spent mark: `0x03 || root[32] || 0xFF || index_be_u32`.
+fn spent_mark_key(root: &[u8; 32], leaf_index: usize) -> [u8; 38] {
+    let mut key = [0u8; 38];
+    key[0] = EXITS_DISCRIMINANT;
+    key[1..33].copy_from_slice(root);
+    key[33] = SPENT_MARK_DELIMITER;
+    key[34..38].copy_from_slice(&(leaf_index as u32).to_be_bytes());
+    key
+}
+
+/// Stores an exit record in the index keyspace under its permission root.
+pub fn put_exit_record(wb: &mut dyn WriteBatch, root: &[u8; 32], rec: &ExitRecord) {
+    let key = exit_record_key(root);
+    let val = borsh::to_vec(rec).expect("ExitRecord borsh serialization should not fail");
+    wb.put(StateSpace::Index, &key, &val);
+}
+
+/// Reads an exit record by its permission root, or `None` if absent.
+pub fn get_exit_record<S: Store>(store: &S, root: &[u8; 32]) -> Option<ExitRecord> {
+    let key = exit_record_key(root);
+    let val = store.get(StateSpace::Index, &key)?;
+    borsh::from_slice(&val).ok()
+}
+
+/// Scans all distinct exit roots currently stored in the index.
+///
+/// Filters strictly for 33-byte record keys (`0x03 || root[32]`), ignoring 38-byte spent marks.
+pub fn exit_roots<S: Store>(store: &S) -> Vec<[u8; 32]> {
+    let start = [EXITS_DISCRIMINANT];
+    let end = [EXITS_DISCRIMINANT + 1];
+    store
+        .range_iter(StateSpace::Index, &start, &end)
+        .filter_map(|(k, _)| {
+            if k.len() == 33 && k[0] == EXITS_DISCRIMINANT {
+                let mut root = [0u8; 32];
+                root.copy_from_slice(&k[1..33]);
+                Some(root)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+/// Marks an exit leaf spent in the index keyspace.
+pub fn mark_leaf_spent(
+    wb: &mut dyn WriteBatch,
+    root: &[u8; 32],
+    leaf_index: usize,
+    mark: &SpentMark,
+) {
+    let key = spent_mark_key(root, leaf_index);
+    let val = borsh::to_vec(mark).expect("SpentMark borsh serialization should not fail");
+    wb.put(StateSpace::Index, &key, &val);
+}
+
+/// Reads the spent mark for a leaf, or `None` if unspent.
+pub fn leaf_spent<S: Store>(store: &S, root: &[u8; 32], leaf_index: usize) -> Option<SpentMark> {
+    let key = spent_mark_key(root, leaf_index);
+    let val = store.get(StateSpace::Index, &key)?;
+    borsh::from_slice(&val).ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use tempfile::TempDir;
+    use vprogs_storage_rocksdb_store::RocksDbStore;
+
+    use super::*;
+
+    fn test_record(root_byte: u8) -> ([u8; 32], ExitRecord) {
+        let root = [root_byte; 32];
+        let pk = [root_byte.wrapping_add(1); 32];
+        let leaves = vec![
+            ExitLeaf::from_pair(StandardSpk::PubKey(&pk), 50_000_000),
+            ExitLeaf::from_pair(StandardSpk::PubKey(&pk), 25_000_000),
+        ];
+        let rec = ExitRecord {
+            settlement_txid: [root_byte.wrapping_add(2); 32],
+            outpoint_index: 1,
+            daa_score: 123_456,
+            unclaimed: 2,
+            rent: 50_000_000,
+            leaves,
+        };
+        (root, rec)
+    }
+
+    fn test_spent_mark(spend_byte: u8) -> SpentMark {
+        SpentMark {
+            spend_txid: [spend_byte; 32],
+            deduct: 50_000_000,
+            new_root: [spend_byte.wrapping_add(1); 32],
+        }
+    }
+
+    #[test]
+    fn test_record_round_trip() {
+        let dir = TempDir::new().unwrap();
+        let store: RocksDbStore = RocksDbStore::open(dir.path());
+        let (root, rec) = test_record(0x11);
+
+        let mut wb = store.write_batch();
+        put_exit_record(&mut wb, &root, &rec);
+        store.commit(wb);
+
+        let fetched = get_exit_record(&store, &root);
+        assert_eq!(fetched, Some(rec));
+    }
+
+    #[test]
+    fn test_spent_mark_round_trip() {
+        let dir = TempDir::new().unwrap();
+        let store: RocksDbStore = RocksDbStore::open(dir.path());
+        let root = [0x22; 32];
+        let mark = test_spent_mark(0x33);
+
+        let mut wb = store.write_batch();
+        mark_leaf_spent(&mut wb, &root, 0, &mark);
+        store.commit(wb);
+
+        let fetched = leaf_spent(&store, &root, 0);
+        assert_eq!(fetched, Some(mark));
+    }
+
+    #[test]
+    fn test_absent_returns_none() {
+        let dir = TempDir::new().unwrap();
+        let store: RocksDbStore = RocksDbStore::open(dir.path());
+        let root = [0x44; 32];
+
+        assert_eq!(get_exit_record(&store, &root), None);
+        assert_eq!(leaf_spent(&store, &root, 0), None);
+    }
+
+    #[test]
+    fn test_exit_roots_lists_distinct_roots_filtering_spent_marks() {
+        let dir = TempDir::new().unwrap();
+        let store: RocksDbStore = RocksDbStore::open(dir.path());
+
+        let (root1, rec1) = test_record(0x01);
+        let (root2, rec2) = test_record(0x02);
+        let mark = test_spent_mark(0x09);
+
+        let mut wb = store.write_batch();
+        put_exit_record(&mut wb, &root1, &rec1);
+        put_exit_record(&mut wb, &root2, &rec2);
+        // Insert a spent mark for root1: key starts with 0x03 || root1, but length is 38 bytes.
+        mark_leaf_spent(&mut wb, &root1, 0, &mark);
+        store.commit(wb);
+
+        let mut roots = exit_roots(&store);
+        roots.sort();
+
+        let mut expected = vec![root1, root2];
+        expected.sort();
+
+        assert_eq!(roots, expected);
+    }
+}

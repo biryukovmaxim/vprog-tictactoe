@@ -34,6 +34,7 @@ async fn main() {
         elfs.as_elfs(),
         delegate_entry_spk_hash,
         Some(Indexer(Arc::new(TicTacToeIndexer))),
+        None,
     )
     .await
     .unwrap_or_else(|e| panic!("runner start failed: {e}"));

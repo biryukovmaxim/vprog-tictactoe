@@ -124,6 +124,7 @@ async fn test_e2e_simnet_game_flow() {
         elfs,
         delegate_entry_spk_hash,
         Some(Indexer(Arc::new(TicTacToeIndexer))),
+        None,
     )
     .await
     .expect("start_runner failed");

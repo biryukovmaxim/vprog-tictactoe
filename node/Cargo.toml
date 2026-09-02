@@ -16,6 +16,7 @@ path = "src/main.rs"
 cuda = ["vprogs-runner/cuda"]
 
 [dependencies]
+borsh                          = { workspace = true }
 ctrlc                          = { workspace = true }
 kaspa-consensus-core           = { workspace = true }
 kaspa-core                     = { workspace = true }
@@ -29,6 +30,7 @@ vprogs-runner                  = { workspace = true }
 vprogs-scheduling-scheduler    = { workspace = true }
 vprogs-storage-canonical-chain = { workspace = true }
 vprogs-storage-types           = { workspace = true }
+vprogs-zk-abi                  = { workspace = true }
 vprogs-zk-backend-risc0-api    = { workspace = true }
 zerocopy                       = { version = "0.8", default-features = false, features = ["derive"] }
 
