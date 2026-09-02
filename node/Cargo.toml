@@ -26,6 +26,7 @@ secp256k1                      = { workspace = true }
 tokio                          = { workspace = true }
 vprog-tictactoe-guest          = { path = "../guest" }
 vprogs-core-types              = { workspace = true }
+vprogs-l1-types                = { workspace = true }
 vprogs-runner                  = { workspace = true }
 vprogs-scheduling-scheduler    = { workspace = true }
 vprogs-storage-canonical-chain = { workspace = true }

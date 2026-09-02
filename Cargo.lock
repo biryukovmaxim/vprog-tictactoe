@@ -8503,6 +8503,7 @@ dependencies = [
  "tokio",
  "vprog-tictactoe-guest",
  "vprogs-core-types",
+ "vprogs-l1-types",
  "vprogs-runner",
  "vprogs-scheduling-scheduler",
  "vprogs-storage-canonical-chain",

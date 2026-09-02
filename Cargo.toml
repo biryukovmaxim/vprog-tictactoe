@@ -24,6 +24,7 @@ resolver = "3"
   # vprogs stack. exit-index on the fork carries app-kit, runtime-processor,
   # indexer hooks, and exit index; flip to kaspanet/vprogs once the branches merge.
   vprogs-core-types                  = { git = "https://github.com/biryukovmaxim/vprogs", branch = "exit-index" }
+  vprogs-l1-types                    = { git = "https://github.com/biryukovmaxim/vprogs", branch = "exit-index" }
   vprogs-l1-wallet                   = { git = "https://github.com/biryukovmaxim/vprogs", branch = "exit-index" }
   vprogs-node-test-utils             = { git = "https://github.com/biryukovmaxim/vprogs", branch = "exit-index" }
   vprogs-runner                      = { git = "https://github.com/biryukovmaxim/vprogs", branch = "exit-index" }

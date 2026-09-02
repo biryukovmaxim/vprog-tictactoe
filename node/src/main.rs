@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use config::Config;
 use kaspa_consensus_core::config::params::Params;
-use vprog_tictactoe_node::indexer::TicTacToeIndexer;
+use vprog_tictactoe_node::{TicTacToeExitIndexer, indexer::TicTacToeIndexer};
 use vprogs_runner::{Indexer, connect_wrpc, start_runner};
 use vprogs_zk_backend_risc0_api::delegate_entry_spk_hash;
 
@@ -34,7 +34,7 @@ async fn main() {
         elfs.as_elfs(),
         delegate_entry_spk_hash,
         Some(Indexer(Arc::new(TicTacToeIndexer))),
-        None,
+        Some(Arc::new(TicTacToeExitIndexer)),
     )
     .await
     .unwrap_or_else(|e| panic!("runner start failed: {e}"));
