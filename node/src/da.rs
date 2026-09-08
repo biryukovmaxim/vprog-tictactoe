@@ -214,6 +214,7 @@ fn exit_root_json(view: &ExitView) -> serde_json::Value {
         "outpoint_index": rec.outpoint_index,
         "daa_score": rec.daa_score,
         "unclaimed": rec.unclaimed,
+        "rent": rec.rent,
         "leaves": leaves,
     })
 }
@@ -812,6 +813,7 @@ mod tests {
         assert_eq!(v1["outpoint_index"], 1);
         assert_eq!(v1["daa_score"], 100);
         assert_eq!(v1["unclaimed"], 2);
+        assert_eq!(v1["rent"], 50_000_000);
 
         let leaves1 = v1["leaves"].as_array().unwrap();
         assert_eq!(leaves1.len(), 2);
