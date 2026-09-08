@@ -20,18 +20,23 @@ export function seatOf(players: [string, string | null], myUserId: string): 0 | 
   return -1;
 }
 
-/// Whether the board accepts my click. Marks swap seats every round (guest
-/// `mark_for_seat`); the seat-to-mark mapping below assumes the creator plays
-/// X because /api/games does not serve `creator_mark` — exact for every
-/// creator-picks-X game (the CreatePanel default), a heuristic otherwise.
-/// ponytail: serve `creator_mark` in node game_json for the exact mapping.
+/// Whether the board accepts my click: the to-move mark comes from board
+/// parity (X opens every round), and my own mark from the served
+/// `creator_mark` — the creator plays it in even rounds and the opposite in
+/// odd ones (guest `mark_for_seat`).
 export function isMyTurn(game: DaGame, myUserId: string): boolean {
   if (game.state !== 1) return false;
   const seat = seatOf(game.players, myUserId);
   if (seat < 0) return false;
   const round = game.round_wins[0] + game.round_wins[1] + game.draws;
-  const iPlayX = seat === 0 ? round % 2 === 0 : round % 2 !== 0;
-  return toMoveMark(game.board) === (iPlayX ? 1 : 2);
+  const seat0Mark = round % 2 === 0 ? game.creator_mark : otherMark(game.creator_mark);
+  const myMark = seat === 0 ? seat0Mark : otherMark(seat0Mark);
+  return toMoveMark(game.board) === myMark;
+}
+
+/// The opposite mark code (1 X, 2 O).
+function otherMark(mark: number): 1 | 2 {
+  return mark === 1 ? 2 : 1;
 }
 
 const SOMPI = 100_000_000n;

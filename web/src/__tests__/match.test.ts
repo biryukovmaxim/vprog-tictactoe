@@ -17,6 +17,7 @@ function game(partial: Partial<DaGame> = {}): DaGame {
     stake: 50_000_000,
     pot: 100_000_000,
     rounds_total: 3,
+    creator_mark: 1,
     round_wins: [0, 0],
     draws: 0,
     players: [ME, OP],
@@ -46,7 +47,7 @@ describe('toMoveMark (X when board parity even)', () => {
 });
 
 describe('isMyTurn', () => {
-  it('round 0, empty board: seat 0 (assumed X in even rounds) moves', () => {
+  it('round 0, empty board, X creator: seat 0 moves', () => {
     expect(isMyTurn(game(), ME)).toBe(true);
     expect(isMyTurn(game(), OP)).toBe(false);
   });
@@ -77,6 +78,32 @@ describe('isMyTurn', () => {
 
   it('false for an observer outside the players', () => {
     expect(isMyTurn(game(), 'cc'.repeat(32))).toBe(false);
+  });
+
+  // Regression pin: an O creator flips the seat-to-mark mapping — the joiner
+  // holds X and opens; the creator takes X back in odd rounds.
+  it('O creator, round 0: the joiner (X) moves, not the creator', () => {
+    const g = game({ creator_mark: 2 });
+    expect(isMyTurn(g, ME)).toBe(false);
+    expect(isMyTurn(g, OP)).toBe(true);
+  });
+
+  it('O creator, round 0, one mark: the creator moves', () => {
+    const g = game({ creator_mark: 2, board: [0, 0, 0, 0, 1, 0, 0, 0, 0] });
+    expect(isMyTurn(g, ME)).toBe(true);
+    expect(isMyTurn(g, OP)).toBe(false);
+  });
+
+  it('O creator, round 1: the creator (X in odd rounds) opens', () => {
+    const g = game({ creator_mark: 2, round_wins: [1, 0] });
+    expect(isMyTurn(g, ME)).toBe(true);
+    expect(isMyTurn(g, OP)).toBe(false);
+  });
+
+  it('O creator, round 1, one mark: the joiner moves', () => {
+    const g = game({ creator_mark: 2, round_wins: [1, 0], board: [1, 0, 0, 0, 0, 0, 0, 0, 0] });
+    expect(isMyTurn(g, ME)).toBe(false);
+    expect(isMyTurn(g, OP)).toBe(true);
   });
 });
 

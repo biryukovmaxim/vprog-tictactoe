@@ -37,6 +37,8 @@ export interface DaGame {
   stake: number;
   pot: number;
   rounds_total: number;
+  /** The creator's mark in even rounds: 1 X, 2 O (marks swap seats by round). */
+  creator_mark: number;
   round_wins: [number, number];
   draws: number;
   players: [string, string | null];
