@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>vprog tictactoe</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { margin: 0; font-family: system-ui, sans-serif; }
+      .keybar {
+        display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem;
+        padding: 0.6rem 1rem; border-bottom: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+      }
+      .keybar input[type="password"] { width: 22rem; max-width: 60vw; }
+      .keybar .addr { font-family: ui-monospace, monospace; }
+      .keybar button { cursor: pointer; }
+      .cols {
+        display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; padding: 1rem;
+      }
+      @media (max-width: 60rem) { .cols { grid-template-columns: 1fr; } }
+      .banner {
+        padding: 0.4rem 1rem;
+        background: color-mix(in srgb, crimson 15%, transparent);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

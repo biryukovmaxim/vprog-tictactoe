@@ -118,6 +118,16 @@ TTFLOW_PRIVATE_KEY=<32-byte-hex-operator-funding-key> \
 cargo run -p vprog-tictactoe-driver
 ```
 
+Run the web frontend dev server (proxies `/api/*` to the `ttd` DA server on `127.0.0.1:9880`):
+
+```bash
+cd web && npm install && npm run dev    # also: npm run test, npm run build
+```
+
+The wallet layer talks to L1 via a locally built `kaspa-wasm` package vendored at
+`web/src/kaspa-pkg` (npm only ships 0.13.x). `VITE_WRPC_URL` (default
+`ws://127.0.0.1:17210`) and `VITE_NETWORK` (default `simnet`) select the node.
+
 ## Run modes
 
 | Mode | Role | `TT_PROVE` | `RISC0_DEV_MODE` | Cargo features |
