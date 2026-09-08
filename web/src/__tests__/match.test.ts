@@ -144,12 +144,14 @@ function view(
   games: Partial<Record<GameStatus, DaGame[]>> = {},
   settledTxid: string | null = null,
   myBalance: bigint | null = null,
+  myL1: bigint | null = null,
 ) {
   return {
     games: { open: [], playing: [], finished: [], ...games } as Record<GameStatus, DaGame[]>,
     settledTxid,
     myUserId: ME,
     myBalance,
+    myL1,
   };
 }
 
@@ -201,6 +203,16 @@ describe('advanceActivity (trust chips over DA polls)', () => {
     expect(advanceActivity(rows, view({}, null, 100n))).toBe(rows);
     expect(advanceActivity(rows, view())).toBe(rows);
     const out = advanceActivity(rows, view({}, 'st-1', 50n));
+    expect(out[0]!.status).toBe('on L2');
+    expect(out[0]!.settledTxid).toBe('st-1');
+  });
+
+  it('l1 witness (exit claims) flips once my L1 UTXO sum rose past the captured one', () => {
+    const rows = [row('pending', { kind: 'l1', before: 100n })];
+    // A dip (a carrier's change spent) or an unread poll is not a payout ack.
+    expect(advanceActivity(rows, view({}, null, null, 50n))).toBe(rows);
+    expect(advanceActivity(rows, view())).toBe(rows);
+    const out = advanceActivity(rows, view({}, 'st-1', null, 150n));
     expect(out[0]!.status).toBe('on L2');
     expect(out[0]!.settledTxid).toBe('st-1');
   });

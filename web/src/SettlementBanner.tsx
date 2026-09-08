@@ -6,15 +6,10 @@
 import { useEffect, useState } from 'react';
 import { shortHex, sharedClient } from './composition';
 import type { Identity } from './KeyBar';
+import { mySpkHex } from './claim';
 import { useDa } from './state';
 
 const POLL_MS = 2_000;
-
-/// Schnorr P2PK script bytes hex (`OpData32 | pubkey | OpCheckSig`) — the
-/// `StandardSpk::PubKey` layout exit leaves carry in `spk_hex`.
-function mySpkHex(identity: Identity): string {
-  return `20${identity.wallet.pubkeyHex}ac`;
-}
 
 export function SettlementBanner({ identity }: { identity: Identity }) {
   const da = useDa();
@@ -37,7 +32,9 @@ export function SettlementBanner({ identity }: { identity: Identity }) {
     };
   }, []);
 
-  const mySpk = mySpkHex(identity);
+  // Schnorr P2PK script bytes hex — the `StandardSpk::PubKey` layout exit
+  // leaves carry in `spk_hex` (see claim.ts for the claimable filter).
+  const mySpk = mySpkHex(identity.wallet.pubkeyHex);
   const claimable = da.exits.reduce(
     (n, root) => n + root.leaves.filter((l) => l.spk_hex === mySpk && l.spent === null).length,
     0,

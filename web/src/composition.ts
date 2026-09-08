@@ -4,12 +4,13 @@
 //! lives entirely inside the encoder — the web only passes `deposit_amount`.
 
 import { useEffect, useState } from 'react';
-import { fetchAccount } from './da';
+import { fetchAccount, type ExitLeaf, type ExitRoot } from './da';
 import type { Identity } from './KeyBar';
 import type { ActivityWitness } from './match';
 import { NETWORK, connectClient, type WalletUtxo } from './wallet';
 import type { RpcClient } from './kaspa-pkg/kaspa.js';
-import { UtxoCandidate, create_game_tx, join_game_tx, network_params, transfer_tx, withdraw_tx } from './wasm/vprog_tictactoe_encoder_wasm.js';
+import { UtxoCandidate, claim_tx, create_game_tx, join_game_tx, network_params, transfer_tx, withdraw_tx } from './wasm/vprog_tictactoe_encoder_wasm.js';
+import { canAffordClaim, claimArgs } from './claim';
 import { transferArgs } from './transfer';
 
 /// Minimum sompi a newborn account must be born with; mirrors the guest
@@ -210,6 +211,62 @@ export async function submitWithdraw(opts: {
   const bytes = withdraw_tx(identity.privkeyHex, network_params(NETWORK), utxo, identity.wallet.address, lane, CONFIG_ID_HEX, amount);
   const txid = await identity.wallet.submitTx(client, bytes);
   onActivity('withdraw', txid, { kind: 'balance', before: opts.balanceBefore });
+  return txid;
+}
+
+/// One full-leaf exit claim: spends the settled permission-tree leaf, funded
+/// by the delegate UTXOs at the covenant deposit address (any depositor's,
+/// not the wallet). The payout lands on L1, so the row acks on my L1 UTXO
+/// sum rising; there is no on-needs-funding hook because the pool is not my
+/// address — a short pool means deposit more via create/join.
+export async function submitClaim(opts: {
+  identity: Identity;
+  client: RpcClient;
+  /// Covenant id hex from /api/state.
+  covenantId: string;
+  /// Deposit P2SH address from /api/state — source of the delegate inputs.
+  depositAddress: string;
+  root: ExitRoot;
+  leaf: ExitLeaf;
+  /// My L1 UTXO sum at submit; seeds the payout ack witness.
+  balanceBefore: bigint | null;
+  onActivity: (label: string, txid: string, witness?: ActivityWitness) => void;
+}): Promise<string> {
+  const { identity, client, covenantId, depositAddress, root, leaf, onActivity } = opts;
+  const args = claimArgs(covenantId, root, leaf);
+
+  const { entries } = await client.getUtxosByAddresses({ addresses: [depositAddress] });
+  const delegates: WalletUtxo[] = entries.map((e) => ({
+    txid_hex: e.outpoint.transactionId,
+    index: e.outpoint.index,
+    amount: e.amount,
+    spk_hex: e.scriptPublicKey.script,
+    spk_version: e.scriptPublicKey.version,
+  }));
+  if (!canAffordClaim(delegates, args.leaf_amount, args.fee)) {
+    throw new Error(`delegate pool at ${depositAddress} cannot cover ${kas(args.leaf_amount)} — deposit more via create/join`);
+  }
+  const utxos = delegates.map((d) => new UtxoCandidate(d.txid_hex, d.index, d.amount, d.spk_hex, d.spk_version));
+
+  const bytes = claim_tx(
+    args.covenant_id_hex,
+    args.permission_txid_hex,
+    args.permission_index,
+    args.permission_rent,
+    args.old_root_hex,
+    args.old_unclaimed,
+    args.depth,
+    args.leaf_index,
+    args.leaf_spk_hex,
+    args.leaf_amount,
+    args.new_root_hex,
+    args.new_unclaimed,
+    args.siblings_hex,
+    utxos,
+    args.fee,
+  );
+  const txid = await identity.wallet.submitTx(client, bytes);
+  onActivity('claim exits', txid, { kind: 'l1', before: opts.balanceBefore });
   return txid;
 }
 

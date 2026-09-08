@@ -69,11 +69,13 @@ export function outcomeLine(
 
 /// What DA change acks one submitted action: the game's board for turns, my
 /// game count for entries (create and join both add a game of mine), my L2
-/// balance for transfers and withdrawals.
+/// balance for transfers and withdrawals, my L1 UTXO sum rising for exit
+/// claims (the payout lands on L1, the L2 side is untouched).
 export type ActivityWitness =
   | { kind: 'board'; gameId: string; board: number[] }
   | { kind: 'myGames'; before: number }
-  | { kind: 'balance'; before: bigint | null };
+  | { kind: 'balance'; before: bigint | null }
+  | { kind: 'l1'; before: bigint | null };
 
 /// The polled view the chip walk reads.
 export interface ActivityView {
@@ -81,6 +83,7 @@ export interface ActivityView {
   settledTxid: string | null;
   myUserId: string;
   myBalance: bigint | null;
+  myL1: bigint | null;
 }
 
 /// Games across all statuses that seat my user.
@@ -115,6 +118,7 @@ export function advanceActivity(rows: ActivityRow[], view: ActivityView): Activi
 function acked(witness: ActivityWitness | undefined, view: ActivityView): boolean {
   if (!witness) return false;
   if (witness.kind === 'balance') return view.myBalance !== null && view.myBalance !== witness.before;
+  if (witness.kind === 'l1') return view.myL1 !== null && witness.before !== null && view.myL1 > witness.before;
   if (witness.kind === 'myGames') return myGamesCount(view.games, view.myUserId) > witness.before;
   const g = [view.games.open, view.games.playing, view.games.finished]
     .flat()

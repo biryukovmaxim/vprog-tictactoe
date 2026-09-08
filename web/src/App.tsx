@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { pickUtxo, useMyBalances, type ActivityRow } from './composition';
 import { ActivityLog } from './ActivityLog';
+import { ClaimExits } from './ClaimExits';
 import { KeyBar, type Identity } from './KeyBar';
 import { CreatePanel } from './CreatePanel';
 import { MatchPanel } from './MatchPanel';
@@ -40,9 +41,15 @@ export default function App() {
   // and rows whose settlement moved; a no-op walk keeps the array reference.
   useEffect(() => {
     setActivity((rows) =>
-      advanceActivity(rows, { games: da.games, settledTxid: da.state?.settled?.txid ?? null, myUserId, myBalance: balances.l2 }),
+      advanceActivity(rows, {
+        games: da.games,
+        settledTxid: da.state?.settled?.txid ?? null,
+        myUserId,
+        myBalance: balances.l2,
+        myL1: balances.utxos?.reduce((sum, u) => sum + u.amount, 0n) ?? null,
+      }),
     );
-  }, [da, myUserId, balances.l2]);
+  }, [da, myUserId, balances.l2, balances.utxos]);
 
   return (
     <>
@@ -62,6 +69,7 @@ export default function App() {
           <section aria-label="actions">
             <TransferForm identity={identity} balances={balances} onActivity={onActivity} onNeedsFunding={onNeedsFunding} />
             <WithdrawForm identity={identity} balances={balances} onActivity={onActivity} onNeedsFunding={onNeedsFunding} />
+            <ClaimExits identity={identity} balances={balances} onActivity={onActivity} />
             <ActivityLog rows={activity} />
           </section>
         </div>

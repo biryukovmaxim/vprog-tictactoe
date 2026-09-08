@@ -74,6 +74,8 @@ export interface ExitRoot {
   outpoint_index: number;
   daa_score: number;
   unclaimed: number;
+  /// Sompi rent reserved for the permission continuation UTXO the claim spends.
+  rent: number;
   leaves: ExitLeaf[];
 }
 
