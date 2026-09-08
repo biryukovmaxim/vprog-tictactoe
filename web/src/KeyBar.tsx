@@ -11,6 +11,9 @@ let encoderInit: Promise<unknown> | null = null;
 
 export interface Identity {
   wallet: Wallet;
+  /// The key hex itself (memory only, never persisted): the encoder builders
+  /// sign from the private key, not from the kaspa-wasm keypair.
+  privkeyHex: string;
   /// `my_ids()` view of the same key: lock hash, user resource id, x-only pubkey.
   lockHashHex: string;
   userIdHex: string;
@@ -23,6 +26,7 @@ export async function loadIdentity(privkeyHex: string): Promise<Identity> {
   const ids = my_ids(privkeyHex);
   return {
     wallet: loadKey(privkeyHex),
+    privkeyHex,
     lockHashHex: ids.lock_hash_hex,
     userIdHex: ids.user_id_hex,
   };

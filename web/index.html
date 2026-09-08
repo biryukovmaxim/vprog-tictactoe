@@ -22,6 +22,35 @@
         padding: 0.4rem 1rem;
         background: color-mix(in srgb, crimson 15%, transparent);
       }
+      .settle {
+        display: flex; flex-wrap: wrap; gap: 1rem; align-items: baseline;
+        padding: 0.4rem 1rem; font-family: ui-monospace, monospace; font-size: 0.85rem;
+        border-bottom: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+      }
+      .settle .dot.settled { color: seagreen; }
+      .settle .dot.unsettled { color: darkorange; }
+      .settle .claim-hint { color: seagreen; }
+      .stack { display: flex; flex-direction: column; gap: 0.5rem; }
+      .stack h3 { margin: 0.5rem 0 0; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.7; }
+      .card {
+        display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;
+        padding: 0.5rem 0.6rem; border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+        border-radius: 0.4rem;
+      }
+      .card button { cursor: pointer; }
+      .card button:disabled { cursor: not-allowed; opacity: 0.5; }
+      .game-row {
+        display: flex; gap: 1rem; align-items: baseline; padding: 0.4rem 0.6rem;
+        background: none; border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+        border-radius: 0.4rem; cursor: pointer; text-align: left;
+      }
+      .game-row.selected { border-color: seagreen; }
+      .hint { opacity: 0.7; font-size: 0.85rem; }
+      .err { color: crimson; font-size: 0.85rem; overflow-wrap: anywhere; }
+      .ok { color: seagreen; font-size: 0.85rem; overflow-wrap: anywhere; }
+      .activity { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+      .chip { font-size: 0.75rem; padding: 0 0.35rem; border-radius: 0.3rem; border: 1px solid currentColor; }
+      .chip.pending { color: darkorange; }
     </style>
   </head>
   <body>
