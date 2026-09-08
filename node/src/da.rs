@@ -277,15 +277,14 @@ fn parse_id_hex(hex: &str) -> Option<[u8; 32]> {
     faster_hex::hex_decode(hex.as_bytes(), &mut bytes).ok().map(|_| bytes)
 }
 
-/// Handler for `GET /api/games?status=open|playing|finished&after=<hex32>&limit=<n>`.
-async fn get_games(
-    State(state): State<DaState>,
-    Query(q): Query<GamesQuery>,
-) -> Json<serde_json::Value> {
+/// Handler for `GET /api/games?status=open|playing|finished&after=<hex32>&limit=<n>`. An
+/// unrecognized status value is rejected with 400.
+async fn get_games(State(state): State<DaState>, Query(q): Query<GamesQuery>) -> impl IntoResponse {
     let status = match q.status.as_deref() {
+        None | Some("open") => GameStatus::Open,
         Some("playing") => GameStatus::Playing,
         Some("finished") => GameStatus::Finished,
-        _ => GameStatus::Open,
+        Some(_) => return StatusCode::BAD_REQUEST.into_response(),
     };
     let after: Option<ResourceId> = q.after.as_deref().and_then(|h| {
         let mut bytes = [0u8; 32];
@@ -306,7 +305,7 @@ async fn get_games(
         })
         .collect();
 
-    Json(serde_json::json!({"games": games}))
+    Json(serde_json::json!({"games": games})).into_response()
 }
 
 /// Handler for `GET /api/games/:id`.
@@ -426,7 +425,6 @@ mod tests {
     async fn test_api_config_uninitialized_then_initialized() {
         let dir = TempDir::new().unwrap();
         let store = Arc::new(RocksDbStore::open(dir.path()));
-        let (_settlement_tx, _settlement_rx) = tokio::sync::watch::channel(None::<()>);
         let state = DaState {
             store: store.clone(),
             covenant_id: [0x11; 32],
@@ -470,7 +468,6 @@ mod tests {
     async fn test_api_state() {
         let dir = TempDir::new().unwrap();
         let store = Arc::new(RocksDbStore::open(dir.path()));
-        let (_settlement_tx, _settlement_rx) = tokio::sync::watch::channel(None::<()>);
         let covenant_id = [0x33; 32];
         let lane_subnet = vec![0xaa, 0xbb, 0xcc, 0xdd];
         let state = DaState {
@@ -729,7 +726,7 @@ mod tests {
         assert_eq!(games[0]["id"], game2_id_hex);
 
         // Pagination: after=game2 & limit=1 -> empty.
-        let app = router(state);
+        let app = router(state.clone());
         let req = Request::builder()
             .uri(format!("/api/games?status=open&after={game2_id_hex}&limit=1"))
             .body(Body::empty())
@@ -739,6 +736,17 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         let games = json["games"].as_array().unwrap();
         assert!(games.is_empty());
+
+        // Unknown status -> 400 BAD REQUEST; omitted status still defaults to open.
+        let app = router(state.clone());
+        let req = Request::builder().uri("/api/games?status=settled").body(Body::empty()).unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+        let app = router(state);
+        let req = Request::builder().uri("/api/games").body(Body::empty()).unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
     }
 
     #[tokio::test]

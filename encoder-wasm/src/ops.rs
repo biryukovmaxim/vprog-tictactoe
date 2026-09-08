@@ -421,6 +421,11 @@ pub fn withdraw_tx(
 
 /// Builds a full-leaf permission-tree claim spending the settled exit leaf; `delegate_utxos` are
 /// covenant deposit UTXOs funding the payout, and `fee` burns delegate value for relay priority.
+///
+/// Fee edge: `fee` is subtracted from the trailing delegate change output, so delegate inputs
+/// summing to exactly `deduct + fee` drive that change to zero value, which the network rejects as
+/// dust. Unreachable in the demo (simnet fee is 0); nonzero-fee callers must overfund the delegate
+/// pool past `deduct + fee`.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[allow(clippy::too_many_arguments)]
 pub fn claim_tx(

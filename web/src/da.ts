@@ -102,10 +102,6 @@ export function fetchGames(status: GameStatus = 'open', after?: string, limit?: 
   return get<{ games: DaGame[] }>(`/api/games?${q}`).then((r) => r.games);
 }
 
-export function fetchGame(id: string): Promise<DaGame> {
-  return get(`/api/games/${id}`);
-}
-
 export function fetchAccount(userIdHex: string): Promise<DaAccount> {
   return get(`/api/accounts/${userIdHex}`);
 }

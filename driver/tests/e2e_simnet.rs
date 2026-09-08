@@ -423,11 +423,10 @@ async fn wait_exit_with_leaf<S: Store>(
     let start = tokio::time::Instant::now();
     loop {
         for root in exit_roots(store) {
-            if let Some(record) = get_exit_record(store, &root) {
-                if let Some(index) = record.leaves.iter().position(|l| l.script_bytes() == dest_spk)
-                {
-                    return (root, record, index);
-                }
+            if let Some(record) = get_exit_record(store, &root)
+                && let Some(index) = record.leaves.iter().position(|l| l.script_bytes() == dest_spk)
+            {
+                return (root, record, index);
             }
         }
         assert!(
