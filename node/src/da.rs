@@ -253,6 +253,7 @@ fn game_json(id_hex: String, body: &GameBody) -> serde_json::Value {
         "stake": body.stake(),
         "pot": body.stake() * 2,
         "rounds_total": body.rounds_total(),
+        "creator_mark": body.creator_mark() as u8,
         "round_wins": [rw[0], rw[1]],
         "draws": body.draws(),
         "players": [creator_hex, joiner],
@@ -654,6 +655,7 @@ mod tests {
         assert_eq!(json["stake"], 10000);
         assert_eq!(json["pot"], 20000);
         assert_eq!(json["rounds_total"], 3);
+        assert_eq!(json["creator_mark"], 1);
         assert_eq!(json["round_wins"], serde_json::json!([0, 0]));
         assert_eq!(json["draws"], 0);
         assert_eq!(json["players"], serde_json::json!([creator_id_hex, null]));
@@ -699,6 +701,7 @@ mod tests {
         assert_eq!(games.len(), 2);
         assert_eq!(games[0]["id"], game1_id_hex);
         assert_eq!(games[1]["id"], game2_id_hex);
+        assert_eq!(games[1]["creator_mark"], 2);
 
         // Pagination: limit=1.
         let app = router(state.clone());
