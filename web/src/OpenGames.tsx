@@ -20,10 +20,12 @@ export function OpenGames({
   identity,
   balances,
   onActivity,
+  onNeedsFunding,
 }: {
   identity: Identity;
   balances: MyBalances;
   onActivity: (label: string, txid: string) => void;
+  onNeedsFunding: (needed: bigint) => void;
 }) {
   const da = useDa();
   const [busy, setBusy] = useState<string | null>(null);
@@ -46,6 +48,7 @@ export function OpenGames({
         covenantId,
         entry: { kind: 'join', stake, gameId },
         onActivity,
+        onNeedsFunding,
       });
     } catch (e) {
       setErr(String(e));
@@ -61,13 +64,13 @@ export function OpenGames({
       {da.games.open.length === 0 && <p className="hint">no open games — create one below</p>}
       {da.games.open.map((g) => {
         const stake = BigInt(g.stake);
-        // Join stays enabled when the L2 balance covers the stake, or when L1
-        // funds afford the auto-deposit; unknown balances cannot gate it.
+        // Join stays enabled when the L2 balance covers the stake, or when a
+        // single L1 UTXO affords the auto-deposit; unknown balances cannot gate.
         const shortL2 = balances.l2 !== null && balances.l2 < stake;
         const l1Covers =
-          balances.l1 !== null &&
+          balances.utxos !== null &&
           canAfford(
-            balances.l1,
+            balances.utxos,
             entryDeposit({
               exists: balances.exists,
               balance: balances.l2 ?? 0n,

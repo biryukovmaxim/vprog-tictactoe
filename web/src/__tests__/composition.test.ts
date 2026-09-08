@@ -55,13 +55,23 @@ describe('entryDeposit', () => {
   });
 });
 
-describe('canAfford', () => {
-  it('affords exactly deposit plus fee', () => {
-    expect(canAfford(1000n + FEE_ESTIMATE, 1000n, FEE_ESTIMATE)).toBe(true);
+describe('canAfford (largest single UTXO, not the sum)', () => {
+  const utxo = (amount: bigint): WalletUtxo => ({ txid_hex: 'aa', index: 0, amount, spk_hex: '00', spk_version: 0 });
+
+  it('affords when the largest UTXO strictly covers deposit plus fee', () => {
+    expect(canAfford([utxo(300n), utxo(1000n + FEE_ESTIMATE + 1n)], 1000n, FEE_ESTIMATE)).toBe(true);
   });
 
-  it('rejects one sompi short of deposit plus fee', () => {
-    expect(canAfford(1000n + FEE_ESTIMATE - 1n, 1000n, FEE_ESTIMATE)).toBe(false);
+  it('rejects a split wallet: sum covers but no single UTXO does', () => {
+    expect(canAfford([utxo(600n), utxo(600n)], 1000n, FEE_ESTIMATE)).toBe(false);
+  });
+
+  it('rejects a single UTXO exactly at deposit plus fee (change must stay positive)', () => {
+    expect(canAfford([utxo(1000n + FEE_ESTIMATE)], 1000n, FEE_ESTIMATE)).toBe(false);
+  });
+
+  it('rejects an empty UTXO set', () => {
+    expect(canAfford([], 1000n, FEE_ESTIMATE)).toBe(false);
   });
 });
 
@@ -167,10 +177,11 @@ describe('submitEntry (create with auto-deposit for a new user)', () => {
     expect(onActivity).toHaveBeenCalledWith('create game', 'cafecafe');
   });
 
-  it('rejects with a funding hint when no L1 UTXO covers the deposit', async () => {
+  it('rejects with a funding hint and signals the needed L1 amount when no UTXO covers the deposit', async () => {
     const identity = await loadIdentity(PRIVKEY);
     stubAccount(identity.userIdHex, { exists: false });
     const { client, submitTransaction } = mockClient(identity.wallet.pubkeyHex, []);
+    const onNeedsFunding = vi.fn();
 
     await expect(
       submitEntry({
@@ -180,9 +191,11 @@ describe('submitEntry (create with auto-deposit for a new user)', () => {
         covenantId: COVENANT,
         entry: { kind: 'create', stake: 50_000_000n, rounds: 3, mark: 1 },
         onActivity: vi.fn(),
+        onNeedsFunding,
       }),
     ).rejects.toThrow(/fund kaspasim:/);
     expect(submitTransaction).not.toHaveBeenCalled();
+    expect(onNeedsFunding).toHaveBeenCalledWith(50_000_000n + FEE_ESTIMATE);
   });
 });
 

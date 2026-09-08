@@ -37,7 +37,7 @@ function kas(amount: bigint): string {
   return `${(Number(amount) / Number(SOMPI)).toFixed(2)} KAS`;
 }
 
-export function KeyBar({ onIdentity }: { onIdentity: (id: Identity | null) => void }) {
+export function KeyBar({ onIdentity, needsFunding = false }: { onIdentity: (id: Identity | null) => void; needsFunding?: boolean }) {
   const [privkey, setPrivkey] = useState('');
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [client, setClient] = useState<RpcClient | null>(null);
@@ -126,6 +126,11 @@ export function KeyBar({ onIdentity }: { onIdentity: (id: Identity | null) => vo
           <button onClick={copy}>{copied ? 'copied' : 'copy'}</button>
           <span>L2: {l2 === null ? '…' : kas(l2)}</span>
           <span>L1: {l1 === null ? '…' : kas(l1)}</span>
+          {needsFunding && (
+            <span className="fundme" title="this address must receive L1 funds">
+              fund me: {identity.wallet.address}
+            </span>
+          )}
           <span>[{NETWORK}{da.reachable ? '' : ' · DA unreachable'}]</span>
         </>
       )}

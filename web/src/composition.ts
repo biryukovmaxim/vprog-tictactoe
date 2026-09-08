@@ -38,9 +38,11 @@ export function entryDeposit(params: {
   return shortfall > floor ? shortfall : floor;
 }
 
-/// Whether the wallet can pay `deposit` plus a fee pad out of `l1Available`.
-export function canAfford(l1Available: bigint, deposit: bigint, feeEstimate: bigint): boolean {
-  return l1Available >= deposit + feeEstimate;
+/// Whether the wallet can pay `deposit` plus a fee pad: the carrier spends
+/// exactly one UTXO, so only a single UTXO strictly covering it affords —
+/// a split wallet whose sum covers still cannot fund the carrier.
+export function canAfford(utxos: WalletUtxo[], deposit: bigint, feeEstimate: bigint): boolean {
+  return pickUtxo(utxos, deposit + feeEstimate) !== null;
 }
 
 /// The single UTXO the carrier will spend: the largest one strictly covering
@@ -86,6 +88,9 @@ export async function submitEntry(opts: {
   covenantId: string;
   entry: EntryFlow;
   onActivity: (label: string, txid: string) => void;
+  /// Fired when no single L1 UTXO covers the deposit; feeds the KeyBar
+  /// "fund me" hint with the amount that was needed.
+  onNeedsFunding?: (needed: bigint) => void;
 }): Promise<EntryReceipt> {
   const { identity, client, lane, covenantId, entry, onActivity } = opts;
   const account = await fetchAccount(identity.userIdHex);
@@ -99,7 +104,10 @@ export async function submitEntry(opts: {
 
   const utxos = await identity.wallet.l1Utxos(client);
   const picked = pickUtxo(utxos, deposit + FEE_ESTIMATE);
-  if (!picked) throw new Error(`insufficient L1 funds — fund ${identity.wallet.address}`);
+  if (!picked) {
+    opts.onNeedsFunding?.(deposit + FEE_ESTIMATE);
+    throw new Error(`insufficient L1 funds — fund ${identity.wallet.address}`);
+  }
   const utxo = new UtxoCandidate(picked.txid_hex, picked.index, picked.amount, picked.spk_hex, picked.spk_version);
 
   const net = network_params(NETWORK);
@@ -146,19 +154,20 @@ export function sharedClient(): Promise<RpcClient> {
   return clientPromise;
 }
 
-/// My L2/L1 balances polled every 2 s; `null` while the first poll is in
-/// flight, last-good retained on errors. Feeds affordance gates and banners.
+/// My L2 balance and live L1 UTXOs polled every 2 s; `null` while the first
+/// poll is in flight, last-good retained on errors. Feeds affordance gates
+/// (single-UTXO, via canAfford) and the fund-me hint.
 export interface MyBalances {
-  l1: bigint | null;
+  utxos: WalletUtxo[] | null;
   l2: bigint | null;
   exists: boolean;
 }
 
 export function useMyBalances(identity: Identity | null): MyBalances {
-  const [b, setB] = useState<MyBalances>({ l1: null, l2: null, exists: false });
+  const [b, setB] = useState<MyBalances>({ utxos: null, l2: null, exists: false });
   useEffect(() => {
     if (!identity) {
-      setB({ l1: null, l2: null, exists: false });
+      setB({ utxos: null, l2: null, exists: false });
       return;
     }
     let stop = false;
@@ -168,7 +177,7 @@ export function useMyBalances(identity: Identity | null): MyBalances {
         const [account, utxos] = await Promise.all([fetchAccount(identity.userIdHex), identity.wallet.l1Utxos(client)]);
         if (!stop) {
           setB({
-            l1: utxos.reduce((sum, u) => sum + u.amount, 0n),
+            utxos,
             l2: account.exists && account.balance !== undefined ? BigInt(account.balance) : 0n,
             exists: account.exists,
           });

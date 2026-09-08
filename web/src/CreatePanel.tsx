@@ -34,10 +34,12 @@ export function CreatePanel({
   identity,
   balances,
   onActivity,
+  onNeedsFunding,
 }: {
   identity: Identity;
   balances: MyBalances;
   onActivity: (label: string, txid: string) => void;
+  onNeedsFunding: (needed: bigint) => void;
 }) {
   const da = useDa();
   const [stakeKas, setStakeKas] = useState('0.5');
@@ -77,6 +79,7 @@ export function CreatePanel({
         covenantId,
         entry: { kind: 'create', stake, rounds: n, mark },
         onActivity,
+        onNeedsFunding,
       });
       // Deposit confirmation line: the covenant (P2SH) deposit address, only
       // when this entry actually carried a deposit.
@@ -94,7 +97,7 @@ export function CreatePanel({
 
   const stake = parseStake(stakeKas);
   const deposit = stake === null ? null : entryDeposit({ exists: balances.exists, balance: balances.l2 ?? 0n, stake, minCreateBalance: MIN_CREATE_BALANCE });
-  const afford = deposit !== null && balances.l1 !== null && canAfford(balances.l1, deposit, FEE_ESTIMATE);
+  const afford = deposit !== null && balances.utxos !== null && canAfford(balances.utxos, deposit, FEE_ESTIMATE);
 
   return (
     <div className="stack">
