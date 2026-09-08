@@ -5,18 +5,19 @@ play a multi-round match, and the verifiable program settles the pot to the winn
 back on a draw). Reuses the vprogs framework and Kaspa stack for everything except the program's
 own actions, accounts and game rules.
 
-> **Status: guest crate, node daemon, and scenario driver landed.** The guest's account baseline,
-> staked game rules, node daemon (`ttd`), scripted issuer (`ttflow`), and simnet e2e test suite
-> build and test clean (`just check`, `just test`, and `TT_E2E=1 cargo test`).
+> **Status: guest crate, node daemon with DA server, scenario driver, and web frontend landed.**
+> The workspace and web build and test clean (`just check`, `just test`, and `cd web && npm run
+> test && npm run build`).
 > The checklist below is the source of truth for what works.
 
 ## Architecture
 
 - **Guest wire library (`guest/`)**: Single source of truth for action encoding/decoding, resource
   layouts, lock views, and deterministic resource-id derivations. Compiles for both host and zkVM.
-- **Node daemon (`node/`, `ttd`)**: Environment-only runner driver with zero payload knowledge.
-  Loads guest ELFs, delegates deposit derivation via `delegate_entry_spk_hash`, and drives execution
-  or proving loops.
+- **Node daemon (`node/`, `ttd`)**: Environment-only runner driver with zero payload knowledge,
+  plus the DA HTTP server. Loads guest ELFs, delegates deposit derivation via
+  `delegate_entry_spk_hash`, drives execution or proving loops, and serves rollup state, games,
+  accounts, and exit views.
 - **Scenario driver (`driver/`, `ttflow`)**: Standalone issuer sample composing guest action encoders,
   `vprogs-zk-backend-risc0-app-kit` payload assembly, and L1 wallet carrier submission.
 - **Web encoder (`encoder-wasm/`)**: Pure build/sign surface for the browser over the guest
@@ -78,12 +79,16 @@ own actions, accounts and game rules.
 - [ ] Guest tests: rules engine, wire round-trips, dev-mode flow tests
 - [ ] Guest ELF: Docker reproducible build, genesis env flow (local `just build-guest` works)
 - [ ] vprogs feature: app-level custom journal data via closures (prerequisite for indexes)
-- [ ] Node DA: exit-record store with spent marks; open-game indexer
+- [x] Node DA: exit-record store with spent marks; open-game and player-event indexes
+  - HTTP server: `/api/state`, `/api/config`, `/api/games`, `/api/accounts/:id`, `/api/exits`
   - Settled exit views with Merkle paths and spend state for DA queries
-- [x] Node `ttd`: runner driver (execution and proving modes, devmode stub and GPU proving; DA server pending journal feature)
+- [x] Node `ttd`: runner driver (execution and proving modes, devmode stub and GPU proving) with
+      the DA server above
 - [x] Driver `ttflow`: scripted scenarios
-- [x] Env-gated L1 e2e against a local simnet
-- [ ] Web frontend: wallet, board, trust ladder (optimistic → L2 → settled → confirmed)
+- [x] Env-gated L1 e2e against a local simnet (in-process rig; all scenario carriers accepted —
+      the appended claim tail awaits a vprogs settlement fix, see `docs/demo/README.md`)
+- [x] Web frontend: DA client, privkey wallet, match board, transfer/withdraw/claim actions,
+      activity trust chips (`docs/demo/` has the runbook and current live limits)
 - [ ] Env-gated L1 e2e against a local testnet-10 fork node
 
 ## Running
@@ -107,6 +112,10 @@ TT_BATCH_ELF=../vprogs/zk/backend/risc0/batch-processor/compiled/program.elf \
 TT_AGGREGATOR_ELF=../vprogs/zk/backend/risc0/batch-aggregator/compiled/program.elf \
 cargo run -p vprog-tictactoe-node
 ```
+
+The daemon also serves the DA HTTP API on `TT_DA_BIND` (default `127.0.0.1:9880`); set
+`TT_WEB_DIR` to serve a built web frontend from the same port. The full demo runbook, including
+the simnet wiring and current live limits, lives in `docs/demo/`.
 
 Run the `ttflow` scenario driver against a running node and lane:
 
@@ -156,6 +165,8 @@ The wallet layer talks to L1 via a locally built `kaspa-wasm` package vendored a
 | `TT_SEED_DEPTH` | Depth below sink for bridge catchup scan | `500` |
 | `TT_PROVE` | Enable prover and settler worker | `0` |
 | `TT_START_MODE` | Start mode (`fresh`, `resume`, `catchup`) | auto |
+| `TT_DA_BIND` | Bind address for the DA HTTP server | `127.0.0.1:9880` |
+| `TT_WEB_DIR` | Optional static web directory served by the DA server | none |
 
 ### Driver (`ttflow`)
 
@@ -175,5 +186,5 @@ The wallet layer talks to L1 via a locally built `kaspa-wasm` package vendored a
 
 ## Documentation
 
-Public docs live under `docs/` as they are written; internal specs and plans are not part of the
-repository.
+Public docs live under `docs/`: `docs/demo/` is the web demo runbook (rig, env vars, funding,
+current live limits). Internal specs and plans are not part of the repository.
