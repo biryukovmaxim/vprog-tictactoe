@@ -20,6 +20,7 @@ export const __wbg_utxocandidate_free: (a: number, b: number) => void;
 export const jsparams_prefix: (a: number) => [number, number];
 export const my_ids: (a: number, b: number) => [number, number, number];
 export const network_params: (a: number, b: number) => [number, number, number];
+export const utxocandidate_new: (a: number, b: number, c: number, d: bigint, e: number, f: number, g: number) => number;
 export const __wbg_set_utxocandidate_spk_hex: (a: number, b: number, c: number) => void;
 export const __wbg_get_utxocandidate_spk_hex: (a: number) => [number, number];
 export const __wbg_get_utxocandidate_txid_hex: (a: number) => [number, number];

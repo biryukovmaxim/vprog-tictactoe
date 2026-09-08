@@ -2372,6 +2372,24 @@ export class UtxoCandidate {
     set spk_version(arg0) {
         wasm.__wbg_set_utxocandidate_spk_version(this.__wbg_ptr, arg0);
     }
+    /**
+     * Assembles a funding-output reference for a carrier input.
+     * @param {string} txid_hex
+     * @param {number} index
+     * @param {bigint} amount
+     * @param {string} spk_hex
+     * @param {number} spk_version
+     */
+    constructor(txid_hex, index, amount, spk_hex, spk_version) {
+        const ptr0 = passStringToWasm0(txid_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(spk_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.utxocandidate_new(ptr0, len0, index, amount, ptr1, len1, spk_version);
+        this.__wbg_ptr = ret >>> 0;
+        UtxoCandidateFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
 }
 
 const UtxoEntriesFinalization = (typeof FinalizationRegistry === 'undefined')

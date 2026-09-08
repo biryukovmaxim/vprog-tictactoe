@@ -36,6 +36,21 @@ pub struct UtxoCandidate {
     pub spk_version: u16,
 }
 
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+impl UtxoCandidate {
+    /// Assembles a funding-output reference for a carrier input.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
+    pub fn new(
+        txid_hex: String,
+        index: u32,
+        amount: u64,
+        spk_hex: String,
+        spk_version: u16,
+    ) -> Self {
+        Self { txid_hex, index, amount, spk_hex, spk_version }
+    }
+}
+
 /// Parsed network parameters, shared across every tx-builder call.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 pub struct JsParams {

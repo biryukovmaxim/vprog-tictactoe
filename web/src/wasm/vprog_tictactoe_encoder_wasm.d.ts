@@ -838,8 +838,11 @@ export class TransactionUtxoEntry {
  * One spendable L1 UTXO backing a carrier input, as fetched from the wallet.
  */
 export class UtxoCandidate {
-  private constructor();
   free(): void;
+  /**
+   * Assembles a funding-output reference for a carrier input.
+   */
+  constructor(txid_hex: string, index: number, amount: bigint, spk_hex: string, spk_version: number);
   /**
    * Transaction id of the funding output, in display hex form.
    */
@@ -969,6 +972,7 @@ export interface InitOutput {
   readonly jsparams_prefix: (a: number) => [number, number];
   readonly my_ids: (a: number, b: number) => [number, number, number];
   readonly network_params: (a: number, b: number) => [number, number, number];
+  readonly utxocandidate_new: (a: number, b: number, c: number, d: bigint, e: number, f: number, g: number) => number;
   readonly __wbg_set_utxocandidate_spk_hex: (a: number, b: number, c: number) => void;
   readonly __wbg_get_utxocandidate_spk_hex: (a: number) => [number, number];
   readonly __wbg_get_utxocandidate_txid_hex: (a: number) => [number, number];
