@@ -27,8 +27,9 @@ beforeAll(async () => {
 
 afterEach(() => vi.unstubAllGlobals());
 
-/// /api/exits fixture: one settled root whose leaf 0 pays my key unspent,
-/// leaf 1 pays my key but is spent, leaf 2 pays another key unspent.
+/// /api/exits fixture: one settled all-unspent root whose leaves 0 and 1 pay
+/// my key, leaf 2 pays another key. The one-claim-per-root gate tests derive
+/// a spent-leaf variant from it.
 const MY_PK = '31'.repeat(32);
 const THEIR_PK = '99'.repeat(32);
 
@@ -52,7 +53,7 @@ const FIXTURE: ExitRoot = {
       index: 1,
       spk_hex: mySpkHex(MY_PK),
       amount: 25_000_000,
-      spent: { spend_txid: 'cc'.repeat(32), deduct: 25_000_000 },
+      spent: null,
       siblings: ['55'.repeat(32), '66'.repeat(32)],
       full_claim: { new_root: '77'.repeat(32), new_unclaimed: 1 },
     },
@@ -67,6 +68,13 @@ const FIXTURE: ExitRoot = {
   ],
 };
 
+/// FIXTURE after a first claim spent leaf 1: the root's settlement outpoint
+/// is spent, so no leaf of it is claimable anymore.
+function claimedFixture(): ExitRoot {
+  const spentLeaf = { ...FIXTURE.leaves[1]!, spent: { spend_txid: 'cc'.repeat(32), deduct: 25_000_000 } };
+  return { ...FIXTURE, leaves: [FIXTURE.leaves[0]!, spentLeaf, FIXTURE.leaves[2]!] };
+}
+
 describe('mySpkHex (StandardSpk::PubKey script bytes: 0x20 || pk || 0xac)', () => {
   it('wraps the 32-byte x-only pubkey in OP_DATA_32 and OP_CHECKSIG (34 bytes)', () => {
     expect(mySpkHex(MY_PK)).toBe(`20${MY_PK}ac`);
@@ -74,24 +82,33 @@ describe('mySpkHex (StandardSpk::PubKey script bytes: 0x20 || pk || 0xac)', () =
   });
 });
 
-describe('claimableExits (settled roots, unspent, paying my key)', () => {
-  it('keeps my unspent leaves of settled roots, keyed root:index', () => {
-    expect(claimableExits([FIXTURE], MY_PK)).toEqual([{ key: `${FIXTURE.root}:0`, root: FIXTURE, leaf: FIXTURE.leaves[0] }]);
+describe('claimableExits (settled all-unspent roots, paying my key)', () => {
+  it('keeps my unspent leaves of an all-unspent root, keyed root:index', () => {
+    expect(claimableExits([FIXTURE], MY_PK)).toEqual([
+      { key: `${FIXTURE.root}:0`, root: FIXTURE, leaf: FIXTURE.leaves[0] },
+      { key: `${FIXTURE.root}:1`, root: FIXTURE, leaf: FIXTURE.leaves[1] },
+    ]);
   });
 
-  it('drops leaves already spent (claimed before)', () => {
-    const targets = claimableExits([FIXTURE], MY_PK);
-    expect(targets.some((t) => t.leaf.index === 1)).toBe(false);
+  it('yields nothing for a root with any spent leaf — one claim per root (even my unspent leaves)', () => {
+    expect(claimableExits([claimedFixture()], MY_PK)).toEqual([]);
   });
 
-  it('drops unspent leaves paying another key', () => {
+  it('a spent-leaf root alongside an unspent one still yields the unspent root only', () => {
+    const other: ExitRoot = { ...FIXTURE, root: '21'.repeat(32), leaves: [FIXTURE.leaves[0]!] };
+    expect(claimableExits([claimedFixture(), other], MY_PK)).toEqual([
+      { key: `${other.root}:0`, root: other, leaf: other.leaves[0] },
+    ]);
+  });
+
+  it('drops leaves paying another key', () => {
     const targets = claimableExits([FIXTURE], MY_PK);
     expect(targets.some((t) => t.leaf.spk_hex === mySpkHex(THEIR_PK))).toBe(false);
   });
 
   it('spans every served root', () => {
     const other: ExitRoot = { ...FIXTURE, root: '21'.repeat(32), leaves: [FIXTURE.leaves[0]!] };
-    expect(claimableExits([FIXTURE, other], MY_PK)).toHaveLength(2);
+    expect(claimableExits([FIXTURE, other], MY_PK)).toHaveLength(3);
   });
 });
 

@@ -17,6 +17,10 @@ import { WithdrawForm } from './WithdrawForm';
 import { advanceActivity, myGamesCount, type ActivityWitness } from './match';
 import { useDa } from './state';
 
+/// Strictly monotonic activity-row id: `rows.length` duplicates once the
+/// 50-row cap starts slicing (length saturates at 50 while rows churn).
+let nextActivityId = 0;
+
 export default function App() {
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [selectedGame, setSelectedGame] = useState<string | null>(null);
@@ -32,7 +36,7 @@ export default function App() {
   /// count witness: both entries land when a game of mine appears.
   const onActivity = (label: string, txid: string, witness?: ActivityWitness) => {
     const w = witness ?? { kind: 'myGames' as const, before: myGamesCount(da.games, myUserId) };
-    setActivity((rows) => [{ id: rows.length, label, txid, status: 'pending' as const, witness: w }, ...rows].slice(0, 50));
+    setActivity((rows) => [{ id: nextActivityId++, label, txid, status: 'pending' as const, witness: w }, ...rows].slice(0, 50));
   };
   const onNeedsFunding = useCallback((needed: bigint) => setFundNeed(needed), []);
   const needsFunding = fundNeed !== null && balances.utxos !== null && pickUtxo(balances.utxos, fundNeed) === null;

@@ -289,9 +289,14 @@ export interface ActivityRow {
 
 let clientPromise: Promise<RpcClient> | null = null;
 
-/// The one shared L1 RpcClient for every component outside KeyBar.
+/// The one shared L1 RpcClient for every component outside KeyBar. A failed
+/// connect clears the cached promise so the next caller retries instead of
+/// every L1 touch staying dead for the session.
 export function sharedClient(): Promise<RpcClient> {
-  clientPromise ??= connectClient();
+  clientPromise ??= connectClient().catch((e) => {
+    clientPromise = null;
+    throw e;
+  });
   return clientPromise;
 }
 

@@ -93,7 +93,11 @@ export function KeyBar({ onIdentity, needsFunding = false }: { onIdentity: (id: 
       const id = await loadIdentity(privkey.trim());
       setIdentity(id);
       setPrivkey('');
-      setClient(await connectClient());
+      // L1 connect is gated separately: an L1-down at key-load time must not
+      // tear the identity down — surface the error and keep the key loaded.
+      connectClient()
+        .then(setClient)
+        .catch((e) => setErr(`L1 connect failed: ${String(e)}`));
     } catch (e) {
       setIdentity(null);
       setClient(null);

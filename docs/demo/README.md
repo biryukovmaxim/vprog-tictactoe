@@ -22,6 +22,10 @@ What does work live: `ttd` boot, every DA endpoint, web build and serve, deposit
 turns (all eight scenario carriers were accepted on L1), and transfer/withdraw submission. The
 unit gates all pass: `just check`, `just test`, `cd web && npm run test && npm run build`.
 
+The demo allows one claim per exit root: once a root's first claim spends its settlement
+outpoint, the remaining leaves are not claimable — sequential claims need the continuation root
+(post-merge work).
+
 ## Running
 
 ### 1. Prerequisites
