@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import { fetchAccount } from './da';
 import type { Identity } from './KeyBar';
+import type { ActivityWitness } from './match';
 import { NETWORK, connectClient, type WalletUtxo } from './wallet';
 import type { RpcClient } from './kaspa-pkg/kaspa.js';
 import { UtxoCandidate, create_game_tx, join_game_tx, network_params } from './wasm/vprog_tictactoe_encoder_wasm.js';
@@ -134,13 +135,18 @@ export async function submitEntry(opts: {
   return { txid, deposit };
 }
 
-/// One activity-log row; `status` walks pending → on L2 → settled as later
-/// tasks derive the chips from the DA polls.
+/// One activity-log row; `status` walks pending → on L2 → settled via the
+/// poll-driven chip walker in match.ts.
 export interface ActivityRow {
   id: number;
   label: string;
   txid: string;
   status: 'pending' | 'on L2' | 'settled';
+  /// What DA change acks this row; drives the chip walk.
+  witness?: ActivityWitness;
+  /// Settlement txid stamped when the row reached on L2; the settled chip
+  /// flips once /api/state later serves a different one.
+  settledTxid?: string | null;
 }
 
 // ---------------------------------------------------------------------------

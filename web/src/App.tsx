@@ -1,13 +1,17 @@
-//! One page: KeyBar, settlement banner, three columns. Columns two (match)
-//! and the actions half of column three land in later tasks.
+//! One page: KeyBar, settlement banner, three columns (game lists, match,
+//! actions + activity). Rows enter the activity log `pending` at submit and
+//! the DA poll walks their trust chips via match.ts `advanceActivity`.
 
-import { useCallback, useState } from 'react';
-import { pickUtxo, useMyBalances, shortHex, type ActivityRow } from './composition';
+import { useCallback, useEffect, useState } from 'react';
+import { pickUtxo, useMyBalances, type ActivityRow } from './composition';
+import { ActivityLog } from './ActivityLog';
 import { KeyBar, type Identity } from './KeyBar';
 import { CreatePanel } from './CreatePanel';
+import { MatchPanel } from './MatchPanel';
 import { MyGames } from './MyGames';
 import { OpenGames } from './OpenGames';
 import { SettlementBanner } from './SettlementBanner';
+import { advanceActivity, myGamesCount, type ActivityWitness } from './match';
 import { useDa } from './state';
 
 export default function App() {
@@ -20,13 +24,21 @@ export default function App() {
   const da = useDa();
   const balances = useMyBalances(identity);
   const onIdentity = useCallback((id: Identity | null) => setIdentity(id), []);
-  const onActivity = useCallback(
-    (label: string, txid: string) =>
-      setActivity((rows) => [{ id: rows.length, label, txid, status: 'pending' as const }, ...rows].slice(0, 50)),
-    [],
-  );
+  const myUserId = identity?.userIdHex ?? '';
+  /// Unwitnessed rows (the T7 create/join calls) default to the my-games
+  /// count witness: both entries land when a game of mine appears.
+  const onActivity = (label: string, txid: string, witness?: ActivityWitness) => {
+    const w = witness ?? { kind: 'myGames' as const, before: myGamesCount(da.games, myUserId) };
+    setActivity((rows) => [{ id: rows.length, label, txid, status: 'pending' as const, witness: w }, ...rows].slice(0, 50));
+  };
   const onNeedsFunding = useCallback((needed: bigint) => setFundNeed(needed), []);
   const needsFunding = fundNeed !== null && balances.utxos !== null && pickUtxo(balances.utxos, fundNeed) === null;
+
+  // Trust-chip walk: each DA poll advances rows whose witnessed change landed
+  // and rows whose settlement moved; a no-op walk keeps the array reference.
+  useEffect(() => {
+    setActivity((rows) => advanceActivity(rows, { games: da.games, settledTxid: da.state?.settled?.txid ?? null, myUserId }));
+  }, [da, myUserId]);
 
   return (
     <>
@@ -41,20 +53,10 @@ export default function App() {
             <MyGames identity={identity} selectedId={selectedGame} onSelect={setSelectedGame} />
           </section>
           <section aria-label="match">
-            <p className="hint">{selectedGame ? 'match panel lands in the next task' : 'select a game in my games'}</p>
+            <MatchPanel identity={identity} gameId={selectedGame} onActivity={onActivity} onNeedsFunding={onNeedsFunding} />
           </section>
           <section aria-label="actions">
-            <div className="stack">
-              <h3>activity</h3>
-              {activity.length === 0 && <p className="hint">nothing submitted yet</p>}
-              <ul className="activity">
-                {activity.map((r) => (
-                  <li key={r.id}>
-                    {r.label} · {shortHex(r.txid)} <span className={`chip ${r.status === 'pending' ? 'pending' : 'done'}`}>{r.status}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <ActivityLog rows={activity} />
           </section>
         </div>
       )}
