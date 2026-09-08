@@ -140,11 +140,16 @@ function row(status: ActivityRow['status'], witness?: ActivityWitness, settledTx
   return { id: 1, label: 'turn 4', txid: 'ff'.repeat(32), status, ...(witness ? { witness } : {}), ...(settledTxid !== undefined ? { settledTxid } : {}) };
 }
 
-function view(games: Partial<Record<GameStatus, DaGame[]>> = {}, settledTxid: string | null = null) {
+function view(
+  games: Partial<Record<GameStatus, DaGame[]>> = {},
+  settledTxid: string | null = null,
+  myBalance: bigint | null = null,
+) {
   return {
     games: { open: [], playing: [], finished: [], ...games } as Record<GameStatus, DaGame[]>,
     settledTxid,
     myUserId: ME,
+    myBalance,
   };
 }
 
@@ -188,6 +193,16 @@ describe('advanceActivity (trust chips over DA polls)', () => {
     expect(advanceActivity(rows, view({}, 'st-9'))[0]!.status).toBe('settled');
     // A first settlement appearing after the ack also counts as a change.
     expect(advanceActivity([row('on L2', undefined, null)], view({}, 'st-1'))[0]!.status).toBe('settled');
+  });
+
+  it('balance witness (transfers, withdrawals) flips once my L2 balance moved', () => {
+    const rows = [row('pending', { kind: 'balance', before: 100n })];
+    // Same balance (and unknown balance) keep the row pending.
+    expect(advanceActivity(rows, view({}, null, 100n))).toBe(rows);
+    expect(advanceActivity(rows, view())).toBe(rows);
+    const out = advanceActivity(rows, view({}, 'st-1', 50n));
+    expect(out[0]!.status).toBe('on L2');
+    expect(out[0]!.settledTxid).toBe('st-1');
   });
 
   it('settled rows and witness-less rows stay as they are', () => {

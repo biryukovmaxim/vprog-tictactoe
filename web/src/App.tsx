@@ -11,6 +11,8 @@ import { MatchPanel } from './MatchPanel';
 import { MyGames } from './MyGames';
 import { OpenGames } from './OpenGames';
 import { SettlementBanner } from './SettlementBanner';
+import { TransferForm } from './TransferForm';
+import { WithdrawForm } from './WithdrawForm';
 import { advanceActivity, myGamesCount, type ActivityWitness } from './match';
 import { useDa } from './state';
 
@@ -37,8 +39,10 @@ export default function App() {
   // Trust-chip walk: each DA poll advances rows whose witnessed change landed
   // and rows whose settlement moved; a no-op walk keeps the array reference.
   useEffect(() => {
-    setActivity((rows) => advanceActivity(rows, { games: da.games, settledTxid: da.state?.settled?.txid ?? null, myUserId }));
-  }, [da, myUserId]);
+    setActivity((rows) =>
+      advanceActivity(rows, { games: da.games, settledTxid: da.state?.settled?.txid ?? null, myUserId, myBalance: balances.l2 }),
+    );
+  }, [da, myUserId, balances.l2]);
 
   return (
     <>
@@ -56,6 +60,8 @@ export default function App() {
             <MatchPanel identity={identity} gameId={selectedGame} onActivity={onActivity} onNeedsFunding={onNeedsFunding} />
           </section>
           <section aria-label="actions">
+            <TransferForm identity={identity} balances={balances} onActivity={onActivity} onNeedsFunding={onNeedsFunding} />
+            <WithdrawForm identity={identity} balances={balances} onActivity={onActivity} onNeedsFunding={onNeedsFunding} />
             <ActivityLog rows={activity} />
           </section>
         </div>

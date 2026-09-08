@@ -9,7 +9,8 @@ import type { Identity } from './KeyBar';
 import type { ActivityWitness } from './match';
 import { NETWORK, connectClient, type WalletUtxo } from './wallet';
 import type { RpcClient } from './kaspa-pkg/kaspa.js';
-import { UtxoCandidate, create_game_tx, join_game_tx, network_params } from './wasm/vprog_tictactoe_encoder_wasm.js';
+import { UtxoCandidate, create_game_tx, join_game_tx, network_params, transfer_tx, withdraw_tx } from './wasm/vprog_tictactoe_encoder_wasm.js';
+import { transferArgs } from './transfer';
 
 /// Minimum sompi a newborn account must be born with; mirrors the guest
 /// `MIN_CREATE_BALANCE` (guest/src/program/deposit_policy.rs).
@@ -133,6 +134,83 @@ export async function submitEntry(opts: {
   const txid = await identity.wallet.submitTx(client, bytes);
   onActivity(`${entry.kind} game`, txid);
   return { txid, deposit };
+}
+
+/// One L2 transfer carrier: no deposit, change-only — the single-UTXO
+/// affordance gate still applies because the carrier spends one UTXO for the
+/// fee. Rows ack on my polled L2 balance moving.
+export async function submitTransfer(opts: {
+  identity: Identity;
+  client: RpcClient;
+  /// Lane subnet hex from /api/state.
+  lane: string;
+  /// Dest user-resource id hex.
+  destUserIdHex: string;
+  /// From `/api/accounts/:destId` — picks the create-vs-plain branch.
+  destExists: boolean;
+  /// Required when the dest account does not exist (binds its newborn lock).
+  destPubkeyHex?: string;
+  amount: bigint;
+  /// My L2 balance at submit; seeds the ack witness.
+  balanceBefore: bigint | null;
+  onActivity: (label: string, txid: string, witness?: ActivityWitness) => void;
+  onNeedsFunding?: (needed: bigint) => void;
+}): Promise<string> {
+  const { identity, client, lane, destUserIdHex, amount, onActivity } = opts;
+  const args = transferArgs({ exists: opts.destExists, pubkeyHex: opts.destPubkeyHex });
+
+  const utxos = await identity.wallet.l1Utxos(client);
+  const picked = pickUtxo(utxos, FEE_ESTIMATE);
+  if (!picked) {
+    opts.onNeedsFunding?.(FEE_ESTIMATE);
+    throw new Error(`insufficient L1 funds — fund ${identity.wallet.address}`);
+  }
+  const utxo = new UtxoCandidate(picked.txid_hex, picked.index, picked.amount, picked.spk_hex, picked.spk_version);
+
+  const bytes = transfer_tx(
+    identity.privkeyHex,
+    network_params(NETWORK),
+    utxo,
+    identity.wallet.address,
+    lane,
+    destUserIdHex,
+    args.dest_exists,
+    amount,
+    args.dest_pubkey_hex ?? null,
+  );
+  const txid = await identity.wallet.submitTx(client, bytes);
+  onActivity('transfer', txid, { kind: 'balance', before: opts.balanceBefore });
+  return txid;
+}
+
+/// One L2 withdraw carrier: the exit destination is fixed to the caller's own
+/// schnorr pubkey inside the encoder; change-only, balance-witnessed like the
+/// transfer.
+export async function submitWithdraw(opts: {
+  identity: Identity;
+  client: RpcClient;
+  /// Lane subnet hex from /api/state.
+  lane: string;
+  amount: bigint;
+  /// My L2 balance at submit; seeds the ack witness.
+  balanceBefore: bigint | null;
+  onActivity: (label: string, txid: string, witness?: ActivityWitness) => void;
+  onNeedsFunding?: (needed: bigint) => void;
+}): Promise<string> {
+  const { identity, client, lane, amount, onActivity } = opts;
+
+  const utxos = await identity.wallet.l1Utxos(client);
+  const picked = pickUtxo(utxos, FEE_ESTIMATE);
+  if (!picked) {
+    opts.onNeedsFunding?.(FEE_ESTIMATE);
+    throw new Error(`insufficient L1 funds — fund ${identity.wallet.address}`);
+  }
+  const utxo = new UtxoCandidate(picked.txid_hex, picked.index, picked.amount, picked.spk_hex, picked.spk_version);
+
+  const bytes = withdraw_tx(identity.privkeyHex, network_params(NETWORK), utxo, identity.wallet.address, lane, CONFIG_ID_HEX, amount);
+  const txid = await identity.wallet.submitTx(client, bytes);
+  onActivity('withdraw', txid, { kind: 'balance', before: opts.balanceBefore });
+  return txid;
 }
 
 /// One activity-log row; `status` walks pending → on L2 → settled via the

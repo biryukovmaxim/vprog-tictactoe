@@ -68,16 +68,19 @@ export function outcomeLine(
 // Activity trust chips: heuristic labels over the DA polls, no extra protocol.
 
 /// What DA change acks one submitted action: the game's board for turns, my
-/// game count for entries (create and join both add a game of mine).
+/// game count for entries (create and join both add a game of mine), my L2
+/// balance for transfers and withdrawals.
 export type ActivityWitness =
   | { kind: 'board'; gameId: string; board: number[] }
-  | { kind: 'myGames'; before: number };
+  | { kind: 'myGames'; before: number }
+  | { kind: 'balance'; before: bigint | null };
 
 /// The polled view the chip walk reads.
 export interface ActivityView {
   games: Record<GameStatus, DaGame[]>;
   settledTxid: string | null;
   myUserId: string;
+  myBalance: bigint | null;
 }
 
 /// Games across all statuses that seat my user.
@@ -111,6 +114,7 @@ export function advanceActivity(rows: ActivityRow[], view: ActivityView): Activi
 
 function acked(witness: ActivityWitness | undefined, view: ActivityView): boolean {
   if (!witness) return false;
+  if (witness.kind === 'balance') return view.myBalance !== null && view.myBalance !== witness.before;
   if (witness.kind === 'myGames') return myGamesCount(view.games, view.myUserId) > witness.before;
   const g = [view.games.open, view.games.playing, view.games.finished]
     .flat()
