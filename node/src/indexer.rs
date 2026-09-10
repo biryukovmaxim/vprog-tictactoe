@@ -322,10 +322,9 @@ pub fn scan_player_events<S: Store>(
         .filter_map(|(k, _)| {
             let key = PlayerEventKey::parse(&k)
                 .unwrap_or_else(|| panic!("malformed player-event key in index: {k:02x?}"));
-            snapshot.is_canonical(key.version.get()).then_some(PlayerEventCursor {
-                version: key.version.get(),
-                game: key.game,
-            })
+            snapshot
+                .is_canonical(key.version.get())
+                .then_some(PlayerEventCursor { version: key.version.get(), game: key.game })
         })
         .take(limit)
         .collect()
