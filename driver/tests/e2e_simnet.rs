@@ -14,10 +14,10 @@ use kaspa_consensus_core::{
     config::params::ForkActivation,
     mass::BlockMassLimits,
     network::{NetworkId, NetworkType},
-    tx::TransactionOutpoint,
+    tx::{Transaction, TransactionOutpoint},
 };
 use kaspa_hashes::Hash;
-use kaspa_rpc_core::{RpcTransaction, api::rpc::RpcApi};
+use kaspa_rpc_core::api::rpc::RpcApi;
 use secp256k1::Keypair;
 use vprog_tictactoe_driver::{config::Config, scenario};
 use vprog_tictactoe_guest::runtime::genesis::GENESIS_PUBKEY;
@@ -429,7 +429,10 @@ async fn test_e2e_simnet_game_flow() {
     assert_eq!(follower_leaf_index, leaf_index, "follower must resolve the same leaf");
     drop(follower);
 
-    // Claims pay the leaf out of the delegate pool at the covenant deposit address.
+    // Claims pay the leaf out of the delegate pool at the covenant deposit address. Claims are
+    // zero-fee by protocol (the permission redeem pins exact value conservation, so no fee can be
+    // burned inside the claim), and the toccata relay floor rejects zero-fee txs from the mempool,
+    // so the claim is mined directly into a block below — the same path the demo L1 takes.
     let covenant_id = handles.covenant_id.as_bytes();
     let deposit_address =
         Address::new(Prefix::Simnet, Version::ScriptHash, &delegate_entry_spk_hash(&covenant_id));
@@ -444,8 +447,7 @@ async fn test_e2e_simnet_game_flow() {
     // Full-leaf claim. On the last leaf of the root the builder folds the permission rent
     // into the payout, so the expected value depends on the remaining unclaimed count.
     let expected_payout = leaf.amount + if record.unclaimed == 1 { record.rent } else { 0 };
-    let claim_txid = submit_full_claim(
-        &arc_client,
+    let (claim_tx, claim_txid) = build_full_claim(
         &covenant_id,
         &record,
         leaf_index,
@@ -453,6 +455,8 @@ async fn test_e2e_simnet_game_flow() {
         delegates,
     )
     .await;
+    l1.mine_block(std::slice::from_ref(&claim_tx)).await;
+    l1.mine_blocks(1).await;
 
     // Payout lands at player A's P2PK destination with the full-leaf value.
     let payout_address = Address::new(Prefix::Simnet, Version::PubKey, &report.player_a_pubkey);
@@ -510,18 +514,18 @@ async fn delegate_pool<C: RpcApi + ?Sized>(
         .collect()
 }
 
-/// Builds and submits the full-leaf permission claim, returning the claim txid.
+/// Builds the full-leaf permission claim for direct mining, returning it and its txid.
 ///
 /// The post-claim root is caller-supplied (the full-leaf fold empties the leaf slot), and the
-/// delegate inputs fund the payout.
-async fn submit_full_claim<C: RpcApi + ?Sized>(
-    client: &Arc<C>,
+/// delegate inputs fund the payout. The claim is zero-fee by protocol, so it cannot ride the
+/// mempool's relay-fee floor; the caller mines it into a block directly.
+async fn build_full_claim(
     covenant_id: &[u8; 32],
     record: &ExitRecord,
     leaf_index: usize,
     new_root: [u8; 32],
     delegates: Vec<(TransactionOutpoint, u64)>,
-) -> Hash {
+) -> (Transaction, Hash) {
     let leaf = &record.leaves[leaf_index];
     let tree = PermissionTreeView::from_leaves(&record.leaves);
     let args = PermissionSpendArgs {
@@ -543,12 +547,9 @@ async fn submit_full_claim<C: RpcApi + ?Sized>(
         new_unclaimed: record.unclaimed - 1,
         delegate_inputs: delegates,
     };
-    let (tx, _utxos) = build_permission_spend(&args).expect("claim assembly failed");
-    client
-        .submit_transaction(RpcTransaction::from(&tx), false)
-        .await
-        .expect("claim submission rejected");
-    tx.id()
+    let tx = build_permission_spend(&args).expect("claim assembly failed").0;
+    let txid = tx.id();
+    (tx, txid)
 }
 
 /// Polls until a UTXO of exactly `expected` sompi appears at `address`.

@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import { fetchAccount, type ExitLeaf, type ExitRoot } from './da';
 import type { Identity } from './KeyBar';
 import type { ActivityWitness } from './match';
-import { NETWORK, connectClient, type WalletUtxo } from './wallet';
+import { NETWORK, connectClient, txFromBorsh, type WalletUtxo } from './wallet';
 import type { RpcClient } from './kaspa-pkg/kaspa.js';
 import { UtxoCandidate, claim_tx, create_game_tx, join_game_tx, network_params, transfer_tx, withdraw_tx } from './wasm/vprog_tictactoe_encoder_wasm.js';
 import { canAffordClaim, claimArgs } from './claim';
@@ -27,6 +27,11 @@ export const FEE_ESTIMATE = 10_000n;
 export const CONFIG_ID_HEX = 'e52d9c508c502347344d8c07ad91cbd6068afc75ff6292f062a09ca381c89e71';
 
 const POLL_MS = 2_000;
+
+/// Demo L1 helper base URL (the local binary that mines txs straight into
+/// blocks). Claims are zero-fee by protocol, so the relay rejects them;
+/// `/inject` is their only submission route.
+const DEMO_L1: string = (import.meta.env.VITE_DEMO_L1 as string) ?? 'http://127.0.0.1:9890';
 
 /// Sompi the entry must deposit so the account can pay `stake` afterwards:
 /// the stake shortfall, floored by the min-create balance for newborns.
@@ -265,7 +270,17 @@ export async function submitClaim(opts: {
     utxos,
     args.fee,
   );
-  const txid = await identity.wallet.submitTx(client, bytes);
+  let txid: string;
+  try {
+    txid = await identity.wallet.submitTx(client, bytes);
+  } catch {
+    // Claims are zero-fee by protocol, so the relay floor rejects them from
+    // the mempool: the demo L1's /inject mines the raw borsh tx directly
+    // into a block instead. The txid rides the tx bytes themselves.
+    const resp = await fetch(`${DEMO_L1}/inject`, { method: 'POST', body: bytes });
+    if (!resp.ok) throw new Error(`${DEMO_L1}/inject: HTTP ${resp.status}`);
+    txid = txFromBorsh(bytes).id;
+  }
   onActivity('claim exits', txid, { kind: 'l1', before: opts.balanceBefore });
   return txid;
 }

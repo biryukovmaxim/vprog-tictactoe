@@ -223,6 +223,7 @@ pub async fn run<C: RpcApi + ?Sized>(
 ) -> Result<ScenarioReport, String> {
     let operator_keypair = Keypair::from_secret_key(secp256k1::SECP256K1, &cfg.private_key);
     let wallet = Wallet::new(&**client, params, operator_keypair);
+    log::info!("operator address (fund this before running): {}", wallet.address());
     let lane_subnet = SubnetworkId::from_namespace(cfg.lane_id.to_be_bytes());
 
     let ctx =

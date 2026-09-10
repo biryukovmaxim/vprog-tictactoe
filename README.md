@@ -85,8 +85,8 @@ own actions, accounts and game rules.
 - [x] Node `ttd`: runner driver (execution and proving modes, devmode stub and GPU proving) with
       the DA server above
 - [x] Driver `ttflow`: scripted scenarios
-- [x] Env-gated L1 e2e against a local simnet (in-process rig; all scenario carriers accepted —
-      the appended claim tail awaits a vprogs settlement fix, see `docs/demo/README.md`)
+- [x] Env-gated L1 e2e against a local simnet (in-process rig; full flow through settlement,
+      withdraw, and claim; runbook in `docs/demo/README.md`)
 - [x] Web frontend: DA client, privkey wallet, match board, transfer/withdraw/claim actions,
       activity trust chips (`docs/demo/` has the runbook and current live limits)
 - [ ] Env-gated L1 e2e against a local testnet-10 fork node

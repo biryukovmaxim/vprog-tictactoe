@@ -9,7 +9,7 @@ import { submitClaim } from '../composition';
 import type { ExitLeaf, ExitRoot } from '../da';
 import { loadIdentity } from '../KeyBar';
 import { canAffordClaim, claimArgs, claimableExits, mySpkHex } from '../claim';
-import { initKaspa, type WalletUtxo } from '../wallet';
+import { initKaspa, txFromBorsh, type WalletUtxo } from '../wallet';
 import initEncoder from '../wasm/vprog_tictactoe_encoder_wasm.js';
 import type { RpcClient } from '../kaspa-pkg/kaspa.js';
 import { Transaction } from '../kaspa-pkg/kaspa.js';
@@ -264,5 +264,37 @@ describe('submitClaim', () => {
       }),
     ).rejects.toThrow(/delegate/);
     expect(submitTransaction).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the demo L1 /inject when the relay rejects the zero-fee claim', async () => {
+    const identity = await loadIdentity(PRIVKEY);
+    const { root, leaf } = myClaimRoot(identity.wallet.pubkeyHex, 1);
+    const { client, submitTransaction } = delegateClient([55_000_000n]);
+    submitTransaction.mockRejectedValueOnce(new Error('rejected: 0 fees'));
+    const inject = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => ({ ok: true }) as Response);
+    vi.stubGlobal('fetch', inject);
+    const onActivity = vi.fn();
+
+    const txid = await submitClaim({
+      identity,
+      client,
+      covenantId: COVENANT,
+      depositAddress: DEPOSIT,
+      root,
+      leaf,
+      balanceBefore: null,
+      onActivity,
+    });
+
+    expect(submitTransaction).toHaveBeenCalledOnce();
+    expect(inject).toHaveBeenCalledOnce();
+    const [url, init] = inject.mock.calls[0]!;
+    expect(url).toBe('http://127.0.0.1:9890/inject');
+    expect(init!.method).toBe('POST');
+    // The body is the raw borsh claim bytes; the txid is the id they embed.
+    const sent = txFromBorsh(init!.body as Uint8Array);
+    expect(sent.inputs).toHaveLength(2); // permission continuation + the one delegate
+    expect(txid).toBe(sent.id);
+    expect(onActivity).toHaveBeenCalledWith('claim exits', txid, { kind: 'l1', before: null });
   });
 });
