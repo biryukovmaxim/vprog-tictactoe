@@ -211,7 +211,10 @@ pub fn exit_views<S: Store>(store: &S) -> Vec<ExitView> {
             let record = get_exit_record(store, &root)?;
             let tree = PermissionTreeView::from_leaves(&record.leaves);
             let depth = tree.depth();
-            let spent = (0..record.leaves.len()).map(|i| leaf_spent(store, &root, i)).collect();
+            // Records key on the script-hash commitment while spend marks key on the raw padded
+            // root (the redeem's `old_root`), so marks are looked up under the view root.
+            let raw_root = tree.root();
+            let spent = (0..record.leaves.len()).map(|i| leaf_spent(store, &raw_root, i)).collect();
             let siblings = (0..record.leaves.len()).map(|i| tree.siblings(i)).collect();
             Some(ExitView { root, record, spent, depth, siblings })
         })
@@ -321,6 +324,16 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let store: RocksDbStore = RocksDbStore::open(dir.path());
 
+        // Production key spaces: records under the script-hash commitment the runner publishes,
+        // spend marks under the raw padded root the redeem's old_root carries.
+        let finalize = |leaves: &[ExitLeaf]| {
+            let mut acc = PermissionTreeAccumulator::new();
+            for leaf in leaves {
+                acc.add_exit(leaf.to_standard_spk(), leaf.amount);
+            }
+            acc.finalize()
+        };
+
         let pk0 = [0x11u8; 32];
         let pk1 = [0x22u8; 32];
         let leaves1 = vec![
@@ -328,7 +341,9 @@ mod tests {
             ExitLeaf::from_pair(StandardSpk::PubKey(&pk1), 25_000_000),
         ];
         let tree1 = PermissionTreeView::from_leaves(&leaves1);
-        let root1 = tree1.root();
+        let raw_root1 = tree1.root();
+        let key1 = finalize(&leaves1);
+        assert_ne!(key1, raw_root1);
         let rec1 = ExitRecord {
             settlement_txid: [0xaa; 32],
             outpoint_index: 1,
@@ -345,7 +360,8 @@ mod tests {
             ExitLeaf::from_pair(StandardSpk::PubKey(&pk3), 30_000_000),
         ];
         let tree2 = PermissionTreeView::from_leaves(&leaves2);
-        let root2 = tree2.root();
+        let raw_root2 = tree2.root();
+        let key2 = finalize(&leaves2);
         let rec2 = ExitRecord {
             settlement_txid: [0xbb; 32],
             outpoint_index: 1,
@@ -358,15 +374,15 @@ mod tests {
         let mark = SpentMark { spend_txid: [0xcc; 32], deduct: 50_000_000, new_root: [0xdd; 32] };
 
         let mut wb = store.write_batch();
-        put_exit_record(&mut wb, &root1, &rec1);
-        put_exit_record(&mut wb, &root2, &rec2);
-        mark_leaf_spent(&mut wb, &root1, 0, &mark);
+        put_exit_record(&mut wb, &key1, &rec1);
+        put_exit_record(&mut wb, &key2, &rec2);
+        mark_leaf_spent(&mut wb, &raw_root1, 0, &mark);
         store.commit(wb);
 
         let views = exit_views(&store);
         assert_eq!(views.len(), 2);
 
-        let view1 = views.iter().find(|v| v.root == root1).expect("view1 present");
+        let view1 = views.iter().find(|v| v.root == key1).expect("view1 present");
         assert_eq!(view1.record, rec1);
         assert_eq!(view1.depth, PermissionTreeAccumulator::required_depth(rec1.leaves.len()));
         assert_eq!(view1.depth, tree1.depth());
@@ -385,10 +401,10 @@ mod tests {
                     curr = PermissionTreeAccumulator::hash_branch(sib, &curr);
                 }
             }
-            assert_eq!(curr, view1.root);
+            assert_eq!(curr, raw_root1);
         }
 
-        let view2 = views.iter().find(|v| v.root == root2).expect("view2 present");
+        let view2 = views.iter().find(|v| v.root == key2).expect("view2 present");
         assert_eq!(view2.record, rec2);
         assert_eq!(view2.depth, PermissionTreeAccumulator::required_depth(rec2.leaves.len()));
         assert_eq!(view2.depth, tree2.depth());
@@ -407,7 +423,7 @@ mod tests {
                     curr = PermissionTreeAccumulator::hash_branch(sib, &curr);
                 }
             }
-            assert_eq!(curr, view2.root);
+            assert_eq!(curr, raw_root2);
         }
     }
 }

@@ -770,13 +770,23 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json, serde_json::json!({"roots": []}));
 
-        // Two roots; root1 has two leaves with leaf 0 spent, root2 has one leaf.
+        // Two roots; root1 has two leaves with leaf 0 spent, root2 has one leaf. Records are
+        // keyed by the script-hash commitment the runner publishes, marks by the raw padded root.
+        let finalize = |leaves: &[ExitLeaf]| {
+            let mut acc = PermissionTreeAccumulator::new();
+            for leaf in leaves {
+                acc.add_exit(leaf.to_standard_spk(), leaf.amount);
+            }
+            acc.finalize()
+        };
+
         let seed_leaves1 = vec![
             ExitLeaf::from_pair(StandardSpk::PubKey(&[0x11; 32]), 50_000_000),
             ExitLeaf::from_pair(StandardSpk::PubKey(&[0x22; 32]), 25_000_000),
         ];
         let tree1 = PermissionTreeView::from_leaves(&seed_leaves1);
-        let root1 = tree1.root();
+        let raw_root1 = tree1.root();
+        let key1 = finalize(&seed_leaves1);
         let rec1 = ExitRecord {
             settlement_txid: [0xaa; 32],
             outpoint_index: 1,
@@ -788,7 +798,8 @@ mod tests {
 
         let seed_leaves2 = vec![ExitLeaf::from_pair(StandardSpk::PubKey(&[0x33; 32]), 70_000_000)];
         let tree2 = PermissionTreeView::from_leaves(&seed_leaves2);
-        let root2 = tree2.root();
+        let raw_root2 = tree2.root();
+        let key2 = finalize(&seed_leaves2);
         let rec2 = ExitRecord {
             settlement_txid: [0xbb; 32],
             outpoint_index: 0,
@@ -801,9 +812,9 @@ mod tests {
         let mark = SpentMark { spend_txid: [0xcc; 32], deduct: 50_000_000, new_root: [0xdd; 32] };
 
         let mut wb = store.write_batch();
-        put_exit_record(&mut wb, &root1, &rec1);
-        put_exit_record(&mut wb, &root2, &rec2);
-        mark_leaf_spent(&mut wb, &root1, 0, &mark);
+        put_exit_record(&mut wb, &key1, &rec1);
+        put_exit_record(&mut wb, &key2, &rec2);
+        mark_leaf_spent(&mut wb, &raw_root1, 0, &mark);
         store.commit(wb);
 
         let app = router(state);
@@ -815,7 +826,7 @@ mod tests {
         let roots = json["roots"].as_array().unwrap();
         assert_eq!(roots.len(), 2);
 
-        let root1_hex = faster_hex::hex_string(&root1);
+        let root1_hex = faster_hex::hex_string(&key1);
         let v1 = roots.iter().find(|r| r["root"] == root1_hex).expect("root1 present");
         assert_eq!(v1["settlement_txid"], faster_hex::hex_string(&[0xaa; 32]));
         assert_eq!(v1["outpoint_index"], 1);
@@ -859,13 +870,20 @@ mod tests {
         );
         assert_eq!(leaves1[1]["full_claim"]["new_unclaimed"], 1);
 
-        // Root 2: single leaf, depth 0, empty siblings, unspent.
-        let root2_hex = faster_hex::hex_string(&root2);
+        // Root 2: single leaf folds at depth 1 against the empty-hash sibling, unspent.
+        let root2_hex = faster_hex::hex_string(&key2);
         let v2 = roots.iter().find(|r| r["root"] == root2_hex).expect("root2 present");
         let leaves2 = v2["leaves"].as_array().unwrap();
         assert_eq!(leaves2.len(), 1);
         assert!(leaves2[0]["spent"].is_null());
-        assert_eq!(leaves2[0]["siblings"], serde_json::json!([]));
+        assert_eq!(leaves2[0]["siblings"], serde_json::json!([faster_hex::hex_string(&empty)]));
+        assert_eq!(leaves2[0]["siblings"].as_array().unwrap().len(), tree2.depth());
+        assert_eq!(tree2.depth(), 1, "a single leaf folds at depth 1");
+        let leaf2_hash = PermissionTreeAccumulator::hash_leaf(
+            rec2.leaves[0].to_standard_spk(),
+            rec2.leaves[0].amount,
+        );
+        assert_eq!(raw_root2, PermissionTreeAccumulator::hash_branch(&leaf2_hash, &empty));
         assert_eq!(
             leaves2[0]["full_claim"],
             serde_json::json!({

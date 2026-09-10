@@ -107,6 +107,9 @@ async fn test_e2e_simnet_game_flow() {
     };
 
     // 5. Start runner in settlement mode (dev stub proofs) with fresh covenant deployment.
+    // Capture the L1 sink before the deploy: the exec-follower below joins the covenant with
+    // `start_from` pinned to a block at/before the bootstrap.
+    let deploy_anchor = arc_client.get_block_dag_info().await.expect("read L1 sink").sink;
     let temp_dir = tempfile::tempdir().expect("tempdir");
     let runner_cfg = RunnerConfig {
         wrpc_url: wrpc_url.clone(),
@@ -367,9 +370,64 @@ async fn test_e2e_simnet_game_flow() {
     );
     assert_ne!(record.settlement_txid, [0u8; 32], "record must name the settlement tx");
 
-    // The stored leaves must rebuild the root the record is keyed by.
+    // The record key is script-hash space: the stored leaves must rebuild it through the
+    // accumulator's redeem script hash, while the view's raw padded root matches the
+    // accumulator root and differs from the key.
+    let mut acc = PermissionTreeAccumulator::new();
+    for leaf in &record.leaves {
+        acc.add_exit(leaf.to_standard_spk(), leaf.amount);
+    }
     let tree = PermissionTreeView::from_leaves(&record.leaves);
-    assert_eq!(tree.root(), exit_root, "stored leaves must rebuild the recorded root");
+    assert_eq!(
+        acc.finalize(),
+        exit_root,
+        "stored leaves must rebuild the recorded script-hash key"
+    );
+    assert_eq!(tree.root(), acc.root(), "view root must equal the accumulator's padded root");
+    assert_ne!(tree.root(), exit_root, "raw root must differ from the script-hash key");
+
+    // 10b. Exec-follower phase: a second, keyless runner in exec mode joins the same covenant
+    // and rebuilds the same exit index purely from L1 observation. Depends only on the settled
+    // record, so it runs before the delegate-pool/claim tail.
+    //
+    // Red-first: like the claim tail below, this phase is expected to fail until the vprogs
+    // bridge seq-commit defect is fixed — the whole exit section times out at its first store
+    // wait today.
+    let follower_dir = tempfile::tempdir().expect("follower tempdir");
+    let follower_cfg = RunnerConfig {
+        wrpc_url: wrpc_url.clone(),
+        private_key: None,
+        network_id,
+        program_elf: None,
+        batch_elf: None,
+        aggregator_elf: None,
+        data_dir: follower_dir.path().to_path_buf(),
+        lane_id: Some(1),
+        covenant_id: Some(handles.covenant_id),
+        bootstrap_txid: None,
+        start_from: Some(deploy_anchor),
+        seed_depth: 500,
+        min_confirmations: None,
+        prove: false,
+        start_mode: Some(StartMode::Catchup),
+    };
+    let follower = start_runner(
+        &follower_cfg,
+        &arc_client,
+        &params,
+        elfs,
+        delegate_entry_spk_hash,
+        Some(Indexer(Arc::new(TicTacToeIndexer))),
+        Some(Arc::new(TicTacToeExitIndexer)),
+    )
+    .await
+    .expect("follower start_runner failed");
+    let follower_store = follower.node.api().storage().store().clone();
+    let (_, follower_record, follower_leaf_index) =
+        wait_exit_with_leaf(&*follower_store, dest_spk.to_script_bytes().as_slice()).await;
+    assert_eq!(follower_record, record, "follower must hold the same exit record");
+    assert_eq!(follower_leaf_index, leaf_index, "follower must resolve the same leaf");
+    drop(follower);
 
     // Claims pay the leaf out of the delegate pool at the covenant deposit address.
     let covenant_id = handles.covenant_id.as_bytes();
@@ -400,8 +458,9 @@ async fn test_e2e_simnet_game_flow() {
     let payout_address = Address::new(Prefix::Simnet, Version::PubKey, &report.player_a_pubkey);
     wait_payout(&arc_client, &payout_address, expected_payout).await;
 
-    // Bridge watcher coverage: the spend mark names our claim tx with the full deduct.
-    let mark = wait_leaf_spent(&*store, &exit_root, leaf_index).await;
+    // Bridge watcher coverage: the spend mark names our claim tx with the full deduct. Marks
+    // key on the raw view root (the redeem's old_root), not the script-hash record key.
+    let mark = wait_leaf_spent(&*store, &tree.root(), leaf_index).await;
     assert_eq!(mark.spend_txid, claim_txid.as_bytes(), "spend mark must name the claim tx");
     assert_eq!(mark.deduct, leaf.amount, "spend mark must record the full-leaf deduct");
 

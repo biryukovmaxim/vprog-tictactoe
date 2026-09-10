@@ -184,7 +184,8 @@ function myClaimRoot(pubkeyHex: string, newUnclaimed: number): { root: ExitRoot;
     spk_hex: mySpkHex(pubkeyHex),
     amount: 50_000_000,
     spent: null,
-    siblings: ['22'.repeat(32), '33'.repeat(32)],
+    // A single-leaf root folds at depth 1: its one sibling is the empty-hash.
+    siblings: ['dbc1b4c900ffe48d575b5da5c638040125f65db0fe3e24494b76ea986457d986'],
     full_claim: { new_root: '44'.repeat(32), new_unclaimed: newUnclaimed },
   };
   return { root: { ...FIXTURE, unclaimed: newUnclaimed + 1, leaves: [leaf] }, leaf };
