@@ -51,8 +51,11 @@ Run the relevant recipes before every commit; `just check` (which includes `fmt-
 
 ## Docs layout
 
-- `docs/<topic>/`: public, committed documentation; the README links into it.
-- `docs/internal/`: git-excluded (agent-written specs, implementation plans, session notes). Never stage it.
+- `docs/<topic>/`: committed docs are human-readable application documentation only; the README links into it.
+- `docs/internal/`: git-excluded home for agent working documents — specs, implementation
+  plans, session notes, agent-to-agent communication. They go here and only here; never
+  committed under any other path.
+- Code, doc comments, and the README never reference internal documents or their paths.
 
 ## vprogs dependency
 

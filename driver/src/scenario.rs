@@ -67,6 +67,12 @@ pub struct ScenarioReport {
     pub turn_b_txid: Hash,
     /// Transaction ID of player A's `Withdraw` carrier.
     pub withdraw_txid: Hash,
+    /// Resource ID of the game under test.
+    pub game_id: ResourceId,
+    /// Resource ID of player A.
+    pub player_a_user_id: ResourceId,
+    /// Resource ID of player B.
+    pub player_b_user_id: ResourceId,
 }
 
 /// Shared execution context for submitting scenario carrier transactions.
@@ -336,6 +342,9 @@ pub async fn run<C: RpcApi + ?Sized>(
         turn_a_txid,
         turn_b_txid,
         withdraw_txid,
+        game_id,
+        player_a_user_id,
+        player_b_user_id,
     })
 }
 

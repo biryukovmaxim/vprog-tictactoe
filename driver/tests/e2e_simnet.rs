@@ -19,8 +19,13 @@ use kaspa_hashes::Hash;
 use secp256k1::Keypair;
 use vprog_tictactoe_driver::{config::Config, scenario};
 use vprog_tictactoe_guest::runtime::genesis::GENESIS_PUBKEY;
+use vprog_tictactoe_node::indexer::{
+    GameStatus, PlayerEvent, TicTacToeIndexer, scan_games_by_status, scan_player_events,
+};
+use vprogs_core_types::ResourceId;
 use vprogs_node_test_utils::L1Node;
-use vprogs_runner::{Elfs, RunnerConfig, StartMode, start_runner};
+use vprogs_runner::{Elfs, Indexer, RunnerConfig, StartMode, start_runner};
+use vprogs_storage_types::Store;
 use vprogs_zk_backend_risc0_api::delegate_entry_spk_hash;
 use vprogs_zk_backend_risc0_app_kit::dev_genesis_keypair;
 use vprogs_zk_backend_risc0_test_suite::{
@@ -112,9 +117,17 @@ async fn test_e2e_simnet_game_flow() {
         start_mode: Some(StartMode::Fresh),
     };
 
-    let handles = start_runner(&runner_cfg, &arc_client, &params, elfs, delegate_entry_spk_hash)
-        .await
-        .expect("start_runner failed");
+    let handles = start_runner(
+        &runner_cfg,
+        &arc_client,
+        &params,
+        elfs,
+        delegate_entry_spk_hash,
+        Some(Indexer(Arc::new(TicTacToeIndexer))),
+        None,
+    )
+    .await
+    .expect("start_runner failed");
 
     // Mine covenant bootstrap transaction.
     l1.mine_blocks(2).await;
@@ -161,6 +174,171 @@ async fn test_e2e_simnet_game_flow() {
     assert_ne!(report.turn_a_txid, Hash::default());
     assert_ne!(report.turn_b_txid, Hash::default());
     assert_ne!(report.withdraw_txid, Hash::default());
+
+    // 9. Poll until secondary index updates commit and assert canonical scans.
+    let store = handles.node.api().storage().store().clone();
+    let game_bytes: [u8; 32] = report.game_id.as_slice().try_into().unwrap();
+
+    let poll_timeout = Duration::from_secs(30);
+    let poll_interval = Duration::from_millis(250);
+    let start_time = tokio::time::Instant::now();
+
+    let mut indexed = false;
+    while start_time.elapsed() < poll_timeout {
+        let snapshot = store.canonical_chain().snapshot();
+
+        let a_created = scan_player_events(
+            &*store,
+            &snapshot,
+            &report.player_a_user_id,
+            PlayerEvent::Created,
+            None,
+            100,
+        );
+        let a_won = scan_player_events(
+            &*store,
+            &snapshot,
+            &report.player_a_user_id,
+            PlayerEvent::Won,
+            None,
+            100,
+        );
+        let b_joined = scan_player_events(
+            &*store,
+            &snapshot,
+            &report.player_b_user_id,
+            PlayerEvent::Joined,
+            None,
+            100,
+        );
+        let b_lost = scan_player_events(
+            &*store,
+            &snapshot,
+            &report.player_b_user_id,
+            PlayerEvent::Lost,
+            None,
+            100,
+        );
+        let finished_games =
+            scan_games_by_status(&*store, &snapshot, GameStatus::Finished, None, 100);
+        let open_games = scan_games_by_status(&*store, &snapshot, GameStatus::Open, None, 100);
+
+        let has_a_created = a_created.iter().any(|e| e.game == game_bytes);
+        let has_a_won = a_won.iter().any(|e| e.game == game_bytes);
+        let has_b_joined = b_joined.iter().any(|e| e.game == game_bytes);
+        let has_b_lost = b_lost.iter().any(|e| e.game == game_bytes);
+        let has_finished = finished_games.contains(&game_bytes);
+        let not_open = !open_games.contains(&game_bytes);
+
+        if has_a_created && has_a_won && has_b_joined && has_b_lost && has_finished && not_open {
+            indexed = true;
+            break;
+        }
+
+        tokio::time::sleep(poll_interval).await;
+    }
+
+    assert!(indexed, "timed out waiting for secondary index entries after completed match");
+
+    let snapshot = store.canonical_chain().snapshot();
+
+    // 9b. Exact event streams: exactly one canonical entry per (player, event), each naming
+    // this game. The scenario creates one game by A (wins) joined by B (loses), so a fresh
+    // covenant holds exactly these four entries and nothing else.
+    let a_created = scan_player_events(
+        &*store,
+        &snapshot,
+        &report.player_a_user_id,
+        PlayerEvent::Created,
+        None,
+        100,
+    );
+    let a_won = scan_player_events(
+        &*store,
+        &snapshot,
+        &report.player_a_user_id,
+        PlayerEvent::Won,
+        None,
+        100,
+    );
+    let b_joined = scan_player_events(
+        &*store,
+        &snapshot,
+        &report.player_b_user_id,
+        PlayerEvent::Joined,
+        None,
+        100,
+    );
+    let b_lost = scan_player_events(
+        &*store,
+        &snapshot,
+        &report.player_b_user_id,
+        PlayerEvent::Lost,
+        None,
+        100,
+    );
+
+    for (label, stream) in
+        [("A Created", &a_created), ("A Won", &a_won), ("B Joined", &b_joined), ("B Lost", &b_lost)]
+    {
+        assert_eq!(stream.len(), 1, "player {label} stream must hold exactly one entry");
+        assert_eq!(stream[0].game, game_bytes, "player {label} entry must name the game");
+        assert!(
+            snapshot.is_canonical(stream[0].version),
+            "player {label} version must be canonical"
+        );
+    }
+
+    // 9c. Status buckets: the lone game ended terminal, so it lives in Finished and only there.
+    let finished_games = scan_games_by_status(&*store, &snapshot, GameStatus::Finished, None, 100);
+    let open_games = scan_games_by_status(&*store, &snapshot, GameStatus::Open, None, 100);
+    let playing_games = scan_games_by_status(&*store, &snapshot, GameStatus::Playing, None, 100);
+    assert_eq!(finished_games, vec![game_bytes], "Finished bucket must hold exactly the game");
+    assert!(open_games.is_empty(), "Open bucket must be empty once the lone game finished");
+    assert!(playing_games.is_empty(), "Playing bucket must be empty once the match settled");
+
+    // 9d. Pagination invariants: walking limit-1 pages from an exclusive cursor concatenates to
+    // exactly the unlimited scan, and the page past the last entry is empty. Streams here hold
+    // one entry each (multi-entry paging is pinned by node indexer unit tests and needs the
+    // open-game driver helper); the empty-bucket cases (Open, Playing) exercise the empty-walk.
+    for (player, event) in [
+        (&report.player_a_user_id, PlayerEvent::Created),
+        (&report.player_a_user_id, PlayerEvent::Won),
+        (&report.player_b_user_id, PlayerEvent::Joined),
+        (&report.player_b_user_id, PlayerEvent::Lost),
+    ] {
+        let full = scan_player_events(&*store, &snapshot, player, event, None, 100);
+        let mut paged = Vec::new();
+        let mut after = None;
+        while let Some(&entry) =
+            scan_player_events(&*store, &snapshot, player, event, after, 1).first()
+        {
+            after = Some(entry);
+            paged.push(entry);
+        }
+        assert_eq!(paged, full, "limit-1 paging must reproduce the full {event:?} stream");
+        assert!(
+            scan_player_events(&*store, &snapshot, player, event, after, 1).is_empty(),
+            "page past the last {event:?} entry must be empty"
+        );
+    }
+
+    for status in [GameStatus::Open, GameStatus::Playing, GameStatus::Finished] {
+        let full = scan_games_by_status(&*store, &snapshot, status, None, 100);
+        let mut paged = Vec::new();
+        let mut after_game = None;
+        while let Some(&game) =
+            scan_games_by_status(&*store, &snapshot, status, after_game, 1).first()
+        {
+            after_game = Some(ResourceId::from(game));
+            paged.push(game);
+        }
+        assert_eq!(paged, full, "limit-1 paging must reproduce the full {status:?} bucket");
+        assert!(
+            scan_games_by_status(&*store, &snapshot, status, after_game, 1).is_empty(),
+            "page past the last {status:?} entry must be empty"
+        );
+    }
 
     // Stop background miner and cleanup.
     mining_stop.notify_one();

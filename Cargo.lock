@@ -966,10 +966,13 @@ checksum = "31b698c5f9a010f6573133b09e0de5408834d0c82f8d7475a89fc1867a71cd90"
 dependencies = [
  "axum-core",
  "bytes",
+ "form_urlencoded",
  "futures-util",
  "http",
  "http-body",
  "http-body-util",
+ "hyper",
+ "hyper-util",
  "itoa",
  "matchit",
  "memchr",
@@ -977,10 +980,15 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "serde_core",
+ "serde_json",
+ "serde_path_to_error",
+ "serde_urlencoded",
  "sync_wrapper",
+ "tokio",
  "tower",
  "tower-layer",
  "tower-service",
+ "tracing",
 ]
 
 [[package]]
@@ -999,6 +1007,7 @@ dependencies = [
  "sync_wrapper",
  "tower-layer",
  "tower-service",
+ "tracing",
 ]
 
 [[package]]
@@ -1037,7 +1046,7 @@ dependencies = [
  "bitflags 2.11.1",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
+ "itertools 0.11.0",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -2914,6 +2923,12 @@ dependencies = [
  "http-body",
  "pin-project-lite",
 ]
+
+[[package]]
+name = "http-range-header"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9171a2ea8a68358193d15dd5d70c1c10a2afc3e7e4c5bc92bc9f025cebd7359c"
 
 [[package]]
 name = "httparse"
@@ -5001,6 +5016,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
 
 [[package]]
+name = "mime_guess"
+version = "2.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7c44f8e672c00fe5308fa235f821cb4198414e1c77935c1ab6948d3fd78550e"
+dependencies = [
+ "mime",
+ "unicase",
+]
+
+[[package]]
 name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5857,7 +5882,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
 dependencies = [
  "heck",
- "itertools 0.14.0",
+ "itertools 0.11.0",
  "log",
  "multimap",
  "once_cell",
@@ -5877,7 +5902,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "343d3bd7056eda839b03204e68deff7d1b13aba7af2b2fd16890697274262ee7"
 dependencies = [
  "heck",
- "itertools 0.14.0",
+ "itertools 0.11.0",
  "log",
  "multimap",
  "petgraph 0.8.3",
@@ -5898,7 +5923,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools 0.11.0",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
@@ -5911,7 +5936,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "27c6023962132f4b30eb4c172c91ce92d933da334c59c23cddee82358ddafb0b"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools 0.11.0",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
@@ -7184,6 +7209,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_path_to_error"
+version = "0.1.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10a9ff822e371bb5403e391ecd83e182e0e77ba7f6fe0160b795797109d1b457"
+dependencies = [
+ "itoa",
+ "serde",
+ "serde_core",
+]
+
+[[package]]
 name = "serde_spanned"
 version = "0.6.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8052,14 +8088,24 @@ checksum = "d4e6559d53cc268e5031cd8429d05415bc4cb4aefc4aa5d6cc35fbf5b924a1f8"
 dependencies = [
  "bitflags 2.11.1",
  "bytes",
+ "futures-core",
  "futures-util",
  "http",
  "http-body",
+ "http-body-util",
+ "http-range-header",
+ "httpdate",
  "iri-string",
+ "mime",
+ "mime_guess",
+ "percent-encoding",
  "pin-project-lite",
+ "tokio",
+ "tokio-util",
  "tower",
  "tower-layer",
  "tower-service",
+ "tracing",
 ]
 
 [[package]]
@@ -8459,14 +8505,39 @@ dependencies = [
  "tempfile",
  "tokio",
  "vprog-tictactoe-guest",
+ "vprog-tictactoe-node",
  "vprogs-core-types",
  "vprogs-l1-wallet",
  "vprogs-node-test-utils",
  "vprogs-runner",
+ "vprogs-scheduling-scheduler",
+ "vprogs-storage-canonical-chain",
+ "vprogs-storage-types",
  "vprogs-zk-abi",
  "vprogs-zk-backend-risc0-api",
  "vprogs-zk-backend-risc0-app-kit",
  "vprogs-zk-backend-risc0-test-suite",
+]
+
+[[package]]
+name = "vprog-tictactoe-encoder-wasm"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "faster-hex",
+ "getrandom 0.3.4",
+ "kaspa-addresses",
+ "kaspa-consensus-core",
+ "kaspa-hashes",
+ "kaspa-txscript",
+ "ring",
+ "secp256k1",
+ "vprog-tictactoe-guest",
+ "vprogs-core-types",
+ "vprogs-zk-abi",
+ "vprogs-zk-backend-risc0-api",
+ "vprogs-zk-backend-risc0-app-kit",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -8488,21 +8559,41 @@ dependencies = [
 name = "vprog-tictactoe-node"
 version = "0.1.0"
 dependencies = [
+ "axum",
+ "borsh",
  "ctrlc",
+ "faster-hex",
+ "kaspa-addresses",
  "kaspa-consensus-core",
  "kaspa-core",
  "kaspa-hashes",
  "log",
  "secp256k1",
+ "serde",
+ "serde_json",
+ "tempfile",
  "tokio",
+ "tower",
+ "tower-http 0.6.8",
+ "vprog-tictactoe-guest",
+ "vprogs-core-types",
+ "vprogs-l1-types",
  "vprogs-runner",
+ "vprogs-scheduling-scheduler",
+ "vprogs-state-ptr-latest",
+ "vprogs-state-version",
+ "vprogs-storage-canonical-chain",
+ "vprogs-storage-rocksdb-store",
+ "vprogs-storage-types",
+ "vprogs-zk-abi",
  "vprogs-zk-backend-risc0-api",
+ "zerocopy",
 ]
 
 [[package]]
 name = "vprogs-core-atomics"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "arc-swap",
  "crossbeam-queue",
@@ -8516,7 +8607,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-codec"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "thiserror 2.0.18",
  "zerocopy",
@@ -8525,7 +8616,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-hashing"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "blake3",
  "sha2",
@@ -8534,7 +8625,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-macros"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -8544,7 +8635,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-merkle-tree"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "vprogs-core-hashing",
 ]
@@ -8552,7 +8643,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-smt"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "tap",
  "vprogs-core-codec",
@@ -8564,7 +8655,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-types"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "borsh",
  "rkyv",
@@ -8575,7 +8666,7 @@ dependencies = [
 [[package]]
 name = "vprogs-l1-bridge"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "arc-swap",
  "crossbeam-queue",
@@ -8584,6 +8675,7 @@ dependencies = [
  "kaspa-notify",
  "kaspa-rpc-core",
  "kaspa-seq-commit",
+ "kaspa-txscript",
  "kaspa-wrpc-client",
  "log",
  "tap",
@@ -8593,13 +8685,15 @@ dependencies = [
  "vprogs-core-macros",
  "vprogs-core-types",
  "vprogs-l1-types",
+ "vprogs-zk-abi",
+ "vprogs-zk-backend-risc0-api",
  "workflow-core",
 ]
 
 [[package]]
 name = "vprogs-l1-types"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "borsh",
  "kaspa-consensus-core",
@@ -8614,7 +8708,7 @@ dependencies = [
 [[package]]
 name = "vprogs-l1-utils"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "blake3",
 ]
@@ -8622,7 +8716,7 @@ dependencies = [
 [[package]]
 name = "vprogs-l1-wallet"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "kaspa-addresses",
  "kaspa-consensus-core",
@@ -8640,7 +8734,7 @@ dependencies = [
 [[package]]
 name = "vprogs-node-framework"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "log",
  "tap",
@@ -8660,7 +8754,7 @@ dependencies = [
 [[package]]
 name = "vprogs-node-test-utils"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "kaspa-addresses",
  "kaspa-consensus-core",
@@ -8691,8 +8785,9 @@ dependencies = [
 [[package]]
 name = "vprogs-runner"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
+ "borsh",
  "clap",
  "ctrlc",
  "fastrand",
@@ -8718,6 +8813,8 @@ dependencies = [
  "vprogs-scheduling-scheduler",
  "vprogs-storage-manager",
  "vprogs-storage-rocksdb-store",
+ "vprogs-storage-types",
+ "vprogs-zk-abi",
  "vprogs-zk-aggregate-prover",
  "vprogs-zk-backend-risc0-api",
  "vprogs-zk-backend-risc0-settler",
@@ -8729,7 +8826,7 @@ dependencies = [
 [[package]]
 name = "vprogs-scheduling-execution-workers"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "crossbeam-deque",
  "crossbeam-queue",
@@ -8744,7 +8841,7 @@ dependencies = [
 [[package]]
 name = "vprogs-scheduling-scheduler"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "arc-swap",
  "borsh",
@@ -8776,7 +8873,7 @@ dependencies = [
 [[package]]
 name = "vprogs-state-batch-metadata"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "borsh",
  "vprogs-core-types",
@@ -8786,7 +8883,7 @@ dependencies = [
 [[package]]
 name = "vprogs-state-metadata"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "borsh",
  "vprogs-core-smt",
@@ -8797,7 +8894,7 @@ dependencies = [
 [[package]]
 name = "vprogs-state-proof-receipt"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "borsh",
  "vprogs-storage-types",
@@ -8807,7 +8904,7 @@ dependencies = [
 [[package]]
 name = "vprogs-state-ptr-latest"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "borsh",
  "vprogs-core-types",
@@ -8817,7 +8914,7 @@ dependencies = [
 [[package]]
 name = "vprogs-state-ptr-rollback"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "borsh",
  "vprogs-core-types",
@@ -8828,7 +8925,7 @@ dependencies = [
 [[package]]
 name = "vprogs-state-version"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "borsh",
  "tap",
@@ -8842,7 +8939,7 @@ dependencies = [
 [[package]]
 name = "vprogs-storage-canonical-chain"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "arc-swap",
  "vprogs-core-atomics",
@@ -8852,7 +8949,7 @@ dependencies = [
 [[package]]
 name = "vprogs-storage-manager"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "crossbeam-queue",
  "crossbeam-utils",
@@ -8863,7 +8960,7 @@ dependencies = [
 [[package]]
 name = "vprogs-storage-rocksdb-store"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "num_cpus",
  "rocksdb",
@@ -8878,7 +8975,7 @@ dependencies = [
 [[package]]
 name = "vprogs-storage-types"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "borsh",
  "vprogs-core-smt",
@@ -8889,7 +8986,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-abi"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "borsh",
  "kaspa-consensus-core",
@@ -8913,7 +9010,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-aggregate-prover"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "arc-swap",
  "kaspa-hashes",
@@ -8931,12 +9028,13 @@ dependencies = [
  "vprogs-zk-abi",
  "vprogs-zk-batch-prover",
  "vprogs-zk-transaction-prover",
+ "zerocopy",
 ]
 
 [[package]]
 name = "vprogs-zk-backend-risc0-api"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "ark-bn254 0.6.0",
  "ark-groth16 0.6.0",
@@ -8961,7 +9059,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-app-kit"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "kaspa-addresses",
  "kaspa-consensus-core",
@@ -8984,7 +9082,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-covenant"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "ark-bn254 0.6.0",
  "ark-groth16 0.6.0",
@@ -9003,7 +9101,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-runtime-processor"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "k256",
  "risc0-zkvm",
@@ -9019,7 +9117,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-settler"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "kaspa-addresses",
  "kaspa-consensus-core",
@@ -9042,7 +9140,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-test-suite"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "kaspa-addresses",
  "kaspa-consensus-core",
@@ -9076,7 +9174,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-batch-prover"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "kaspa-grpc-client",
  "kaspa-hashes",
@@ -9097,7 +9195,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-transaction-prover"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "borsh",
  "tap",
@@ -9113,10 +9211,11 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-vm"
 version = "0.1.0"
-source = "git+https://github.com/biryukovmaxim/vprogs?branch=reorg-recovery#480c1156c706bf481d88ad392768eced45cc9cb9"
+source = "git+https://github.com/kaspanet/vprogs?branch=exit-index#6e9038bd1014b2ea47941d12c67491cb5cf8f770"
 dependencies = [
  "faster-hex",
  "log",
+ "tokio",
  "vprogs-l1-types",
  "vprogs-scheduling-scheduler",
  "vprogs-storage-types",
