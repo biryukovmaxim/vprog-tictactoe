@@ -1,0 +1,26 @@
+{
+  "name": "vprog-tictactoe-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "kaspa-wasm": "file:vendor/kaspa-wasm-2.0.1.tgz",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "vprog-tictactoe-encoder-wasm": "file:vendor/vprog-tictactoe-encoder-wasm-0.1.0.tgz"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "~5.8.0",
+    "vite": "^7.0.0",
+    "vitest": "^3.2.0"
+  }
+}
