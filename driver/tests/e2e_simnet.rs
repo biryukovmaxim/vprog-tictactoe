@@ -2,10 +2,10 @@
 //!
 //! Gated behind `TT_E2E=1` and available guest program ELFs. Exercises the full thin-app stack:
 //! 1. In-process simnet [`L1Node`].
-//! 2. Runner execution daemon (`ttd` equivalent via [`start_runner`]).
+//! 2. Runner execution and settlement daemon (`ttd` equivalent via [`start_runner`]).
 //! 3. Scenario driver (`ttflow` equivalent via [`scenario::run`]).
 //! 4. Full game lifecycle: Init -> Deposits -> CreateGame -> JoinGame -> Turns -> Settlement ->
-//!    Withdraw.
+//!    Withdraw -> Claim -> Payout.
 
 use std::{sync::Arc, time::Duration};
 
@@ -14,20 +14,29 @@ use kaspa_consensus_core::{
     config::params::ForkActivation,
     mass::BlockMassLimits,
     network::{NetworkId, NetworkType},
+    tx::{Transaction, TransactionOutpoint},
 };
 use kaspa_hashes::Hash;
+use kaspa_rpc_core::api::rpc::RpcApi;
 use secp256k1::Keypair;
 use vprog_tictactoe_driver::{config::Config, scenario};
 use vprog_tictactoe_guest::runtime::genesis::GENESIS_PUBKEY;
-use vprog_tictactoe_node::indexer::{
-    GameStatus, PlayerEvent, TicTacToeIndexer, scan_games_by_status, scan_player_events,
+use vprog_tictactoe_node::{
+    TicTacToeExitIndexer,
+    da_store::{ExitRecord, SpentMark, exit_roots, get_exit_record, leaf_spent},
+    indexer::{
+        GameStatus, PlayerEvent, TicTacToeIndexer, scan_games_by_status, scan_player_events,
+    },
 };
 use vprogs_core_types::ResourceId;
 use vprogs_node_test_utils::L1Node;
 use vprogs_runner::{Elfs, Indexer, RunnerConfig, StartMode, start_runner};
 use vprogs_storage_types::Store;
-use vprogs_zk_backend_risc0_api::delegate_entry_spk_hash;
-use vprogs_zk_backend_risc0_app_kit::dev_genesis_keypair;
+use vprogs_zk_abi::withdrawal::StandardSpk;
+use vprogs_zk_backend_risc0_api::{PermissionTreeAccumulator, delegate_entry_spk_hash};
+use vprogs_zk_backend_risc0_app_kit::{
+    PermissionSpendArgs, PermissionTreeView, build_permission_spend, dev_genesis_keypair,
+};
 use vprogs_zk_backend_risc0_test_suite::{
     batch_aggregator_elf, batch_processor_elf, dev_mode_enabled,
 };
@@ -97,7 +106,10 @@ async fn test_e2e_simnet_game_flow() {
         aggregator: &aggregator_elf_bytes,
     };
 
-    // 5. Start runner in execution mode with fresh covenant deployment.
+    // 5. Start runner in settlement mode (dev stub proofs) with fresh covenant deployment.
+    // Capture the L1 sink before the deploy: the exec-follower below joins the covenant with
+    // `start_from` pinned to a block at/before the bootstrap.
+    let deploy_anchor = arc_client.get_block_dag_info().await.expect("read L1 sink").sink;
     let temp_dir = tempfile::tempdir().expect("tempdir");
     let runner_cfg = RunnerConfig {
         wrpc_url: wrpc_url.clone(),
@@ -113,7 +125,7 @@ async fn test_e2e_simnet_game_flow() {
         start_from: None,
         seed_depth: 500,
         min_confirmations: None,
-        prove: false,
+        prove: true,
         start_mode: Some(StartMode::Fresh),
     };
 
@@ -124,7 +136,7 @@ async fn test_e2e_simnet_game_flow() {
         elfs,
         delegate_entry_spk_hash,
         Some(Indexer(Arc::new(TicTacToeIndexer))),
-        None,
+        Some(Arc::new(TicTacToeExitIndexer)),
     )
     .await
     .expect("start_runner failed");
@@ -340,8 +352,236 @@ async fn test_e2e_simnet_game_flow() {
         );
     }
 
+    // 10. Exit tail: wait for the settlement to record the withdraw leaf, claim it in full,
+    // and verify the payout plus the spend mark. The wait reads the store, not
+    // `handles.exits_rx`: the exit indexer owns that channel and closes the returned receiver.
+    let dest_spk = StandardSpk::PubKey(&report.player_a_pubkey);
+    let (exit_root, record, leaf_index) =
+        wait_exit_with_leaf(&*store, dest_spk.to_script_bytes().as_slice()).await;
+
+    // Feed and handler coverage: the record names a real settlement, counts its leaves
+    // unclaimed, and carries exactly the winner-pot withdraw.
+    let leaf = &record.leaves[leaf_index];
+    assert_eq!(leaf.amount, driver_cfg.stake * 2, "exit leaf must carry the winner pot");
+    assert_eq!(
+        record.unclaimed as usize,
+        record.leaves.len(),
+        "a freshly recorded bundle counts every leaf unclaimed"
+    );
+    assert_ne!(record.settlement_txid, [0u8; 32], "record must name the settlement tx");
+
+    // The record key is script-hash space: the stored leaves must rebuild it through the
+    // accumulator's redeem script hash, while the view's raw padded root matches the
+    // accumulator root and differs from the key.
+    let mut acc = PermissionTreeAccumulator::new();
+    for leaf in &record.leaves {
+        acc.add_exit(leaf.to_standard_spk(), leaf.amount);
+    }
+    let tree = PermissionTreeView::from_leaves(&record.leaves);
+    assert_eq!(
+        acc.finalize(),
+        exit_root,
+        "stored leaves must rebuild the recorded script-hash key"
+    );
+    assert_eq!(tree.root(), acc.root(), "view root must equal the accumulator's padded root");
+    assert_ne!(tree.root(), exit_root, "raw root must differ from the script-hash key");
+
+    // 10b. Exec-follower phase: a second, keyless runner in exec mode joins the same covenant
+    // and rebuilds the same exit index purely from L1 observation. Depends only on the settled
+    // record, so it runs before the delegate-pool/claim tail.
+    //
+    // Red-first: like the claim tail below, this phase is expected to fail until the vprogs
+    // bridge seq-commit defect is fixed — the whole exit section times out at its first store
+    // wait today.
+    let follower_dir = tempfile::tempdir().expect("follower tempdir");
+    let follower_cfg = RunnerConfig {
+        wrpc_url: wrpc_url.clone(),
+        private_key: None,
+        network_id,
+        program_elf: None,
+        batch_elf: None,
+        aggregator_elf: None,
+        data_dir: follower_dir.path().to_path_buf(),
+        lane_id: Some(1),
+        covenant_id: Some(handles.covenant_id),
+        bootstrap_txid: None,
+        start_from: Some(deploy_anchor),
+        seed_depth: 500,
+        min_confirmations: None,
+        prove: false,
+        start_mode: Some(StartMode::Catchup),
+    };
+    let follower = start_runner(
+        &follower_cfg,
+        &arc_client,
+        &params,
+        elfs,
+        delegate_entry_spk_hash,
+        Some(Indexer(Arc::new(TicTacToeIndexer))),
+        Some(Arc::new(TicTacToeExitIndexer)),
+    )
+    .await
+    .expect("follower start_runner failed");
+    let follower_store = follower.node.api().storage().store().clone();
+    let (_, follower_record, follower_leaf_index) =
+        wait_exit_with_leaf(&*follower_store, dest_spk.to_script_bytes().as_slice()).await;
+    assert_eq!(follower_record, record, "follower must hold the same exit record");
+    assert_eq!(follower_leaf_index, leaf_index, "follower must resolve the same leaf");
+    drop(follower);
+
+    // Claims pay the leaf out of the delegate pool at the covenant deposit address. Claims are
+    // zero-fee by protocol (the permission redeem pins exact value conservation, so no fee can be
+    // burned inside the claim), and the toccata relay floor rejects zero-fee txs from the mempool,
+    // so the claim is mined directly into a block below — the same path the demo L1 takes.
+    let covenant_id = handles.covenant_id.as_bytes();
+    let deposit_address =
+        Address::new(Prefix::Simnet, Version::ScriptHash, &delegate_entry_spk_hash(&covenant_id));
+    let delegates = delegate_pool(&arc_client, &deposit_address).await;
+    let delegate_total: u64 = delegates.iter().map(|(_, amount)| *amount).sum();
+    assert!(
+        delegate_total >= leaf.amount,
+        "delegate pool {delegate_total} must cover the leaf {}",
+        leaf.amount
+    );
+
+    // Full-leaf claim. On the last leaf of the root the builder folds the permission rent
+    // into the payout, so the expected value depends on the remaining unclaimed count.
+    let expected_payout = leaf.amount + if record.unclaimed == 1 { record.rent } else { 0 };
+    let (claim_tx, claim_txid) = build_full_claim(
+        &covenant_id,
+        &record,
+        leaf_index,
+        tree.root_with_leaf(leaf_index, PermissionTreeAccumulator::hash_empty()),
+        delegates,
+    )
+    .await;
+    l1.mine_block(std::slice::from_ref(&claim_tx)).await;
+    l1.mine_blocks(1).await;
+
+    // Payout lands at player A's P2PK destination with the full-leaf value.
+    let payout_address = Address::new(Prefix::Simnet, Version::PubKey, &report.player_a_pubkey);
+    wait_payout(&arc_client, &payout_address, expected_payout).await;
+
+    // Bridge watcher coverage: the spend mark names our claim tx with the full deduct. Marks
+    // key on the raw view root (the redeem's old_root), not the script-hash record key.
+    let mark = wait_leaf_spent(&*store, &tree.root(), leaf_index).await;
+    assert_eq!(mark.spend_txid, claim_txid.as_bytes(), "spend mark must name the claim tx");
+    assert_eq!(mark.deduct, leaf.amount, "spend mark must record the full-leaf deduct");
+
     // Stop background miner and cleanup.
     mining_stop.notify_one();
     let _ = miner_handle.await;
     l1.mine_blocks(2).await;
+}
+
+/// Polls the exit index store until a settled record holds a leaf paying `dest_spk`.
+///
+/// Returns the record's root, the record, and the matched leaf position. Fails the test on
+/// timeout, proving the exit feed, the settlement pairing, and the store handler together.
+async fn wait_exit_with_leaf<S: Store>(
+    store: &S,
+    dest_spk: &[u8],
+) -> ([u8; 32], ExitRecord, usize) {
+    let timeout = Duration::from_secs(180);
+    let start = tokio::time::Instant::now();
+    loop {
+        for root in exit_roots(store) {
+            if let Some(record) = get_exit_record(store, &root)
+                && let Some(index) = record.leaves.iter().position(|l| l.script_bytes() == dest_spk)
+            {
+                return (root, record, index);
+            }
+        }
+        assert!(
+            start.elapsed() < timeout,
+            "timed out waiting for a settled exit record holding the withdraw leaf"
+        );
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+}
+
+/// Confirmed UTXO set at `address` as claim-ready `(outpoint, amount)` pairs.
+async fn delegate_pool<C: RpcApi + ?Sized>(
+    client: &Arc<C>,
+    address: &Address,
+) -> Vec<(TransactionOutpoint, u64)> {
+    client
+        .get_utxos_by_addresses(vec![address.clone()])
+        .await
+        .expect("fetch delegate utxos")
+        .into_iter()
+        .map(|e| (TransactionOutpoint::from(e.outpoint), e.utxo_entry.amount))
+        .collect()
+}
+
+/// Builds the full-leaf permission claim for direct mining, returning it and its txid.
+///
+/// The post-claim root is caller-supplied (the full-leaf fold empties the leaf slot), and the
+/// delegate inputs fund the payout. The claim is zero-fee by protocol, so it cannot ride the
+/// mempool's relay-fee floor; the caller mines it into a block directly.
+async fn build_full_claim(
+    covenant_id: &[u8; 32],
+    record: &ExitRecord,
+    leaf_index: usize,
+    new_root: [u8; 32],
+    delegates: Vec<(TransactionOutpoint, u64)>,
+) -> (Transaction, Hash) {
+    let leaf = &record.leaves[leaf_index];
+    let tree = PermissionTreeView::from_leaves(&record.leaves);
+    let args = PermissionSpendArgs {
+        covenant_id: *covenant_id,
+        permission_outpoint: TransactionOutpoint::new(
+            Hash::from_bytes(record.settlement_txid),
+            record.outpoint_index,
+        ),
+        permission_rent: record.rent,
+        old_root: tree.root(),
+        old_unclaimed: record.unclaimed,
+        depth: tree.depth(),
+        leaf_index,
+        leaf_spk: leaf.script_bytes(),
+        leaf_amount: leaf.amount,
+        deduct: leaf.amount,
+        siblings: tree.siblings(leaf_index),
+        new_root,
+        new_unclaimed: record.unclaimed - 1,
+        delegate_inputs: delegates,
+    };
+    let tx = build_permission_spend(&args).expect("claim assembly failed").0;
+    let txid = tx.id();
+    (tx, txid)
+}
+
+/// Polls until a UTXO of exactly `expected` sompi appears at `address`.
+async fn wait_payout<C: RpcApi + ?Sized>(client: &Arc<C>, address: &Address, expected: u64) {
+    let timeout = Duration::from_secs(60);
+    let start = tokio::time::Instant::now();
+    loop {
+        let entries =
+            client.get_utxos_by_addresses(vec![address.clone()]).await.expect("fetch payout utxos");
+        if entries.iter().any(|e| e.utxo_entry.amount == expected) {
+            return;
+        }
+        assert!(
+            start.elapsed() < timeout,
+            "timed out waiting for a {expected}-sompi payout at {address}"
+        );
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+}
+
+/// Polls the exit index store until the leaf's spend mark lands, returning it.
+async fn wait_leaf_spent<S: Store>(store: &S, root: &[u8; 32], leaf_index: usize) -> SpentMark {
+    let timeout = Duration::from_secs(60);
+    let start = tokio::time::Instant::now();
+    loop {
+        if let Some(mark) = leaf_spent(store, root, leaf_index) {
+            return mark;
+        }
+        assert!(
+            start.elapsed() < timeout,
+            "timed out waiting for the spend mark on the claimed leaf"
+        );
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
 }

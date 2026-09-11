@@ -67,6 +67,8 @@ pub struct ScenarioReport {
     pub turn_b_txid: Hash,
     /// Transaction ID of player A's `Withdraw` carrier.
     pub withdraw_txid: Hash,
+    /// Schnorr public key of player A; the withdraw destination and exit-leaf owner.
+    pub player_a_pubkey: [u8; 32],
     /// Resource ID of the game under test.
     pub game_id: ResourceId,
     /// Resource ID of player A.
@@ -221,6 +223,7 @@ pub async fn run<C: RpcApi + ?Sized>(
 ) -> Result<ScenarioReport, String> {
     let operator_keypair = Keypair::from_secret_key(secp256k1::SECP256K1, &cfg.private_key);
     let wallet = Wallet::new(&**client, params, operator_keypair);
+    log::info!("operator address (fund this before running): {}", wallet.address());
     let lane_subnet = SubnetworkId::from_namespace(cfg.lane_id.to_be_bytes());
 
     let ctx =
@@ -342,6 +345,7 @@ pub async fn run<C: RpcApi + ?Sized>(
         turn_a_txid,
         turn_b_txid,
         withdraw_txid,
+        player_a_pubkey: player_a.pubkey(),
         game_id,
         player_a_user_id,
         player_b_user_id,
