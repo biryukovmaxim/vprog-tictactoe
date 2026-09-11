@@ -7,7 +7,10 @@ use vprogs_l1_types::{PermissionSpend, SettlementInfo};
 use vprogs_runner::{ExitIndexer, ExitsForBundle};
 use vprogs_storage_types::WriteBatch;
 
-use crate::da_store::{ExitRecord, SpentMark, mark_leaf_spent, put_exit_record};
+use crate::da_store::{
+    ExitRecord, LatestSettlement, SpentMark, mark_leaf_spent, put_exit_record,
+    put_latest_settlement,
+};
 
 /// Secondary exit indexer recording exit bundles and leaf spend marks.
 pub struct TicTacToeExitIndexer;
@@ -30,6 +33,15 @@ impl ExitIndexer for TicTacToeExitIndexer {
             leaves: (*bundle.leaves).clone(),
         };
         put_exit_record(wb, &bundle.permission_spk_hash, &rec);
+        put_latest_settlement(
+            wb,
+            &LatestSettlement {
+                state_root: bundle.new_state,
+                permission_root: bundle.permission_spk_hash,
+                txid: settlement.tx_id.as_bytes(),
+                daa_score: settlement.daa_score.get(),
+            },
+        );
     }
 
     fn on_permission_spent(&self, spend: &PermissionSpend, wb: &mut dyn WriteBatch) {
@@ -55,7 +67,7 @@ mod tests {
     use zerocopy::little_endian::U64;
 
     use super::*;
-    use crate::da_store::{get_exit_record, leaf_spent};
+    use crate::da_store::{get_exit_record, latest_settlement, leaf_spent};
 
     #[test]
     fn test_exit_indexer_records_bundle_and_spend_mark() {
@@ -92,6 +104,16 @@ mod tests {
             leaves,
         };
         assert_eq!(get_exit_record(&store, &bundle.permission_spk_hash), Some(expected_record));
+
+        assert_eq!(
+            latest_settlement(&store),
+            Some(LatestSettlement {
+                state_root: [0xaa; 32],
+                permission_root: [0xbb; 32],
+                txid: [0xcc; 32],
+                daa_score: 789_101,
+            })
+        );
 
         let spend = PermissionSpend {
             covenant_id: [0x01; 32],

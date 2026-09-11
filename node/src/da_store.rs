@@ -14,6 +14,9 @@ pub const EXITS_DISCRIMINANT: u8 = 0x03;
 /// Delimiter byte separating exit root from leaf index in spent mark keys.
 pub const SPENT_MARK_DELIMITER: u8 = 0xFF;
 
+/// Reserved marker byte identifying the single latest-settlement key.
+pub const LATEST_SETTLEMENT_MARKER: u8 = 0xFE;
+
 /// Record of an on-chain settled exit bundle indexed by its permission SPK hash root.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExitRecord {
@@ -78,6 +81,19 @@ pub struct SpentMark {
     pub new_root: [u8; 32],
 }
 
+/// Latest paired settlement; a single row overwritten on every committed exit bundle.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+pub struct LatestSettlement {
+    /// L2 SMT state root after the settled bundle.
+    pub state_root: [u8; 32],
+    /// Permission SPK hash root of the settled bundle's exit tree.
+    pub permission_root: [u8; 32],
+    /// L1 transaction id of the settlement.
+    pub txid: [u8; 32],
+    /// DAA score of the block containing the settlement.
+    pub daa_score: u64,
+}
+
 /// Materialized Merkle-path view of a settled exit bundle with per-leaf spend marks.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExitView {
@@ -109,6 +125,15 @@ fn spent_mark_key(root: &[u8; 32], leaf_index: usize) -> [u8; 38] {
     key[33] = SPENT_MARK_DELIMITER;
     key[34..38].copy_from_slice(&(leaf_index as u32).to_be_bytes());
     key
+}
+
+/// Builds the 2-byte key for the latest settlement: `0x03 || 0xFE`.
+///
+/// The exit keyspace holds records (`0x03 || root[32]`, 33 bytes) and spent marks (`0x03 ||
+/// root[32] || 0xFF || index_be_u32`, 38 bytes); this key's reserved marker byte and 2-byte length
+/// keep it distinct from both, so `exit_roots` skips it when scanning.
+fn latest_settlement_key() -> [u8; 2] {
+    [EXITS_DISCRIMINANT, LATEST_SETTLEMENT_MARKER]
 }
 
 /// Stores an exit record in the index keyspace under its permission root.
@@ -164,6 +189,20 @@ pub fn leaf_spent<S: Store>(store: &S, root: &[u8; 32], leaf_index: usize) -> Op
     borsh::from_slice(&val).ok()
 }
 
+/// Stores the latest settlement, overwriting any previous one.
+pub fn put_latest_settlement(wb: &mut dyn WriteBatch, rec: &LatestSettlement) {
+    let key = latest_settlement_key();
+    let val = borsh::to_vec(rec).expect("LatestSettlement borsh serialization should not fail");
+    wb.put(StateSpace::Index, &key, &val);
+}
+
+/// Reads the latest settlement, or `None` if no bundle has settled yet.
+pub fn latest_settlement<S: Store>(store: &S) -> Option<LatestSettlement> {
+    let key = latest_settlement_key();
+    let val = store.get(StateSpace::Index, &key)?;
+    borsh::from_slice(&val).ok()
+}
+
 /// Materializes all stored exit records into Merkle-path views with per-leaf spend marks.
 pub fn exit_views<S: Store>(store: &S) -> Vec<ExitView> {
     exit_roots(store)
@@ -172,7 +211,10 @@ pub fn exit_views<S: Store>(store: &S) -> Vec<ExitView> {
             let record = get_exit_record(store, &root)?;
             let tree = PermissionTreeView::from_leaves(&record.leaves);
             let depth = tree.depth();
-            let spent = (0..record.leaves.len()).map(|i| leaf_spent(store, &root, i)).collect();
+            // Records key on the script-hash commitment while spend marks key on the raw padded
+            // root (the redeem's `old_root`), so marks are looked up under the view root.
+            let raw_root = tree.root();
+            let spent = (0..record.leaves.len()).map(|i| leaf_spent(store, &raw_root, i)).collect();
             let siblings = (0..record.leaves.len()).map(|i| tree.siblings(i)).collect();
             Some(ExitView { root, record, spent, depth, siblings })
         })
@@ -282,6 +324,16 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let store: RocksDbStore = RocksDbStore::open(dir.path());
 
+        // Production key spaces: records under the script-hash commitment the runner publishes,
+        // spend marks under the raw padded root the redeem's old_root carries.
+        let finalize = |leaves: &[ExitLeaf]| {
+            let mut acc = PermissionTreeAccumulator::new();
+            for leaf in leaves {
+                acc.add_exit(leaf.to_standard_spk(), leaf.amount);
+            }
+            acc.finalize()
+        };
+
         let pk0 = [0x11u8; 32];
         let pk1 = [0x22u8; 32];
         let leaves1 = vec![
@@ -289,7 +341,9 @@ mod tests {
             ExitLeaf::from_pair(StandardSpk::PubKey(&pk1), 25_000_000),
         ];
         let tree1 = PermissionTreeView::from_leaves(&leaves1);
-        let root1 = tree1.root();
+        let raw_root1 = tree1.root();
+        let key1 = finalize(&leaves1);
+        assert_ne!(key1, raw_root1);
         let rec1 = ExitRecord {
             settlement_txid: [0xaa; 32],
             outpoint_index: 1,
@@ -306,7 +360,8 @@ mod tests {
             ExitLeaf::from_pair(StandardSpk::PubKey(&pk3), 30_000_000),
         ];
         let tree2 = PermissionTreeView::from_leaves(&leaves2);
-        let root2 = tree2.root();
+        let raw_root2 = tree2.root();
+        let key2 = finalize(&leaves2);
         let rec2 = ExitRecord {
             settlement_txid: [0xbb; 32],
             outpoint_index: 1,
@@ -319,15 +374,15 @@ mod tests {
         let mark = SpentMark { spend_txid: [0xcc; 32], deduct: 50_000_000, new_root: [0xdd; 32] };
 
         let mut wb = store.write_batch();
-        put_exit_record(&mut wb, &root1, &rec1);
-        put_exit_record(&mut wb, &root2, &rec2);
-        mark_leaf_spent(&mut wb, &root1, 0, &mark);
+        put_exit_record(&mut wb, &key1, &rec1);
+        put_exit_record(&mut wb, &key2, &rec2);
+        mark_leaf_spent(&mut wb, &raw_root1, 0, &mark);
         store.commit(wb);
 
         let views = exit_views(&store);
         assert_eq!(views.len(), 2);
 
-        let view1 = views.iter().find(|v| v.root == root1).expect("view1 present");
+        let view1 = views.iter().find(|v| v.root == key1).expect("view1 present");
         assert_eq!(view1.record, rec1);
         assert_eq!(view1.depth, PermissionTreeAccumulator::required_depth(rec1.leaves.len()));
         assert_eq!(view1.depth, tree1.depth());
@@ -346,10 +401,10 @@ mod tests {
                     curr = PermissionTreeAccumulator::hash_branch(sib, &curr);
                 }
             }
-            assert_eq!(curr, view1.root);
+            assert_eq!(curr, raw_root1);
         }
 
-        let view2 = views.iter().find(|v| v.root == root2).expect("view2 present");
+        let view2 = views.iter().find(|v| v.root == key2).expect("view2 present");
         assert_eq!(view2.record, rec2);
         assert_eq!(view2.depth, PermissionTreeAccumulator::required_depth(rec2.leaves.len()));
         assert_eq!(view2.depth, tree2.depth());
@@ -368,7 +423,7 @@ mod tests {
                     curr = PermissionTreeAccumulator::hash_branch(sib, &curr);
                 }
             }
-            assert_eq!(curr, view2.root);
+            assert_eq!(curr, raw_root2);
         }
     }
 }

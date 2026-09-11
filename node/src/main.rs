@@ -39,6 +39,24 @@ async fn main() {
     .await
     .unwrap_or_else(|e| panic!("runner start failed: {e}"));
 
+    let da_state = vprog_tictactoe_node::da::DaState {
+        store: handles.node.api().storage().store().clone(),
+        covenant_id: handles.covenant_id.as_bytes(),
+        lane_subnet: handles.lane_subnet.as_bytes().to_vec(),
+        network_prefix: kaspa_addresses::Prefix::from(network_id).to_string(),
+        web_dir: cfg.web_dir.clone(),
+    };
+    let da_router = vprog_tictactoe_node::da::router(da_state);
+    let listener = tokio::net::TcpListener::bind(&cfg.da_bind)
+        .await
+        .unwrap_or_else(|e| panic!("failed to bind DA server on {}: {e}", cfg.da_bind));
+    log::info!("DA server listening on http://{}", cfg.da_bind);
+    tokio::spawn(async move {
+        if let Err(e) = axum::serve(listener, da_router).await {
+            log::error!("DA server error: {e}");
+        }
+    });
+
     println!("== ttd node: lane={} ==", handles.lane_id);
     println!("watch RUST_LOG trace for vprogs_node_framework and vprogs_zk_vm");
 
