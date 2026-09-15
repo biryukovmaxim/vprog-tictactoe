@@ -65,8 +65,9 @@ Full env blocks per mode: runbook steps 2-3. All variables and defaults: `docs/d
 - Data, DA on `:9880` (all `GET`, JSON): `/api/state`, `/api/config`,
   `/api/games?status=open&after={id}&limit=N`, `/api/games/{id}`,
   `/api/accounts/{user-id-hex}`, `/api/exits` (settled leaves, claimable).
-- Claims are zero-fee by protocol and are mined through the demo L1's `/inject`, never the
-  mempool; a rejected `submitTx` in the web console is the expected fallback, not a bug.
+- Claims burn a fee (2M sompi) from the delegate pool and submit through the ordinary
+  `submitTx`/mempool path on any node; a rejected `submitTx` is a real error (short delegate
+  pool, or a node fee policy above the script's 10M burn cap).
 
 ## Reset / teardown
 

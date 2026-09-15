@@ -54,7 +54,6 @@ runbook explains the flow; this file is the knob-by-knob reference.
 | Variable | Description | Default |
 |---|---|---|
 | `TT_DEMO_L1_INTERVAL_MS` | Demo L1 mining interval | `1000` |
-| `VITE_DEMO_L1` | Demo L1 base URL (faucet + `/inject`) | `http://127.0.0.1:9890` |
 | `VITE_WRPC_URL` | L1 wRPC URL for the in-page wallet | `ws://127.0.0.1:17210` |
 | `VITE_NETWORK` | Network for the in-page wallet (`simnet`, `testnet-10`, ...) | `simnet` |
 
@@ -63,7 +62,7 @@ runbook explains the flow; this file is the knob-by-knob reference.
 | Process | Address | Serves |
 |---|---|---|
 | demo L1 | `ws://127.0.0.1:17210` | wRPC (borsh) for `ttd`, `ttflow`, and the web wallet |
-| demo L1 | `http://127.0.0.1:9890` | `GET /faucet/{address}` (pays 10 KAS; 503 for the first ~10 blocks until the coinbase matures), `POST /inject` (body is raw borsh tx bytes, mined into the next block) |
+| demo L1 | `http://127.0.0.1:9890` | `GET /faucet/{address}` (pays 10 KAS; 503 for the first ~10 blocks until the coinbase matures), `POST /inject` (body is raw borsh tx bytes, mined into the next block; claims no longer use it — they pay fees through the mempool) |
 | `ttd` DA | `http://127.0.0.1:9880` | DA HTTP API below, plus optional static `TT_WEB_DIR` |
 
 DA API (all `GET`, JSON):
@@ -87,7 +86,7 @@ DA API (all `GET`, JSON):
 | `ttflow` fails at Init with "transaction submission failed after retries" | operator key unfunded | faucet its logged operator address **twice**, rerun |
 | `ttd` restart exits with "starting block no longer in chain" | data dir holds anchors from a previous chain | `rm -rf ttd-data` (or the `TT_DATA_DIR`), restart demo L1 and `ttd` fresh together |
 | CUDA link fails with `undefined symbol: ngpus()/select_gpu(int)` | sppark's build script cached a no-nvcc result | delete `target-cuda/release/build/sppark-*`, `target-cuda/release/deps/libsppark-*`, `target-cuda/release/.fingerprint/sppark-*`, rebuild with `/usr/local/cuda-12.2/bin` on `PATH` |
-| Web console shows a rejected `submitTx` when claiming | expected: claims are zero-fee by protocol, the relay floor rejects them, the web falls back to `/inject` | nothing; it is the designed path |
+| Web console shows a rejected `submitTx` when claiming | a real error: claims pay a fee and are ordinary mempool txs (delegate pool short, node fee policy above the burn cap) | check the delegate pool covers payout + fee; check the node's relay policy |
 | `17210`/`9890`/`9880` already in use | stale demo L1 / `ttd` from a previous run | kill them, wipe the data dir, restart fresh |
 | `ttflow` Init rejected | covenant already initialized (Init is genesis-gated) | check `GET /api/config` for `{"initialized": true}`; skip init |
 | `ttd` sits silent for a long stretch after compiling | debug builds sync very slowly | run with `--release` |

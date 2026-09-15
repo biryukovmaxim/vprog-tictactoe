@@ -37,9 +37,8 @@ faucet, and the same one-time `ttflow` init. Differences that matter:
 
 - Settlements must carry real proofs: use the CUDA build (`--features cuda`, `RISC0_DEV_MODE`
   unset). Dev stub receipts are for the local simnet demo only.
-- Exit claims do not work on tn10 yet: claims are zero-fee by protocol, the relay floor
-  rejects them from the mempool, and the simnet runbook mines them through the demo L1's
-  `/inject` endpoint, which a real node does not have.
+- Claims pay fees from the delegate pool and submit through the mempool on tn10 exactly as on
+  the demo L1.
 - Start `ttd` against a fresh lane (wipe `ttd-data` when starting over): the bridge cannot
   join an already-live lane.
 
