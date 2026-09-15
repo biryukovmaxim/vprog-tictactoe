@@ -24,6 +24,6 @@ target/build-graph/
 .env
 .env.*
 
-# CUDA proving build (separate target dir) and ttd runtime state
+# CUDA proving build (separate target dir) and ttd runtime state (any TT_DATA_DIR variant)
 /target-cuda
-/ttd-data
+/ttd-data*
