@@ -48,8 +48,8 @@ runbook above.
 
 ## Dev
 
-Requires the [vprogs](../vprogs) clone next to this repo, a Rust nightly toolchain, `just`,
-`taplo`, and a Node toolchain for the frontend.
+Requires the [vprogs](../vprogs) clone next to this repo, a Rust stable toolchain (nightly
+only for `just fmt`), `just`, `taplo`, and a Node toolchain for the frontend.
 
 ```bash
 just check        # clippy, warnings denied
@@ -58,5 +58,5 @@ just build-guest  # compile guest ELF to guest/compiled/program.elf
 cd web && npm run test && npm run build
 ```
 
-Environment variables and run modes: see the [reference section](docs/demo/README.md#reference)
-of the demo runbook.
+Environment variables, run modes, ports, and failure signatures: see the
+[demo reference](docs/demo/reference.md).

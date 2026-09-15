@@ -15,10 +15,11 @@ Both modes run the identical flow below; only step 2 differs.
 - A [vprogs](../../vprogs) clone next to this repo, with backend ELFs built
   (`zk/backend/risc0/batch-processor/compiled/program.elf` and
   `zk/backend/risc0/batch-aggregator/compiled/program.elf`)
-- Rust nightly, `just`, `taplo`; Node/npm for the frontend
+- Rust (stable; nightly only for `just fmt` / `fmt-check` / `udeps`), `just`, `taplo`;
+  Node/npm for the frontend
 - Guest ELF: `just build-guest`
-- CUDA mode only: CUDA 12.2 at `/usr/local/cuda-12.2` (nvcc is not on the default PATH — see
-  step 2)
+- CUDA mode only: CUDA 12.2 at `/usr/local/cuda-12.2` with `bin/` on `PATH` (nvcc), at
+  build and run time
 
 ## Running
 
@@ -60,11 +61,10 @@ TT_DA_BIND=127.0.0.1:9880 \
 cargo run -p vprog-tictactoe-node
 ```
 
-CUDA (real proofs; build once, then keep `/usr/local/cuda-12.2/bin` on `PATH` at runtime too —
-the prover needs the CUDA tools, and `RISC0_DEV_MODE` must stay unset):
+CUDA (real proofs; `RISC0_DEV_MODE` must stay unset, and `/usr/local/cuda-12.2/bin` must be
+on `PATH` at build and run time — the prover needs the CUDA tools):
 
 ```bash
-export PATH=/usr/local/cuda-12.2/bin:$PATH
 CARGO_TARGET_DIR=target-cuda cargo build --release --features cuda -p vprog-tictactoe-node
 
 TT_WRPC_URL=ws://127.0.0.1:17210 \
@@ -184,56 +184,5 @@ TT_E2E=1 RISC0_DEV_MODE=1 cargo test --release -p vprog-tictactoe-driver --test 
 
 ## Reference
 
-### Run modes (`ttd`)
-
-| Mode | Role | `TT_PROVE` | `RISC0_DEV_MODE` | Cargo features |
-|---|---|---|---|---|
-| **Execution** | Follower / DA / local exec | `0` (default) | `1` (default) | default |
-| **Dev Prover** | Fast local proving (CPU stubs) | `1` | `1` | default |
-| **Production Prover** | Verifiable STARK proving (CUDA) | `1` | `0` | `--features cuda` |
-
-### Node (`ttd`)
-
-| Variable | Description | Default |
-|---|---|---|
-| `TT_WRPC_URL` | WebSocket RPC URL of the Kaspa node | *(required)* |
-| `TT_PRIVATE_KEY` | 32-byte hex secret key for fees and node actions | *(required)* |
-| `TT_NETWORK` | Network identifier (`tn10`, `simnet`, `devnet`, `mainnet`) | `tn10` |
-| `TT_PROGRAM_ELF` | Path to compiled guest program ELF | `guest/compiled/program.elf` |
-| `TT_BATCH_ELF` | Path to compiled batch-processor ELF | *(required)* |
-| `TT_AGGREGATOR_ELF` | Path to compiled batch-aggregator ELF | *(required)* |
-| `TT_DATA_DIR` | Directory for persistent state and RocksDB | `./ttd-data` |
-| `TT_LANE_ID` | Execution lane identifier | generated if omitted |
-| `TT_COVENANT_ID` | 32-byte hex covenant ID for catchup mode | none |
-| `TT_BOOTSTRAP_TXID` | 32-byte hex anchor transaction ID | none |
-| `TT_START_FROM` | 32-byte hex starting block hash | none |
-| `TT_SEED_DEPTH` | Depth below sink for bridge catchup scan | `500` |
-| `TT_PROVE` | Enable prover and settler worker | `0` |
-| `TT_START_MODE` | Start mode (`fresh`, `resume`, `catchup`) | auto |
-| `TT_DA_BIND` | Bind address for the DA HTTP server | `127.0.0.1:9880` |
-| `TT_WEB_DIR` | Optional static web directory served by the DA server | none |
-
-### Driver (`ttflow`)
-
-| Variable | Description | Default |
-|---|---|---|
-| `TT_WRPC_URL` | WebSocket RPC URL of the Kaspa node | *(required)* |
-| `TT_LANE_ID` | Target execution lane identifier | *(required)* |
-| `TT_COVENANT_ID` | 32-byte hex covenant ID | *(required)* |
-| `TTFLOW_PRIVATE_KEY` | 32-byte hex operator funding key | *(required)* |
-| `TT_NETWORK` | Network identifier | `tn10` |
-| `TTFLOW_GENESIS_KEY` | 32-byte hex key for config `Init` auth | dev genesis scalar 3 |
-| `TTFLOW_STAKE` | Stake per player in sompis | `50000000` (0.5 KAS) |
-| `TTFLOW_ROUNDS` | Rounds per match | `1` |
-| `TTFLOW_DEPOSIT_AMOUNT` | Deposit amount per player in sompis | `100000000` (1.0 KAS) |
-| `TTFLOW_STEP_DELAY_MS` | Delay between scenario steps in milliseconds | `2000` |
-| `TTFLOW_TURN_TTL` | Turn TTL in DAA-score units | `10000` |
-
-### Demo L1 and web
-
-| Variable | Description | Default |
-|---|---|---|
-| `TT_DEMO_L1_INTERVAL_MS` | Demo L1 mining interval | `1000` |
-| `VITE_DEMO_L1` | Demo L1 base URL (faucet + `/inject`) | `http://127.0.0.1:9890` |
-| `VITE_WRPC_URL` | L1 wRPC URL for the in-page wallet | `ws://127.0.0.1:17210` |
-| `VITE_NETWORK` | Network for the in-page wallet (`simnet`, `testnet-10`, ...) | `simnet` |
+Run modes, environment variables, ports, HTTP endpoints, and failure-signature fixes:
+[reference.md](reference.md).
