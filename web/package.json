@@ -12,7 +12,7 @@
     "kaspa-wasm": "file:vendor/kaspa-wasm-2.0.1.tgz",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "vprog-tictactoe-encoder-wasm": "file:vendor/vprog-tictactoe-encoder-wasm-0.1.0.tgz"
+    "vprog-tictactoe-encoder-wasm": "file:vendor/vprog-tictactoe-encoder-wasm-0.1.1.tgz"
   },
   "devDependencies": {
     "@types/node": "^26.5.0",

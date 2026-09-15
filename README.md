@@ -74,7 +74,8 @@ own actions, accounts and game rules.
 - [ ] Guest ELF: Docker reproducible build, genesis env flow (local `just build-guest` works)
 - [ ] vprogs feature: app-level custom journal data via closures (prerequisite for indexes)
 - [ ] Node DA: exit-record store with spent marks; open-game indexer
-  - Settled exit views with Merkle paths and spend state for DA queries
+  - Settled exit views with Merkle paths and spend state for DA queries; records advance onto
+    each claim's continuation, so a root's exits claim sequentially leaf by leaf
 - [x] Node `ttd`: runner driver (execution and proving modes, devmode stub and GPU proving; DA server pending journal feature)
 - [x] Driver `ttflow`: scripted scenarios
 - [x] Env-gated L1 e2e against a local simnet

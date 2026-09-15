@@ -5,7 +5,8 @@ use std::str::FromStr;
 
 use kaspa_addresses::Address;
 use kaspa_consensus_core::{
-    constants::TX_VERSION_TOCCATA,
+    constants::{STORAGE_MASS_PARAMETER, TX_VERSION_TOCCATA},
+    mass::{UtxoCell, UtxoPlurality, calc_storage_mass},
     subnets::SubnetworkId,
     tx::{ScriptPublicKey, Transaction, TransactionOutpoint, TransactionOutput, UtxoEntry},
 };
@@ -471,6 +472,7 @@ pub fn claim_tx(
     }
 
     let leaf_spk = hex_vec(leaf_spk_hex)?;
+    let delegate_amounts: Vec<u64> = delegate_inputs.iter().map(|(_, amount)| *amount).collect();
     let args = PermissionSpendArgs {
         covenant_id,
         permission_outpoint: TransactionOutpoint::new(permission_txid, permission_index),
@@ -487,7 +489,7 @@ pub fn claim_tx(
         new_unclaimed,
         delegate_inputs,
     };
-    let (mut tx, _utxos) = build_permission_spend(&args).map_err(JsError::new)?;
+    let (mut tx, utxos) = build_permission_spend(&args).map_err(JsError::new)?;
 
     // Burn `fee` from the trailing delegate change output (inputs minus outputs).
     if fee > 0 {
@@ -497,5 +499,21 @@ pub fn claim_tx(
             .ok_or_else(|| JsError::new("claim tx has no output to pay the fee from"))?;
         change.value -= fee;
     }
+
+    // Commit the KIP-0009 storage mass (Toccata txs must carry it or the node disqualifies
+    // their block). Cells must mirror the consensus pluralities exactly: the covenant-bound
+    // permission input and continuation output occupy two 100-byte storage units each, while
+    // the delegate inputs and the plain outputs occupy one. STORAGE_MASS_PARAMETER is uniform
+    // across every network preset (a custom ParamsOverrides could diverge; out of demo scope).
+    let permission_entry = utxos.first().expect("claim builder returns the permission entry");
+    let input_cells: Vec<UtxoCell> =
+        std::iter::once(UtxoCell::new(permission_entry.plurality(), permission_rent))
+            .chain(delegate_amounts.into_iter().map(|amount| UtxoCell::new(1, amount)))
+            .collect();
+    let output_cells = tx.outputs.iter().map(|o| UtxoCell::new(o.plurality(), o.value));
+    let storage_mass =
+        calc_storage_mass(false, input_cells.iter().copied(), output_cells, STORAGE_MASS_PARAMETER)
+            .ok_or_else(|| JsError::new("storage mass calculation overflowed"))?;
+    tx.set_storage_mass(storage_mass);
     borsh_bytes(&tx)
 }

@@ -106,8 +106,10 @@ mod tests {
     use borsh::BorshDeserialize;
     use kaspa_addresses::{Address, Prefix, Version};
     use kaspa_consensus_core::{
+        config::params::SIMNET_PARAMS,
         constants::TX_VERSION_TOCCATA,
         hashing::sighash::SigHashReusedValuesUnsync,
+        mass::MassCalculator,
         tx::{PopulatedTransaction, Transaction, UtxoEntry},
     };
     use kaspa_hashes::Hash;
@@ -621,10 +623,11 @@ mod tests {
         ];
         let tree = PermissionTreeView::from_leaves(&leaves);
         let covenant_id = [0xFFu8; 32];
+        // Overfunded delegate pool, so the claim's UTXO footprint genuinely expands.
         let delegate = UtxoCandidate {
             txid_hex: Hash::from_bytes([2u8; 32]).to_string(),
             index: 1,
-            amount: 5_000,
+            amount: 8_000,
             spk_hex: String::new(),
             spk_version: 0,
         };
@@ -649,8 +652,27 @@ mod tests {
         .unwrap();
         let tx = decode_built(&bytes);
 
+        // A continuation output expands the UTXO footprint, so the KIP-0009 storage-mass
+        // commitment must be present and non-zero.
+        assert!(tx.storage_mass() > 0, "non-terminal claim must commit storage mass");
+
         let utxos =
             claim_utxos(&covenant_id, &tree.root(), 2, tree.depth(), 50_000_000, &[delegate]);
+        // The committed mass must equal the consensus calculator over the real covenant-aware
+        // entries (the permission input and continuation output count plurality 2).
+        let calc = MassCalculator::new(
+            SIMNET_PARAMS.mass_per_tx_byte,
+            SIMNET_PARAMS.mass_per_script_pub_key_byte,
+            SIMNET_PARAMS.storage_mass_parameter,
+        );
+        let masses = calc
+            .calc_contextual_masses(&PopulatedTransaction::new(&tx, utxos.clone()))
+            .expect("contextual mass over claim entries");
+        assert_eq!(
+            tx.storage_mass(),
+            masses.storage_mass,
+            "committed storage mass must match the consensus calculator"
+        );
         run_permission_input(&tx, &utxos).expect("full-leaf claim spend verifies");
     }
 

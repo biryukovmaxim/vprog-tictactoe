@@ -20,25 +20,18 @@ export interface ClaimTarget {
   leaf: ExitLeaf;
 }
 
-/// Leaves worth showing a Claim button for: unspent and paying my key, on
-/// roots no claim has touched yet. Every root /api/exits serves is a
-/// materialized settled root (the settled gate is the endpoint itself), so no
-/// extra settled check applies here.
-///
-/// Demo lock — one claim per root: the first claim spends the root's
-/// settlement outpoint, so once ANY leaf of a root is spent the whole root is
-/// skipped — every remaining leaf's served args (old_root, permission
-/// outpoint, full_claim) are stale and its claim would re-spend an
-/// already-spent outpoint. Sequential claims need the continuation root the
-/// first claim creates (post-merge work).
+/// Leaves worth showing a Claim button for: unspent and paying my key. Every
+/// root /api/exits serves is a materialized settled root (the settled gate is
+/// the endpoint itself), and the served record advances to the claim's
+/// continuation after each spend, so remaining leaves keep fresh args
+/// (old_root, permission outpoint, full_claim) until their own `spent` entry
+/// lands: claims chain sequentially within a root.
 export function claimableExits(roots: ExitRoot[], pubkeyHex: string): ClaimTarget[] {
   const spk = mySpkHex(pubkeyHex);
   return roots.flatMap((root) =>
-    root.leaves.some((leaf) => leaf.spent !== null)
-      ? []
-      : root.leaves
-          .filter((leaf) => leaf.spent === null && leaf.spk_hex === spk)
-          .map((leaf) => ({ key: `${root.root}:${leaf.index}`, root, leaf })),
+    root.leaves
+      .filter((leaf) => leaf.spent === null && leaf.spk_hex === spk)
+      .map((leaf) => ({ key: `${root.root}:${leaf.index}`, root, leaf })),
   );
 }
 

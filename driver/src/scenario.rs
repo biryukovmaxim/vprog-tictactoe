@@ -7,7 +7,8 @@
 //! 4. `JoinGame` by player B.
 //! 5. Player A turn carrier with opening ply and pre-commits.
 //! 6. Player B turn carrier triggering cascade, round win, and match settlement.
-//! 7. Player A winner pot withdrawal.
+//! 7. Player A withdrawal of the winner pot plus the deposit remainder (one carrier, two exit
+//!    leaves).
 
 use std::sync::Arc;
 
@@ -324,12 +325,25 @@ pub async fn run<C: RpcApi + ?Sized>(
     log::info!("Step 7 (Turn Player B) accepted: {turn_b_txid}");
     tokio::time::sleep(cfg.step_delay).await;
 
-    // Step 8: Withdraw Winnings.
-    log::info!("issuing Step 8: Withdraw winner pot");
+    // Step 8: Withdraw Winnings. One carrier drains the pot and the deposit remainder as two
+    // exit leaves, so both settle into the same bundle and later claims chain on one root.
+    log::info!("issuing Step 8: Withdraw pot and remainder");
     let dest_spk = StandardSpk::PubKey(&player_a.pubkey());
-    let withdraw_amount = cfg.stake.checked_mul(2).unwrap_or(cfg.stake);
-    let withdraw_payload =
-        build_withdraw_payload(player_a_user_id, config_id, withdraw_amount, &dest_spk);
+    let pot = cfg.stake.checked_mul(2).unwrap_or(cfg.stake);
+    let withdraw_payload = build_withdraw_payload(player_a_user_id, config_id, pot, &dest_spk);
+    let remainder = cfg.deposit_amount.saturating_sub(cfg.stake);
+    let withdraw_payload = if remainder >= 1_000_000 {
+        // Same min_withdrawal the Init above sets; below it the guest rejects the carrier.
+        let access = user_config_access(player_a_user_id, config_id);
+        withdraw_payload.action(encode_withdraw_action(
+            access.user_idx,
+            access.config_idx,
+            remainder,
+            &dest_spk,
+        ))
+    } else {
+        withdraw_payload
+    };
     let withdraw_txid = submit_action("withdraw winnings", &ctx, &withdraw_payload, |req| {
         player_a.sign_digest(req.digest)
     })
@@ -560,5 +574,16 @@ mod tests {
         assert_eq!(ix_withdraw.signers.len(), 1);
         assert_eq!(ix_withdraw.actions.len(), 1);
         assert_eq!(ix_withdraw.actions[0].action_tag, ActionTag::Withdraw);
+
+        // 8. Two-withdraw carrier (pot plus remainder): both actions decode in order.
+        let access = user_config_access(player_a_user_id, config_id);
+        let p_two = build_withdraw_payload(player_a_user_id, config_id, 100_000_000, &dest)
+            .action(encode_withdraw_action(access.user_idx, access.config_idx, 50_000_000, &dest));
+        let bytes_two = p_two.finish(&rest_preimage, &mut |req| player_a.sign_digest(req.digest));
+        let mut slice_two = bytes_two.as_slice();
+        let access_two = AccessMetadata::decode_vec(&mut slice_two).unwrap();
+        let ix_two = decode_ix(slice_two, access_two.len(), decode_action).unwrap();
+        assert_eq!(ix_two.actions.len(), 2);
+        assert!(ix_two.actions.iter().all(|a| a.action_tag == ActionTag::Withdraw));
     }
 }

@@ -11,7 +11,7 @@ use std::{sync::Arc, time::Duration};
 
 use kaspa_addresses::{Address, Prefix, Version};
 use kaspa_consensus_core::{
-    config::params::ForkActivation,
+    config::params::{ForkActivation, Params},
     mass::BlockMassLimits,
     network::{NetworkId, NetworkType},
     tx::{Transaction, TransactionOutpoint},
@@ -23,12 +23,16 @@ use vprog_tictactoe_driver::{config::Config, scenario};
 use vprog_tictactoe_guest::runtime::genesis::GENESIS_PUBKEY;
 use vprog_tictactoe_node::{
     TicTacToeExitIndexer,
-    da_store::{ExitRecord, SpentMark, exit_roots, get_exit_record, leaf_spent},
+    da_store::{
+        EmptiedLeaf, ExitRecord, ExitView, SpentMark, exit_roots, exit_views, get_exit_record,
+        leaf_spent,
+    },
     indexer::{
         GameStatus, PlayerEvent, TicTacToeIndexer, scan_games_by_status, scan_player_events,
     },
 };
 use vprogs_core_types::ResourceId;
+use vprogs_l1_wallet::build::commit_storage_mass;
 use vprogs_node_test_utils::L1Node;
 use vprogs_runner::{Elfs, Indexer, RunnerConfig, StartMode, start_runner};
 use vprogs_storage_types::Store;
@@ -136,7 +140,7 @@ async fn test_e2e_simnet_game_flow() {
         elfs,
         delegate_entry_spk_hash,
         Some(Indexer(Arc::new(TicTacToeIndexer))),
-        Some(Arc::new(TicTacToeExitIndexer)),
+        Some(Arc::new(TicTacToeExitIndexer::default())),
     )
     .await
     .expect("start_runner failed");
@@ -360,8 +364,10 @@ async fn test_e2e_simnet_game_flow() {
         wait_exit_with_leaf(&*store, dest_spk.to_script_bytes().as_slice()).await;
 
     // Feed and handler coverage: the record names a real settlement, counts its leaves
-    // unclaimed, and carries exactly the winner-pot withdraw.
+    // unclaimed, and carries the winner-pot withdraw plus the deposit remainder (one carrier,
+    // two leaves), so the claims below chain on a single root.
     let leaf = &record.leaves[leaf_index];
+    assert_eq!(record.leaves.len(), 2, "the withdraw carrier settles two exit leaves");
     assert_eq!(leaf.amount, driver_cfg.stake * 2, "exit leaf must carry the winner pot");
     assert_eq!(
         record.unclaimed as usize,
@@ -370,28 +376,23 @@ async fn test_e2e_simnet_game_flow() {
     );
     assert_ne!(record.settlement_txid, [0u8; 32], "record must name the settlement tx");
 
-    // The record key is script-hash space: the stored leaves must rebuild it through the
-    // accumulator's redeem script hash, while the view's raw padded root matches the
-    // accumulator root and differs from the key.
+    // The record key is raw-root space (the redeem's old_root): the stored leaves rebuild it
+    // through the padded view, and it differs from the accumulator's script-hash commitment.
     let mut acc = PermissionTreeAccumulator::new();
     for leaf in &record.leaves {
         acc.add_exit(leaf.to_standard_spk(), leaf.amount);
     }
     let tree = PermissionTreeView::from_leaves(&record.leaves);
-    assert_eq!(
-        acc.finalize(),
-        exit_root,
-        "stored leaves must rebuild the recorded script-hash key"
-    );
     assert_eq!(tree.root(), acc.root(), "view root must equal the accumulator's padded root");
-    assert_ne!(tree.root(), exit_root, "raw root must differ from the script-hash key");
+    assert_eq!(tree.root(), exit_root, "record must key on the raw padded root");
+    assert_ne!(acc.finalize(), exit_root, "raw root must differ from the script-hash commitment");
 
     // 10b. Exec-follower phase: a second, keyless runner in exec mode joins the same covenant
     // and rebuilds the same exit index purely from L1 observation. Depends only on the settled
     // record, so it runs before the delegate-pool/claim tail.
     //
     // Red-first: like the claim tail below, this phase is expected to fail until the vprogs
-    // bridge seq-commit defect is fixed — the whole exit section times out at its first store
+    // bridge seq-commit defect is fixed: the whole exit section times out at its first store
     // wait today.
     let follower_dir = tempfile::tempdir().expect("follower tempdir");
     let follower_cfg = RunnerConfig {
@@ -418,7 +419,7 @@ async fn test_e2e_simnet_game_flow() {
         elfs,
         delegate_entry_spk_hash,
         Some(Indexer(Arc::new(TicTacToeIndexer))),
-        Some(Arc::new(TicTacToeExitIndexer)),
+        Some(Arc::new(TicTacToeExitIndexer::default())),
     )
     .await
     .expect("follower start_runner failed");
@@ -432,7 +433,7 @@ async fn test_e2e_simnet_game_flow() {
     // Claims pay the leaf out of the delegate pool at the covenant deposit address. Claims are
     // zero-fee by protocol (the permission redeem pins exact value conservation, so no fee can be
     // burned inside the claim), and the toccata relay floor rejects zero-fee txs from the mempool,
-    // so the claim is mined directly into a block below — the same path the demo L1 takes.
+    // so the claim is mined directly into a block below; the same path the demo L1 takes.
     let covenant_id = handles.covenant_id.as_bytes();
     let deposit_address =
         Address::new(Prefix::Simnet, Version::ScriptHash, &delegate_entry_spk_hash(&covenant_id));
@@ -448,6 +449,7 @@ async fn test_e2e_simnet_game_flow() {
     // into the payout, so the expected value depends on the remaining unclaimed count.
     let expected_payout = leaf.amount + if record.unclaimed == 1 { record.rent } else { 0 };
     let (claim_tx, claim_txid) = build_full_claim(
+        &params,
         &covenant_id,
         &record,
         leaf_index,
@@ -463,10 +465,60 @@ async fn test_e2e_simnet_game_flow() {
     wait_payout(&arc_client, &payout_address, expected_payout).await;
 
     // Bridge watcher coverage: the spend mark names our claim tx with the full deduct. Marks
-    // key on the raw view root (the redeem's old_root), not the script-hash record key.
+    // key on the raw root (the redeem's old_root), which is also the record key.
     let mark = wait_leaf_spent(&*store, &tree.root(), leaf_index).await;
     assert_eq!(mark.spend_txid, claim_txid.as_bytes(), "spend mark must name the claim tx");
     assert_eq!(mark.deduct, leaf.amount, "spend mark must record the full-leaf deduct");
+
+    // 11. Sequential claims: the record must advance onto the first claim's continuation, and
+    // the second claim must build purely from the served view (the raw-root serving the web
+    // path rides on).
+    let other_index = 1 - leaf_index;
+    let view = wait_exit_view(&*store, &mark.new_root).await;
+    assert_eq!(
+        view.record.settlement_txid,
+        claim_txid.as_bytes(),
+        "advanced record must name the claim tx as its permission source"
+    );
+    assert_eq!(view.record.outpoint_index, 1, "continuation permission output is index 1");
+    assert_eq!(view.record.unclaimed, 1, "one leaf claimed, one remains");
+    assert_eq!(
+        view.spent[leaf_index],
+        Some(EmptiedLeaf {
+            leaf_index: leaf_index as u32,
+            spend_txid: claim_txid.as_bytes(),
+            deduct: leaf.amount,
+        }),
+        "the claimed leaf serves its emptied entry"
+    );
+    assert!(view.spent[other_index].is_none(), "the remaining leaf stays unclaimed");
+
+    let leaf2 = &view.record.leaves[other_index];
+    let delegates2 = delegate_pool(&arc_client, &deposit_address).await;
+    let delegate2_total: u64 = delegates2.iter().map(|(_, amount)| *amount).sum();
+    assert!(
+        delegate2_total >= leaf2.amount,
+        "delegate pool {delegate2_total} must cover the second leaf {}",
+        leaf2.amount
+    );
+
+    let (claim2_tx, claim2_txid) =
+        build_claim_from_view(&covenant_id, &view, other_index, delegates2);
+    l1.mine_block(std::slice::from_ref(&claim2_tx)).await;
+    l1.mine_blocks(1).await;
+
+    // Terminal payout: the last leaf folds the permission rent into the payout. Match by the
+    // claim's own outpoint; the first payout shares the destination and value family.
+    let expected_payout2 = leaf2.amount + view.record.rent;
+    wait_payout_from(&arc_client, &payout_address, claim2_txid, expected_payout2).await;
+
+    // The family drains in place: same key, unclaimed 0, both leaves spent.
+    let mark2 = wait_leaf_spent(&*store, &mark.new_root, other_index).await;
+    assert_eq!(mark2.spend_txid, claim2_txid.as_bytes(), "second spend mark names claim 2");
+    assert_eq!(mark2.deduct, leaf2.amount, "second spend mark records the full-leaf deduct");
+    let drained = wait_exit_view(&*store, &mark.new_root).await;
+    assert_eq!(drained.record.unclaimed, 0, "the drained family counts nothing unclaimed");
+    assert!(drained.spent.iter().all(|s| s.is_some()), "both leaves serve their emptied entries");
 
     // Stop background miner and cleanup.
     mining_stop.notify_one();
@@ -520,6 +572,7 @@ async fn delegate_pool<C: RpcApi + ?Sized>(
 /// delegate inputs fund the payout. The claim is zero-fee by protocol, so it cannot ride the
 /// mempool's relay-fee floor; the caller mines it into a block directly.
 async fn build_full_claim(
+    params: &Params,
     covenant_id: &[u8; 32],
     record: &ExitRecord,
     leaf_index: usize,
@@ -547,7 +600,9 @@ async fn build_full_claim(
         new_unclaimed: record.unclaimed - 1,
         delegate_inputs: delegates,
     };
-    let tx = build_permission_spend(&args).expect("claim assembly failed").0;
+    let (tx, utxos) = build_permission_spend(&args).expect("claim assembly failed");
+    // Toccata txs must commit their KIP-0009 storage mass or the node disqualifies their block.
+    commit_storage_mass(params, &tx, &utxos);
     let txid = tx.id();
     (tx, txid)
 }
@@ -581,6 +636,95 @@ async fn wait_leaf_spent<S: Store>(store: &S, root: &[u8; 32], leaf_index: usize
         assert!(
             start.elapsed() < timeout,
             "timed out waiting for the spend mark on the claimed leaf"
+        );
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+}
+
+/// Polls the exit store until the advancing family serves its view under `root`.
+async fn wait_exit_view<S: Store>(store: &S, root: &[u8; 32]) -> ExitView {
+    let timeout = Duration::from_secs(60);
+    let start = tokio::time::Instant::now();
+    loop {
+        if let Some(view) = exit_views(store).into_iter().find(|v| v.root == *root) {
+            return view;
+        }
+        assert!(
+            start.elapsed() < timeout,
+            "timed out waiting for the exit view under the advanced root"
+        );
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+}
+
+/// Builds a full-leaf claim from a served exit view through the web encoder's `claim_tx`
+/// builder, so the L1 consensus exercises the exact transaction the frontend submits. Every
+/// argument comes from the served view, mirroring the web `claimArgs` mapping.
+fn build_claim_from_view(
+    covenant_id: &[u8; 32],
+    view: &ExitView,
+    leaf_index: usize,
+    delegates: Vec<(TransactionOutpoint, u64)>,
+) -> (Transaction, Hash) {
+    let hex = |bytes: &[u8]| bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
+    let leaf = &view.record.leaves[leaf_index];
+    let delegate_utxos = delegates
+        .into_iter()
+        .map(|(outpoint, amount)| vprog_tictactoe_encoder_wasm::UtxoCandidate {
+            txid_hex: outpoint.transaction_id.to_string(),
+            index: outpoint.index,
+            amount,
+            spk_hex: String::new(),
+            spk_version: 0,
+        })
+        .collect();
+    let bytes = vprog_tictactoe_encoder_wasm::claim_tx(
+        &Hash::from_bytes(*covenant_id).to_string(),
+        &Hash::from_bytes(view.record.settlement_txid).to_string(),
+        view.record.outpoint_index,
+        view.record.rent,
+        &Hash::from_bytes(view.root).to_string(),
+        view.record.unclaimed,
+        view.depth as u32,
+        leaf_index as u32,
+        &hex(leaf.script_bytes()),
+        leaf.amount,
+        &Hash::from_bytes(view.full_claim_roots[leaf_index]).to_string(),
+        view.record.unclaimed - 1,
+        view.siblings[leaf_index].iter().map(|s| hex(s.as_slice())).collect(),
+        delegate_utxos,
+        0,
+    )
+    .expect("encoder claim assembly failed");
+    let tx: Transaction = borsh::from_slice(&bytes).expect("decode encoder claim");
+    let txid = tx.id();
+    (tx, txid)
+}
+
+/// Polls until the claim tx's own output of exactly `expected` sompi appears at `address`.
+///
+/// Matching by the claim's outpoint (not just amount) keeps the assert meaningful when earlier
+/// payouts share the destination and value family.
+async fn wait_payout_from<C: RpcApi + ?Sized>(
+    client: &Arc<C>,
+    address: &Address,
+    claim_txid: Hash,
+    expected: u64,
+) {
+    let timeout = Duration::from_secs(60);
+    let start = tokio::time::Instant::now();
+    loop {
+        let entries =
+            client.get_utxos_by_addresses(vec![address.clone()]).await.expect("fetch payout utxos");
+        if entries.iter().any(|e| {
+            TransactionOutpoint::from(e.outpoint).transaction_id == claim_txid
+                && e.utxo_entry.amount == expected
+        }) {
+            return;
+        }
+        assert!(
+            start.elapsed() < timeout,
+            "timed out waiting for the {expected}-sompi payout from {claim_txid} at {address}"
         );
         tokio::time::sleep(Duration::from_millis(250)).await;
     }

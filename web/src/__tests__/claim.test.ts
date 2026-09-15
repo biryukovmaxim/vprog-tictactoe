@@ -29,8 +29,8 @@ beforeAll(async () => {
 afterEach(() => vi.unstubAllGlobals());
 
 /// /api/exits fixture: one settled all-unspent root whose leaves 0 and 1 pay
-/// my key, leaf 2 pays another key. The one-claim-per-root gate tests derive
-/// a spent-leaf variant from it.
+/// my key, leaf 2 pays another key. The sequential-claim tests derive
+/// spent-leaf and drained variants from it.
 const MY_PK = '31'.repeat(32);
 const THEIR_PK = '99'.repeat(32);
 
@@ -69,11 +69,26 @@ const FIXTURE: ExitRoot = {
   ],
 };
 
-/// FIXTURE after a first claim spent leaf 1: the root's settlement outpoint
-/// is spent, so no leaf of it is claimable anymore.
+/// FIXTURE after a first claim spent leaf 1: the served record has advanced
+/// to the continuation (fresh root, claim txid, decremented unclaimed).
 function claimedFixture(): ExitRoot {
   const spentLeaf = { ...FIXTURE.leaves[1]!, spent: { spend_txid: 'cc'.repeat(32), deduct: 25_000_000 } };
-  return { ...FIXTURE, leaves: [FIXTURE.leaves[0]!, spentLeaf, FIXTURE.leaves[2]!] };
+  return {
+    ...FIXTURE,
+    root: '21'.repeat(32),
+    settlement_txid: 'cc'.repeat(32),
+    unclaimed: 2,
+    leaves: [FIXTURE.leaves[0]!, spentLeaf, FIXTURE.leaves[2]!],
+  };
+}
+
+/// A fully drained root: every leaf spent, unclaimed 0.
+function drainedFixture(): ExitRoot {
+  const leaves = FIXTURE.leaves.map((leaf) => ({
+    ...leaf,
+    spent: { spend_txid: 'cd'.repeat(32), deduct: leaf.amount },
+  }));
+  return { ...FIXTURE, unclaimed: 0, leaves };
 }
 
 describe('mySpkHex (StandardSpk::PubKey script bytes: 0x20 || pk || 0xac)', () => {
@@ -83,7 +98,7 @@ describe('mySpkHex (StandardSpk::PubKey script bytes: 0x20 || pk || 0xac)', () =
   });
 });
 
-describe('claimableExits (settled all-unspent roots, paying my key)', () => {
+describe('claimableExits (unspent leaves paying my key, across advancing roots)', () => {
   it('keeps my unspent leaves of an all-unspent root, keyed root:index', () => {
     expect(claimableExits([FIXTURE], MY_PK)).toEqual([
       { key: `${FIXTURE.root}:0`, root: FIXTURE, leaf: FIXTURE.leaves[0] },
@@ -91,15 +106,20 @@ describe('claimableExits (settled all-unspent roots, paying my key)', () => {
     ]);
   });
 
-  it('yields nothing for a root with any spent leaf — one claim per root (even my unspent leaves)', () => {
-    expect(claimableExits([claimedFixture()], MY_PK)).toEqual([]);
+  it('keeps my unspent leaves of a continuation-advanced root (a spent sibling does not gate them)', () => {
+    const advanced = claimedFixture();
+    expect(claimableExits([advanced], MY_PK)).toEqual([
+      { key: `${advanced.root}:0`, root: advanced, leaf: advanced.leaves[0] },
+    ]);
   });
 
-  it('a spent-leaf root alongside an unspent one still yields the unspent root only', () => {
-    const other: ExitRoot = { ...FIXTURE, root: '21'.repeat(32), leaves: [FIXTURE.leaves[0]!] };
-    expect(claimableExits([claimedFixture(), other], MY_PK)).toEqual([
-      { key: `${other.root}:0`, root: other, leaf: other.leaves[0] },
-    ]);
+  it('drops my emptied leaves even when the root still serves them', () => {
+    const advanced = claimedFixture();
+    expect(claimableExits([advanced], MY_PK).some((t) => t.leaf.spent !== null)).toBe(false);
+  });
+
+  it('yields nothing for a drained root (unclaimed 0, every leaf spent)', () => {
+    expect(claimableExits([drainedFixture()], MY_PK)).toEqual([]);
   });
 
   it('drops leaves paying another key', () => {
@@ -108,7 +128,7 @@ describe('claimableExits (settled all-unspent roots, paying my key)', () => {
   });
 
   it('spans every served root', () => {
-    const other: ExitRoot = { ...FIXTURE, root: '21'.repeat(32), leaves: [FIXTURE.leaves[0]!] };
+    const other: ExitRoot = { ...FIXTURE, root: '31'.repeat(32), leaves: [FIXTURE.leaves[0]!] };
     expect(claimableExits([FIXTURE, other], MY_PK)).toHaveLength(3);
   });
 });
