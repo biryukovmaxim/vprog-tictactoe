@@ -161,7 +161,7 @@ not yet exercised end to end.
 ## Automated e2e
 
 The whole flow headlessly — in-process simnet, init, deposits, a full match, settlement,
-withdraw, exit records, claim, and payout (dev stub proofs):
+withdraw, exit records, two sequential claims, and payouts (dev stub proofs):
 
 ```bash
 TT_E2E=1 RISC0_DEV_MODE=1 cargo test --release -p vprog-tictactoe-driver --test e2e_simnet -- --nocapture
@@ -169,9 +169,6 @@ TT_E2E=1 RISC0_DEV_MODE=1 cargo test --release -p vprog-tictactoe-driver --test 
 
 ## Current limits
 
-- **One claim per exit root**: once a root's first claim spends its settlement outpoint, the
-  remaining leaves are not claimable — sequential claims need the continuation root (post-merge
-  work).
 - **Claims are zero-fee and direct-mined** via `/inject`; they never go through the mempool (see
   step 5).
 - **The bridge cannot join an already-live lane** (it mis-anchors without authoritative tip
