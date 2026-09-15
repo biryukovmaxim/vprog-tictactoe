@@ -491,13 +491,16 @@ pub fn claim_tx(
     };
     let (mut tx, utxos) = build_permission_spend(&args).map_err(JsError::new)?;
 
-    // Burn `fee` from the trailing delegate change output (inputs minus outputs).
+    // Burn `fee` from the trailing delegate change output (inputs minus outputs). The burn
+    // changes the tx payload, so the id must be finalized again — the storage-mass commit
+    // below does not affect it.
     if fee > 0 {
         let change = tx
             .outputs
             .last_mut()
             .ok_or_else(|| JsError::new("claim tx has no output to pay the fee from"))?;
         change.value -= fee;
+        tx.finalize();
     }
 
     // Commit the KIP-0009 storage mass (Toccata txs must carry it or the node disqualifies

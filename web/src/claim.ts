@@ -35,10 +35,12 @@ export function claimableExits(roots: ExitRoot[], pubkeyHex: string): ClaimTarge
   );
 }
 
-/// Fee burned from the delegate change: 0 matches the encoder claim layout
-/// tests (the demo relay accepts unpaid claims); the affordance gate below
-/// still carries it so raising it is a one-line change.
-export const CLAIM_FEE = 0n;
+/// Fee burned from the delegate change so the claim enters the mempool like
+/// an ordinary transaction (the relay floor rejects zero-fee txs). The floor
+/// prices the claim's normalized transient mass (measured ~935k sompi for a
+/// typical spend), so this doubles it; the script-side FEE_CAP (10_000_000
+/// sompi) the redeem script enforces bounds the burn well above.
+export const CLAIM_FEE = 2_000_000n;
 
 /// `claim_tx` arguments assembled from the served shapes; field names mirror
 /// the encoder-wasm parameter names. The DA precomputes the post-claim root

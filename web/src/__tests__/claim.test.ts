@@ -10,7 +10,7 @@ import { submitClaim } from '../composition';
 import type { ExitLeaf, ExitRoot } from '../da';
 import { loadIdentity } from '../KeyBar';
 import { canAffordClaim, claimArgs, claimableExits, mySpkHex } from '../claim';
-import { initKaspa, txFromBorsh, type WalletUtxo } from '../wallet';
+import { initKaspa, type WalletUtxo } from '../wallet';
 import initEncoder from 'vprog-tictactoe-encoder-wasm';
 import type { RpcClient } from 'kaspa-wasm';
 import { Transaction } from 'kaspa-wasm';
@@ -150,7 +150,7 @@ describe('claimArgs (full-deduct claim_tx mapping from the served shapes)', () =
       new_root_hex: leaf.full_claim.new_root,
       new_unclaimed: 2n,
       siblings_hex: leaf.siblings,
-      fee: 0n,
+      fee: 2_000_000n,
     });
   });
 });
@@ -242,6 +242,8 @@ describe('submitClaim', () => {
     expect(arg.transaction.outputs[0].scriptPublicKey.script).toBe(mySpkHex(identity.wallet.pubkeyHex));
     // The permission continuation output carries the served rent.
     expect(arg.transaction.outputs[1].value).toBe(50_000_000n);
+    // The delegate change carries the pool remainder minus the burned fee.
+    expect(arg.transaction.outputs[2].value).toBe(3_000_000n);
     expect(onActivity).toHaveBeenCalledWith('claim exits', 'cafecafe', { kind: 'l1', before: 123n });
   });
 
@@ -287,35 +289,26 @@ describe('submitClaim', () => {
     expect(submitTransaction).not.toHaveBeenCalled();
   });
 
-  it('falls back to the demo L1 /inject when the relay rejects the zero-fee claim', async () => {
+  it('propagates a rejected submitTx: fee-bearing claims have no /inject fallback', async () => {
     const identity = await loadIdentity(PRIVKEY);
     const { root, leaf } = myClaimRoot(identity.wallet.pubkeyHex, 1);
     const { client, submitTransaction } = delegateClient([55_000_000n]);
-    submitTransaction.mockRejectedValueOnce(new Error('rejected: 0 fees'));
-    const inject = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => ({ ok: true }) as Response);
+    submitTransaction.mockRejectedValueOnce(new Error('rejected: missing inputs'));
+    const inject = vi.fn();
     vi.stubGlobal('fetch', inject);
-    const onActivity = vi.fn();
 
-    const txid = await submitClaim({
-      identity,
-      client,
-      covenantId: COVENANT,
-      depositAddress: DEPOSIT,
-      root,
-      leaf,
-      balanceBefore: null,
-      onActivity,
-    });
-
-    expect(submitTransaction).toHaveBeenCalledOnce();
-    expect(inject).toHaveBeenCalledOnce();
-    const [url, init] = inject.mock.calls[0]!;
-    expect(url).toBe('http://127.0.0.1:9890/inject');
-    expect(init!.method).toBe('POST');
-    // The body is the raw borsh claim bytes; the txid is the id they embed.
-    const sent = txFromBorsh(init!.body as Uint8Array);
-    expect(sent.inputs).toHaveLength(2); // permission continuation + the one delegate
-    expect(txid).toBe(sent.id);
-    expect(onActivity).toHaveBeenCalledWith('claim exits', txid, { kind: 'l1', before: null });
+    await expect(
+      submitClaim({
+        identity,
+        client,
+        covenantId: COVENANT,
+        depositAddress: DEPOSIT,
+        root,
+        leaf,
+        balanceBefore: null,
+        onActivity: vi.fn(),
+      }),
+    ).rejects.toThrow(/rejected: missing inputs/);
+    expect(inject).not.toHaveBeenCalled();
   });
 });

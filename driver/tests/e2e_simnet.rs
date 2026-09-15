@@ -17,7 +17,7 @@ use kaspa_consensus_core::{
     tx::{Transaction, TransactionOutpoint},
 };
 use kaspa_hashes::Hash;
-use kaspa_rpc_core::api::rpc::RpcApi;
+use kaspa_rpc_core::{RpcTransaction, api::rpc::RpcApi};
 use secp256k1::Keypair;
 use vprog_tictactoe_driver::{config::Config, scenario};
 use vprog_tictactoe_guest::runtime::genesis::GENESIS_PUBKEY;
@@ -44,6 +44,13 @@ use vprogs_zk_backend_risc0_app_kit::{
 use vprogs_zk_backend_risc0_test_suite::{
     batch_aggregator_elf, batch_processor_elf, dev_mode_enabled,
 };
+
+/// Fee burned from the delegate change so claims ride the ordinary mempool
+/// path (mirrors the web `CLAIM_FEE`; the permission redeem caps any burn at
+/// the script-side FEE_CAP, currently 10_000_000 sompi). The relay floor
+/// prices the claim's normalized transient mass — measured at 935_200 sompi
+/// for a typical spend — so this doubles it.
+const CLAIM_FEE: u64 = 2_000_000;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_e2e_simnet_game_flow() {
@@ -430,19 +437,20 @@ async fn test_e2e_simnet_game_flow() {
     assert_eq!(follower_leaf_index, leaf_index, "follower must resolve the same leaf");
     drop(follower);
 
-    // Claims pay the leaf out of the delegate pool at the covenant deposit address. Claims are
-    // zero-fee by protocol (the permission redeem pins exact value conservation, so no fee can be
-    // burned inside the claim), and the toccata relay floor rejects zero-fee txs from the mempool,
-    // so the claim is mined directly into a block below; the same path the demo L1 takes.
+    // Claims pay the leaf out of the delegate pool at the covenant deposit address and burn
+    // CLAIM_FEE from the delegate change (the permission redeem pins the payout exact and caps
+    // the burn at FEE_CAP), so they enter the mempool through the ordinary submit path and the
+    // continuous miner picks them up — no /inject, exactly like a real node.
     let covenant_id = handles.covenant_id.as_bytes();
     let deposit_address =
         Address::new(Prefix::Simnet, Version::ScriptHash, &delegate_entry_spk_hash(&covenant_id));
     let delegates = delegate_pool(&arc_client, &deposit_address).await;
     let delegate_total: u64 = delegates.iter().map(|(_, amount)| *amount).sum();
     assert!(
-        delegate_total >= leaf.amount,
-        "delegate pool {delegate_total} must cover the leaf {}",
-        leaf.amount
+        delegate_total >= leaf.amount + CLAIM_FEE,
+        "delegate pool {delegate_total} must cover the leaf {} plus the fee {}",
+        leaf.amount,
+        CLAIM_FEE
     );
 
     // Full-leaf claim. On the last leaf of the root the builder folds the permission rent
@@ -455,10 +463,14 @@ async fn test_e2e_simnet_game_flow() {
         leaf_index,
         tree.root_with_leaf(leaf_index, PermissionTreeAccumulator::hash_empty()),
         delegates,
+        CLAIM_FEE,
     )
     .await;
-    l1.mine_block(std::slice::from_ref(&claim_tx)).await;
-    l1.mine_blocks(1).await;
+    let submitted = arc_client
+        .submit_transaction(RpcTransaction::from(&claim_tx), false)
+        .await
+        .expect("fee-bearing claim must enter the mempool");
+    assert_eq!(submitted, claim_txid, "the node must accept the claim under its own txid");
 
     // Payout lands at player A's P2PK destination with the full-leaf value.
     let payout_address = Address::new(Prefix::Simnet, Version::PubKey, &report.player_a_pubkey);
@@ -497,15 +509,19 @@ async fn test_e2e_simnet_game_flow() {
     let delegates2 = delegate_pool(&arc_client, &deposit_address).await;
     let delegate2_total: u64 = delegates2.iter().map(|(_, amount)| *amount).sum();
     assert!(
-        delegate2_total >= leaf2.amount,
-        "delegate pool {delegate2_total} must cover the second leaf {}",
-        leaf2.amount
+        delegate2_total >= leaf2.amount + CLAIM_FEE,
+        "delegate pool {delegate2_total} must cover the second leaf {} plus the fee {}",
+        leaf2.amount,
+        CLAIM_FEE
     );
 
     let (claim2_tx, claim2_txid) =
-        build_claim_from_view(&covenant_id, &view, other_index, delegates2);
-    l1.mine_block(std::slice::from_ref(&claim2_tx)).await;
-    l1.mine_blocks(1).await;
+        build_claim_from_view(&covenant_id, &view, other_index, delegates2, CLAIM_FEE);
+    let submitted2 = arc_client
+        .submit_transaction(RpcTransaction::from(&claim2_tx), false)
+        .await
+        .expect("second fee-bearing claim must enter the mempool");
+    assert_eq!(submitted2, claim2_txid);
 
     // Terminal payout: the last leaf folds the permission rent into the payout. Match by the
     // claim's own outpoint; the first payout shares the destination and value family.
@@ -578,6 +594,7 @@ async fn build_full_claim(
     leaf_index: usize,
     new_root: [u8; 32],
     delegates: Vec<(TransactionOutpoint, u64)>,
+    fee: u64,
 ) -> (Transaction, Hash) {
     let leaf = &record.leaves[leaf_index];
     let tree = PermissionTreeView::from_leaves(&record.leaves);
@@ -600,7 +617,16 @@ async fn build_full_claim(
         new_unclaimed: record.unclaimed - 1,
         delegate_inputs: delegates,
     };
-    let (tx, utxos) = build_permission_spend(&args).expect("claim assembly failed");
+    let (mut tx, utxos) = build_permission_spend(&args).expect("claim assembly failed");
+    // Burn the fee from the trailing delegate change, mirroring the web encoder's claim_tx:
+    // the burn precedes the storage-mass commit so the commitment covers the final outputs.
+    // The burn changes the tx payload, so the id must be finalized again (storage mass alone
+    // does not affect it).
+    if fee > 0 {
+        let change = tx.outputs.last_mut().expect("claim tx has a delegate change output");
+        change.value -= fee;
+        tx.finalize();
+    }
     // Toccata txs must commit their KIP-0009 storage mass or the node disqualifies their block.
     commit_storage_mass(params, &tx, &utxos);
     let txid = tx.id();
@@ -665,6 +691,7 @@ fn build_claim_from_view(
     view: &ExitView,
     leaf_index: usize,
     delegates: Vec<(TransactionOutpoint, u64)>,
+    fee: u64,
 ) -> (Transaction, Hash) {
     let hex = |bytes: &[u8]| bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
     let leaf = &view.record.leaves[leaf_index];
@@ -693,7 +720,7 @@ fn build_claim_from_view(
         view.record.unclaimed - 1,
         view.siblings[leaf_index].iter().map(|s| hex(s.as_slice())).collect(),
         delegate_utxos,
-        0,
+        fee,
     )
     .expect("encoder claim assembly failed");
     let tx: Transaction = borsh::from_slice(&bytes).expect("decode encoder claim");
