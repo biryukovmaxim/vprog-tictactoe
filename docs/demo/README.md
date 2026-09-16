@@ -23,10 +23,10 @@ Both modes run the identical flow below; only step 2 differs.
 
 ## Running
 
-Start steps 1 and 2 fresh together: the vprogs bridge cannot join an already-live lane, and the
-demo L1's throwaway appdir guarantees a fresh chain on every run. When starting over, also wipe
-`ttd`'s state directory (`rm -rf ttd-data`) — it persists the previous chain's anchors and the
-bridge dies on restart with "starting block no longer in chain".
+Starting the demo L1 and `ttd` fresh together keeps the run clean; the demo L1's throwaway
+appdir already guarantees a fresh chain on every run. When starting over, also wipe `ttd`'s
+state directory (`rm -rf ttd-data`) — it persists the previous chain's anchors and the bridge
+dies on restart with "starting block no longer in chain".
 
 ### 1. Demo L1
 
@@ -156,9 +156,8 @@ everything at the node:
 - Fund keys from a tn10 faucet instead of the demo faucet; keep the one-time `ttflow` init.
 
 Claims pay fees from the claimer's own collateral (the node's feerate estimation picks the
-amount), so they submit through the mempool on tn10 exactly as on the demo L1. One gap
-remains, known: the bridge cannot join an already-live lane — start `ttd` on a fresh lane.
-This path is configured but not yet exercised end to end.
+amount), so they submit through the mempool on tn10 exactly as on the demo L1. This path is
+configured but not yet exercised end to end.
 
 ## Automated e2e
 
@@ -171,9 +170,6 @@ TT_E2E=1 RISC0_DEV_MODE=1 cargo test --release -p vprog-tictactoe-driver --test 
 
 ## Current limits
 
-- **The bridge cannot join an already-live lane** (it mis-anchors without authoritative tip
-  seeding, still to land in vprogs): start the demo L1 and `ttd` fresh together — the demo L1's
-  fresh-chain design guarantees this.
 - **Busy-DAG divergence remains possible**: on mixed lanes / orphan mergesets the vprogs bridge
   can still diverge on merge_idx conventions. The demo L1 is quiet and linear, so it should not
   appear; if a settlement is rejected with a seq-commit script failure, that is where to look

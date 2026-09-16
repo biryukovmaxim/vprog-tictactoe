@@ -33,8 +33,7 @@ Full env blocks per mode: runbook steps 2-3. All variables and defaults: `docs/d
 
 1. Kill stale processes and wipe node state: nothing may listen on `17210`/`9890`/`9880`
    (a previous run's demo L1 or `ttd`), then `rm -rf ttd-data` (or the `TT_DATA_DIR` in
-   use). The bridge cannot join an already-live lane, and stale anchors kill restarts with
-   "starting block no longer in chain".
+   use). Stale anchors kill restarts with "starting block no longer in chain".
 2. Start the demo L1 and `ttd` fresh together, as background processes with log files
    (`run_in_background`, redirect output). Keys are any 32-byte hex: `openssl rand -hex 32`;
    never commit them. Reusing one key for `TT_PRIVATE_KEY` and `TTFLOW_PRIVATE_KEY` saves a

@@ -39,8 +39,8 @@ faucet, and the same one-time `ttflow` init. Differences that matter:
   unset). Dev stub receipts are for the local simnet demo only.
 - Claims pay fees from the claimer's own collateral (feerate-estimated) and submit through
   the mempool on tn10 exactly as on the demo L1.
-- Start `ttd` against a fresh lane (wipe `ttd-data` when starting over): the bridge cannot
-  join an already-live lane.
+- Wipe `ttd-data` when starting over: stale anchors kill restarts with "starting block no
+  longer in chain".
 
 This path is configured but not yet exercised end to end; the verified flow is the simnet
 runbook above.
