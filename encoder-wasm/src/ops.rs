@@ -502,7 +502,7 @@ pub fn claim_tx(
 
     // Sign the collateral input over the built transaction. The sighash replaces the signed
     // input's script with the prevout SPK, so the signature stays valid once spliced in; the
-    // id must be finalized again — the storage-mass commit below does not affect it.
+    // id must be finalized again (the storage-mass commit below does not affect it).
     let idx = tx.inputs.len() - 1;
     let secret = hex32(privkey_hex)?;
     let sig =

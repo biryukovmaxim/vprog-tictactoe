@@ -39,7 +39,7 @@ export function claimableExits(roots: ExitRoot[], pubkeyHex: string): ClaimTarge
 /// `claim_tx` arguments assembled from the served shapes; field names mirror
 /// the encoder-wasm parameter names. The DA precomputes the post-claim root
 /// per leaf, so no merkle math happens here. The deduct is always the full
-/// leaf amount (demo lock: full claims only — the encoder pins it). The fee
+/// leaf amount (demo lock: full claims only; the encoder pins it). The fee
 /// is absent: it prices from the node's feerate estimation at submit time
 /// (see `claimFee`) and burns from the claimer's own collateral input.
 export interface ClaimArgs {
@@ -79,7 +79,7 @@ export function claimArgs(covenantIdHex: string, root: ExitRoot, leaf: ExitLeaf)
 
 /// The claim fee from the node's feerate estimation: the priority bucket's
 /// feerate (sompi/gram) times the tx byte length plus one sigop compute mass
-/// (~10k grams — byte length alone under-prices once the collateral P2PK
+/// (~10k grams; byte length alone under-prices once the collateral P2PK
 /// signature is added). Over-estimating slightly is fine: the unburned
 /// remainder returns as the collateral change.
 export async function claimFee(client: RpcClient, txBytes: Uint8Array): Promise<bigint> {
@@ -89,7 +89,7 @@ export async function claimFee(client: RpcClient, txBytes: Uint8Array): Promise<
 }
 
 /// Whether the delegate pool can fund the payout: claims aggregate inputs,
-/// so the SUM covering `amount` affords — unlike carriers, whose single-UTXO
+/// so the SUM covering `amount` affords, unlike carriers, whose single-UTXO
 /// spend requires `pickUtxo`'s largest-strictly-covering rule. The fee never
 /// comes from the pool: it burns from the claimer's own collateral input.
 export function canAffordClaim(utxos: WalletUtxo[], leafAmount: bigint): boolean {

@@ -435,7 +435,7 @@ async fn test_e2e_simnet_game_flow() {
     // Claims pay the leaf out of the delegate pool at the covenant deposit address and burn a
     // feerate-priced fee from the claimer's own collateral UTXO (delegates are conserved
     // exact), so they enter the mempool through the ordinary submit path and the continuous
-    // miner picks them up — no /inject, exactly like a real node.
+    // miner picks them up; no /inject, exactly like a real node.
     let covenant_id = handles.covenant_id.as_bytes();
     let deposit_address =
         Address::new(Prefix::Simnet, Version::ScriptHash, &delegate_entry_spk_hash(&covenant_id));
@@ -623,7 +623,7 @@ async fn own_collateral<C: RpcApi + ?Sized>(
 
 /// The claim fee from the node's feerate estimation (mirrors the web `claimFee`): the priority
 /// bucket's feerate (sompi/gram) times the tx byte length plus one sigop compute mass (~10k
-/// grams — byte length alone under-prices once the collateral P2PK signature is added). The
+/// grams; byte length alone under-prices once the collateral P2PK signature is added). The
 /// fee never changes the byte length, so the probe is built at fee 0.
 async fn claim_fee<C: RpcApi + ?Sized>(client: &Arc<C>, probe: &Transaction) -> u64 {
     let estimate = client.get_fee_estimate().await.expect("fee estimate");
@@ -637,7 +637,7 @@ async fn claim_fee<C: RpcApi + ?Sized>(client: &Arc<C>, probe: &Transaction) -> 
 /// The post-claim root is caller-supplied (the full-leaf fold empties the leaf slot), the
 /// delegate inputs fund the payout, and the collateral input funds a feerate-priced fee burned
 /// from its trailing change (signed with A's key, so the claim rides the mempool's ordinary
-/// submit path — no /inject).
+/// submit path; no /inject).
 #[allow(clippy::too_many_arguments)]
 async fn build_full_claim<C: RpcApi + ?Sized>(
     client: &Arc<C>,
@@ -685,11 +685,15 @@ async fn build_full_claim<C: RpcApi + ?Sized>(
     let (mut tx, utxos) = build(fee).expect("claim assembly failed");
 
     // Sign the collateral input over the built transaction (the sighash excludes signature
-    // scripts), then commit the KIP-0009 storage mass over the final outputs — Toccata txs
+    // scripts), then commit the KIP-0009 storage mass over the final outputs: Toccata txs
     // must carry it or the node disqualifies their block.
     let idx = tx.inputs.len() - 1;
-    let sig =
-        sign_input(&PopulatedTransaction::new(&tx, utxos.clone()), idx, &collateral.secret, SIG_HASH_ALL);
+    let sig = sign_input(
+        &PopulatedTransaction::new(&tx, utxos.clone()),
+        idx,
+        &collateral.secret,
+        SIG_HASH_ALL,
+    );
     tx.inputs[idx].signature_script = sig;
     tx.finalize();
     commit_storage_mass(params, &tx, &utxos);
