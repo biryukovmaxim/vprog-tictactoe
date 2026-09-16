@@ -6,7 +6,7 @@ packages never land in git as text:
 - `kaspa-wasm-2.0.1.tgz` — the Rusty Kaspa SDK wasm package, built locally for `wasm32`
   from [rusty-kaspa](https://github.com/kaspanet/rusty-kaspa) master (`wasm/` crate).
   npm only ships 0.13.x; the wallet needs 2.0.x. ISC license, see the LICENSE inside.
-- `vprog-tictactoe-encoder-wasm-0.1.4.tgz` — `wasm-pack` output of this repo's
+- `vprog-tictactoe-encoder-wasm-0.1.5.tgz` — `wasm-pack` output of this repo's
   `encoder-wasm` crate.
 
 Regenerating:

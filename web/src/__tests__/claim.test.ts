@@ -150,7 +150,6 @@ describe('claimArgs (full-deduct claim_tx mapping from the served shapes)', () =
       new_root_hex: leaf.full_claim.new_root,
       new_unclaimed: 2n,
       siblings_hex: leaf.siblings,
-      fee: 2_000_000n,
     });
   });
 });
@@ -158,42 +157,50 @@ describe('claimArgs (full-deduct claim_tx mapping from the served shapes)', () =
 describe('canAffordClaim (delegate sum, not the single-UTXO rule)', () => {
   const utxo = (amount: bigint): WalletUtxo => ({ txid_hex: 'aa'.repeat(32), index: 0, amount, spk_hex: '00', spk_version: 0 });
 
-  it('affords when the delegate sum covers payout plus fee (split pool)', () => {
-    expect(canAffordClaim([utxo(30n), utxo(25n)], 50n, 0n)).toBe(true);
+  it('affords when the delegate sum covers the payout (split pool)', () => {
+    expect(canAffordClaim([utxo(30n), utxo(25n)], 50n)).toBe(true);
   });
 
   it('affords at the exact boundary (delegate change may be zero)', () => {
-    expect(canAffordClaim([utxo(50n)], 50n, 0n)).toBe(true);
+    expect(canAffordClaim([utxo(50n)], 50n)).toBe(true);
   });
 
   it('rejects a short or empty pool', () => {
-    expect(canAffordClaim([utxo(30n)], 50n, 0n)).toBe(false);
-    expect(canAffordClaim([], 50n, 0n)).toBe(false);
-  });
-
-  it('counts the fee in the requirement', () => {
-    expect(canAffordClaim([utxo(50n)], 50n, 1n)).toBe(false);
+    expect(canAffordClaim([utxo(30n)], 50n)).toBe(false);
+    expect(canAffordClaim([], 50n)).toBe(false);
   });
 });
 
 // ---------------------------------------------------------------------------
 // Submit flow over the real encoder wasm.
 
-/// L1 client whose delegate pool (UTXOs at the deposit address) totals
-/// `amounts`; the address argument is ignored like the other mocks.
-function delegateClient(amounts: bigint[]) {
-  const entries = amounts.map((amount, i) => ({
+/// L1 client serving the delegate pool at `DEPOSIT` and the claimer's own
+/// collateral UTXO (paid to their P2PK) at any other address, with a flat
+/// priority feerate of 1 sompi/gram.
+function claimClient(delegateAmounts: bigint[], ownAmount: bigint, pubkeyHex: string) {
+  const delegateEntries = delegateAmounts.map((amount, i) => ({
     outpoint: { transactionId: `d${i}`.repeat(32), index: 0 },
     amount,
     scriptPublicKey: { version: 0, script: '9a'.repeat(10) },
     blockDaaScore: 0n,
     isCoinbase: false,
   }));
+  const ownEntries = [
+    {
+      outpoint: { transactionId: 'ee'.repeat(32), index: 0 },
+      amount: ownAmount,
+      scriptPublicKey: { version: 0, script: mySpkHex(pubkeyHex) },
+      blockDaaScore: 0n,
+      isCoinbase: false,
+    },
+  ];
   const submitTransaction = vi.fn(
     async (_req: { transaction: Transaction; allowOrphan?: boolean }) => ({ transactionId: 'cafecafe' }),
   );
   const client = {
-    getUtxosByAddresses: async () => ({ entries }),
+    getUtxosByAddresses: async ({ addresses }: { addresses: string[] }) =>
+      addresses[0] === DEPOSIT ? { entries: delegateEntries } : { entries: ownEntries },
+    getFeeEstimate: async () => ({ estimate: { priorityBucket: { feerate: 1 } } }),
     submitTransaction,
   } as never as RpcClient;
   return { client, submitTransaction };
@@ -213,10 +220,10 @@ function myClaimRoot(pubkeyHex: string, newUnclaimed: number): { root: ExitRoot;
 }
 
 describe('submitClaim', () => {
-  it('aggregates delegate UTXOs into a full-deduct payout on L1 and witnesses my L1 sum', async () => {
+  it('aggregates delegates plus a fee collateral and witnesses my L1 sum', async () => {
     const identity = await loadIdentity(PRIVKEY);
     const { root, leaf } = myClaimRoot(identity.wallet.pubkeyHex, 1);
-    const { client, submitTransaction } = delegateClient([30_000_000n, 25_000_000n]);
+    const { client, submitTransaction } = claimClient([30_000_000n, 25_000_000n], 1_000_000_000n, identity.wallet.pubkeyHex);
     const onActivity = vi.fn();
 
     const txid = await submitClaim({
@@ -235,22 +242,26 @@ describe('submitClaim', () => {
     const arg = submitTransaction.mock.calls[0]![0]!;
     expect(arg.allowOrphan).toBe(false);
     expect(arg.transaction).toBeInstanceOf(Transaction);
-    // Permission UTXO plus both delegate inputs: claims aggregate, unlike carriers.
-    expect(arg.transaction.inputs).toHaveLength(3);
+    // Permission UTXO plus both delegate inputs plus the fee collateral: claims aggregate.
+    expect(arg.transaction.inputs).toHaveLength(4);
     // Full-leaf deduct: the payout is the whole leaf amount, to my key.
     expect(arg.transaction.outputs[0].value).toBe(50_000_000n);
     expect(arg.transaction.outputs[0].scriptPublicKey.script).toBe(mySpkHex(identity.wallet.pubkeyHex));
     // The permission continuation output carries the served rent.
     expect(arg.transaction.outputs[1].value).toBe(50_000_000n);
-    // The delegate change carries the pool remainder minus the burned fee.
-    expect(arg.transaction.outputs[2].value).toBe(3_000_000n);
+    // The delegate change carries the pool remainder exactly (delegates never burn).
+    expect(arg.transaction.outputs[2].value).toBe(5_000_000n);
+    // The collateral change is the own UTXO minus the feerate-priced fee.
+    const fee = 1_000_000_000n - arg.transaction.outputs[3]!.value;
+    expect(fee).toBeGreaterThan(10_000n);
+    expect(arg.transaction.inputs[3]!.previousOutpoint.transactionId).toBe('ee'.repeat(32));
     expect(onActivity).toHaveBeenCalledWith('claim exits', 'cafecafe', { kind: 'l1', before: 123n });
   });
 
   it('folds the rent into the payout when claiming the last unclaimed leaf', async () => {
     const identity = await loadIdentity(PRIVKEY);
     const { root, leaf } = myClaimRoot(identity.wallet.pubkeyHex, 0);
-    const { client, submitTransaction } = delegateClient([55_000_000n]);
+    const { client, submitTransaction } = claimClient([55_000_000n], 1_000_000_000n, identity.wallet.pubkeyHex);
 
     await submitClaim({
       identity,
@@ -264,15 +275,15 @@ describe('submitClaim', () => {
     });
 
     const tx = submitTransaction.mock.calls[0]![0]!.transaction;
-    // Payout + folded rent, then the delegate change; no continuation output.
-    expect(tx.outputs).toHaveLength(2);
+    // Payout + folded rent, delegate change, collateral change; no continuation output.
+    expect(tx.outputs).toHaveLength(3);
     expect(tx.outputs[0].value).toBe(100_000_000n);
   });
 
   it('rejects before building when the delegate pool cannot cover the payout', async () => {
     const identity = await loadIdentity(PRIVKEY);
     const { root, leaf } = myClaimRoot(identity.wallet.pubkeyHex, 1);
-    const { client, submitTransaction } = delegateClient([10_000_000n]);
+    const { client, submitTransaction } = claimClient([10_000_000n], 1_000_000_000n, identity.wallet.pubkeyHex);
 
     await expect(
       submitClaim({
@@ -289,10 +300,30 @@ describe('submitClaim', () => {
     expect(submitTransaction).not.toHaveBeenCalled();
   });
 
+  it('rejects when the wallet holds no collateral UTXO for the fee', async () => {
+    const identity = await loadIdentity(PRIVKEY);
+    const { root, leaf } = myClaimRoot(identity.wallet.pubkeyHex, 1);
+    const { client, submitTransaction } = claimClient([55_000_000n], 0n, identity.wallet.pubkeyHex);
+
+    await expect(
+      submitClaim({
+        identity,
+        client,
+        covenantId: COVENANT,
+        depositAddress: DEPOSIT,
+        root,
+        leaf,
+        balanceBefore: null,
+        onActivity: vi.fn(),
+      }),
+    ).rejects.toThrow(/insufficient L1 funds/);
+    expect(submitTransaction).not.toHaveBeenCalled();
+  });
+
   it('propagates a rejected submitTx: fee-bearing claims have no /inject fallback', async () => {
     const identity = await loadIdentity(PRIVKEY);
     const { root, leaf } = myClaimRoot(identity.wallet.pubkeyHex, 1);
-    const { client, submitTransaction } = delegateClient([55_000_000n]);
+    const { client, submitTransaction } = claimClient([55_000_000n], 1_000_000_000n, identity.wallet.pubkeyHex);
     submitTransaction.mockRejectedValueOnce(new Error('rejected: missing inputs'));
     const inject = vi.fn();
     vi.stubGlobal('fetch', inject);

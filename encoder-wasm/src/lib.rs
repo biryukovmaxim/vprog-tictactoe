@@ -110,7 +110,7 @@ mod tests {
         constants::TX_VERSION_TOCCATA,
         hashing::sighash::SigHashReusedValuesUnsync,
         mass::MassCalculator,
-        tx::{PopulatedTransaction, Transaction, UtxoEntry},
+        tx::{PopulatedTransaction, ScriptPublicKey, Transaction, UtxoEntry},
     };
     use kaspa_hashes::Hash;
     use kaspa_txscript::{
@@ -567,8 +567,8 @@ mod tests {
         }
     }
 
-    /// Executes the permission input's script against the tx, mirroring the claim-kit tests.
-    fn run_permission_input(tx: &Transaction, utxos: &[UtxoEntry]) -> Result<(), String> {
+    /// Executes one input's scripts against the tx, mirroring the claim-kit tests.
+    fn run_input(tx: &Transaction, utxos: &[UtxoEntry], idx: usize) -> Result<(), String> {
         let sig_cache = Cache::new(10_000);
         let reused = SigHashReusedValuesUnsync::new();
         let flags = EngineFlags { covenants_enabled: true, ..Default::default() };
@@ -582,13 +582,40 @@ mod tests {
             .with_covenants_ctx(&cov_ctx);
         let mut vm = TxScriptEngine::from_transaction_input(
             &populated,
-            &tx.inputs[0],
-            0,
-            &utxos[0],
+            &tx.inputs[idx],
+            idx,
+            &utxos[idx],
             exec_ctx,
             flags,
         );
         vm.execute().map_err(|e| format!("{e:?}"))
+    }
+
+    /// Executes the permission input and the collateral input: the permission script enforces
+    /// the spend shape, the collateral input's P2PK sig commits to exactly the submitted
+    /// outputs.
+    fn run_permission_input(tx: &Transaction, utxos: &[UtxoEntry]) -> Result<(), String> {
+        run_input(tx, utxos, 0)?;
+        run_input(tx, utxos, tx.inputs.len() - 1)
+    }
+
+    /// Decodes a hex string (test-local mirror of the ops helper).
+    fn hex_bytes(s: &str) -> Vec<u8> {
+        let mut out = vec![0u8; s.len() / 2];
+        faster_hex::hex_decode(s.as_bytes(), &mut out).expect("valid hex");
+        out
+    }
+
+    /// The claimer's collateral UTXO at the test key: a plain schnorr P2PK.
+    fn collateral_utxo() -> UtxoCandidate {
+        let spk = pay_to_address_script(&test_address(&test_signer()));
+        UtxoCandidate {
+            txid_hex: Hash::from_bytes([3u8; 32]).to_string(),
+            index: 0,
+            amount: 1_000_000_000,
+            spk_hex: faster_hex::hex_string(spk.script()),
+            spk_version: spk.version(),
+        }
     }
 
     /// Rebuilds the UTXO entries the claim builder's transaction spends.
@@ -599,6 +626,7 @@ mod tests {
         depth: usize,
         rent: u64,
         delegates: &[UtxoCandidate],
+        collateral: &UtxoCandidate,
     ) -> Vec<UtxoEntry> {
         let perm_spk = pay_to_script_hash_script(&build_permission_redeem_script(
             old_root,
@@ -611,6 +639,9 @@ mod tests {
         for d in delegates {
             utxos.push(UtxoEntry::new(d.amount, delegate_spk.clone(), 0, false, None));
         }
+        let spk =
+            ScriptPublicKey::new(collateral.spk_version, hex_bytes(&collateral.spk_hex).into());
+        utxos.push(UtxoEntry::new(collateral.amount, spk, 0, false, None));
         utxos
     }
 
@@ -631,8 +662,10 @@ mod tests {
             spk_hex: String::new(),
             spk_version: 0,
         };
+        let collateral = collateral_utxo();
 
         let bytes = claim_tx(
+            &test_privkey_hex(),
             &hex32_str(&covenant_id),
             &Hash::from_bytes([1u8; 32]).to_string(),
             0,
@@ -647,6 +680,7 @@ mod tests {
             1,
             claim_siblings(&leaves, 0).iter().map(|s| faster_hex::hex_string(s)).collect(),
             vec![delegate.clone()],
+            collateral.clone(),
             0,
         )
         .unwrap();
@@ -656,8 +690,15 @@ mod tests {
         // commitment must be present and non-zero.
         assert!(tx.storage_mass() > 0, "non-terminal claim must commit storage mass");
 
-        let utxos =
-            claim_utxos(&covenant_id, &tree.root(), 2, tree.depth(), 50_000_000, &[delegate]);
+        let utxos = claim_utxos(
+            &covenant_id,
+            &tree.root(),
+            2,
+            tree.depth(),
+            50_000_000,
+            &[delegate],
+            &collateral,
+        );
         // The committed mass must equal the consensus calculator over the real covenant-aware
         // entries (the permission input and continuation output count plurality 2).
         let calc = MassCalculator::new(
@@ -677,7 +718,7 @@ mod tests {
     }
 
     #[test]
-    fn claim_tx_fee_reduces_delegate_change() {
+    fn claim_tx_fee_reduces_collateral_change() {
         let my_pk = [0x31u8; 32];
         let leaves = vec![
             ExitLeaf::from_pair(StandardSpk::PubKey(&my_pk), 5_000),
@@ -692,8 +733,10 @@ mod tests {
             spk_hex: String::new(),
             spk_version: 0,
         };
+        let collateral = collateral_utxo();
 
         let bytes = claim_tx(
+            &test_privkey_hex(),
             &hex32_str(&covenant_id),
             &Hash::from_bytes([1u8; 32]).to_string(),
             0,
@@ -707,28 +750,37 @@ mod tests {
             &hex32_str(&tree.root_with_leaf(0, PermissionTreeAccumulator::hash_empty())),
             1,
             claim_siblings(&leaves, 0).iter().map(|s| faster_hex::hex_string(s)).collect(),
-            vec![delegate],
+            vec![delegate.clone()],
+            collateral.clone(),
             1_000,
         )
         .unwrap();
         let tx = decode_built(&bytes);
-        // Payout, permission continuation, and the delegate change minus the fee.
+        // Payout, permission continuation, the exact delegate change, and the collateral
+        // change minus the fee.
         assert_eq!(tx.outputs[0].value, 5_000);
         assert_eq!(tx.outputs[1].value, 50_000_000);
-        assert_eq!(tx.outputs[2].value, 2_000);
+        assert_eq!(tx.outputs[2].value, 3_000);
+        assert_eq!(tx.outputs[3].value, collateral.amount - 1_000);
 
-        // A fee beyond the delegate change is rejected.
+        let utxos = claim_utxos(
+            &covenant_id,
+            &tree.root(),
+            2,
+            tree.depth(),
+            50_000_000,
+            &[delegate],
+            &collateral,
+        );
+        run_permission_input(&tx, &utxos).expect("fee-bearing claim spend verifies");
+
+        // A fee not strictly below the collateral is rejected (zero change is network dust).
         #[cfg(target_arch = "wasm32")]
         {
-            let lean = UtxoCandidate {
-                txid_hex: Hash::from_bytes([2u8; 32]).to_string(),
-                index: 1,
-                amount: 5_000,
-                spk_hex: String::new(),
-                spk_version: 0,
-            };
+            let lean = UtxoCandidate { amount: 1_000, ..collateral };
             assert!(
                 claim_tx(
+                    &test_privkey_hex(),
                     &hex32_str(&covenant_id),
                     &Hash::from_bytes([1u8; 32]).to_string(),
                     0,
@@ -742,8 +794,9 @@ mod tests {
                     &hex32_str(&tree.root_with_leaf(0, PermissionTreeAccumulator::hash_empty())),
                     1,
                     claim_siblings(&leaves, 0).iter().map(|s| faster_hex::hex_string(s)).collect(),
-                    vec![lean],
-                    1,
+                    vec![],
+                    lean,
+                    1_000,
                 )
                 .is_err()
             );

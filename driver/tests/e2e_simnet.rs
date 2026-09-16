@@ -12,9 +12,11 @@ use std::{sync::Arc, time::Duration};
 use kaspa_addresses::{Address, Prefix, Version};
 use kaspa_consensus_core::{
     config::params::{ForkActivation, Params},
+    hashing::sighash_type::SIG_HASH_ALL,
     mass::BlockMassLimits,
     network::{NetworkId, NetworkType},
-    tx::{Transaction, TransactionOutpoint},
+    sign::sign_input,
+    tx::{PopulatedTransaction, ScriptPublicKey, Transaction, TransactionOutpoint},
 };
 use kaspa_hashes::Hash;
 use kaspa_rpc_core::{RpcTransaction, api::rpc::RpcApi};
@@ -44,13 +46,6 @@ use vprogs_zk_backend_risc0_app_kit::{
 use vprogs_zk_backend_risc0_test_suite::{
     batch_aggregator_elf, batch_processor_elf, dev_mode_enabled,
 };
-
-/// Fee burned from the delegate change so claims ride the ordinary mempool
-/// path (mirrors the web `CLAIM_FEE`; the permission redeem caps any burn at
-/// the script-side FEE_CAP, currently 10_000_000 sompi). The relay floor
-/// prices the claim's normalized transient mass — measured at 935_200 sompi
-/// for a typical spend — so this doubles it.
-const CLAIM_FEE: u64 = 2_000_000;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_e2e_simnet_game_flow() {
@@ -437,33 +432,39 @@ async fn test_e2e_simnet_game_flow() {
     assert_eq!(follower_leaf_index, leaf_index, "follower must resolve the same leaf");
     drop(follower);
 
-    // Claims pay the leaf out of the delegate pool at the covenant deposit address and burn
-    // CLAIM_FEE from the delegate change (the permission redeem pins the payout exact and caps
-    // the burn at FEE_CAP), so they enter the mempool through the ordinary submit path and the
-    // continuous miner picks them up — no /inject, exactly like a real node.
+    // Claims pay the leaf out of the delegate pool at the covenant deposit address and burn a
+    // feerate-priced fee from the claimer's own collateral UTXO (delegates are conserved
+    // exact), so they enter the mempool through the ordinary submit path and the continuous
+    // miner picks them up — no /inject, exactly like a real node.
     let covenant_id = handles.covenant_id.as_bytes();
     let deposit_address =
         Address::new(Prefix::Simnet, Version::ScriptHash, &delegate_entry_spk_hash(&covenant_id));
+    let payout_address = Address::new(Prefix::Simnet, Version::PubKey, &report.player_a_pubkey);
+    // Fund player A's payout address so the claims have their own collateral to spend.
+    l1.fund_address(&payout_address, 1_000_000_000, 2).await;
+    l1.mine_blocks(2).await;
+
     let delegates = delegate_pool(&arc_client, &deposit_address).await;
     let delegate_total: u64 = delegates.iter().map(|(_, amount)| *amount).sum();
     assert!(
-        delegate_total >= leaf.amount + CLAIM_FEE,
-        "delegate pool {delegate_total} must cover the leaf {} plus the fee {}",
-        leaf.amount,
-        CLAIM_FEE
+        delegate_total >= leaf.amount,
+        "delegate pool {delegate_total} must cover the leaf {}",
+        leaf.amount
     );
 
     // Full-leaf claim. On the last leaf of the root the builder folds the permission rent
     // into the payout, so the expected value depends on the remaining unclaimed count.
     let expected_payout = leaf.amount + if record.unclaimed == 1 { record.rent } else { 0 };
+    let collateral = own_collateral(&arc_client, &payout_address, &report.player_a_secret).await;
     let (claim_tx, claim_txid) = build_full_claim(
+        &arc_client,
         &params,
         &covenant_id,
         &record,
         leaf_index,
         tree.root_with_leaf(leaf_index, PermissionTreeAccumulator::hash_empty()),
         delegates,
-        CLAIM_FEE,
+        &collateral,
     )
     .await;
     let submitted = arc_client
@@ -473,7 +474,6 @@ async fn test_e2e_simnet_game_flow() {
     assert_eq!(submitted, claim_txid, "the node must accept the claim under its own txid");
 
     // Payout lands at player A's P2PK destination with the full-leaf value.
-    let payout_address = Address::new(Prefix::Simnet, Version::PubKey, &report.player_a_pubkey);
     wait_payout(&arc_client, &payout_address, expected_payout).await;
 
     // Bridge watcher coverage: the spend mark names our claim tx with the full deduct. Marks
@@ -509,14 +509,21 @@ async fn test_e2e_simnet_game_flow() {
     let delegates2 = delegate_pool(&arc_client, &deposit_address).await;
     let delegate2_total: u64 = delegates2.iter().map(|(_, amount)| *amount).sum();
     assert!(
-        delegate2_total >= leaf2.amount + CLAIM_FEE,
-        "delegate pool {delegate2_total} must cover the second leaf {} plus the fee {}",
-        leaf2.amount,
-        CLAIM_FEE
+        delegate2_total >= leaf2.amount,
+        "delegate pool {delegate2_total} must cover the second leaf {}",
+        leaf2.amount
     );
+    let collateral2 = own_collateral(&arc_client, &payout_address, &report.player_a_secret).await;
 
-    let (claim2_tx, claim2_txid) =
-        build_claim_from_view(&covenant_id, &view, other_index, delegates2, CLAIM_FEE);
+    let (claim2_tx, claim2_txid) = build_claim_from_view(
+        &arc_client,
+        &covenant_id,
+        &view,
+        other_index,
+        delegates2,
+        &collateral2,
+    )
+    .await;
     let submitted2 = arc_client
         .submit_transaction(RpcTransaction::from(&claim2_tx), false)
         .await
@@ -582,52 +589,109 @@ async fn delegate_pool<C: RpcApi + ?Sized>(
         .collect()
 }
 
-/// Builds the full-leaf permission claim for direct mining, returning it and its txid.
+/// The claimer's fee collateral: player A's largest own UTXO plus the signing key.
+struct Collateral {
+    /// The funding outpoint.
+    outpoint: TransactionOutpoint,
+    /// The UTXO's value in sompi.
+    amount: u64,
+    /// The UTXO's script public key (a schnorr P2PK paying A's key).
+    spk: ScriptPublicKey,
+    /// Player A's private key, signing the collateral input.
+    secret: [u8; 32],
+}
+
+/// Picks the claimer's largest UTXO at `address` as the fee collateral.
+async fn own_collateral<C: RpcApi + ?Sized>(
+    client: &Arc<C>,
+    address: &Address,
+    secret: &[u8; 32],
+) -> Collateral {
+    let entries =
+        client.get_utxos_by_addresses(vec![address.clone()]).await.expect("fetch collateral utxos");
+    let pick = entries
+        .iter()
+        .max_by_key(|e| e.utxo_entry.amount)
+        .expect("the claimer must own a collateral UTXO");
+    Collateral {
+        outpoint: TransactionOutpoint::from(pick.outpoint),
+        amount: pick.utxo_entry.amount,
+        spk: pick.utxo_entry.script_public_key.clone(),
+        secret: *secret,
+    }
+}
+
+/// The claim fee from the node's feerate estimation (mirrors the web `claimFee`): the priority
+/// bucket's feerate (sompi/gram) times the tx byte length plus one sigop compute mass (~10k
+/// grams — byte length alone under-prices once the collateral P2PK signature is added). The
+/// fee never changes the byte length, so the probe is built at fee 0.
+async fn claim_fee<C: RpcApi + ?Sized>(client: &Arc<C>, probe: &Transaction) -> u64 {
+    let estimate = client.get_fee_estimate().await.expect("fee estimate");
+    let feerate = estimate.priority_bucket.feerate;
+    let grams = borsh::to_vec(&probe).expect("serialize probe").len() as f64 + 10_000.0;
+    (feerate * grams).ceil() as u64
+}
+
+/// Builds the full-leaf permission claim, returning it and its txid.
 ///
-/// The post-claim root is caller-supplied (the full-leaf fold empties the leaf slot), and the
-/// delegate inputs fund the payout. The claim is zero-fee by protocol, so it cannot ride the
-/// mempool's relay-fee floor; the caller mines it into a block directly.
-async fn build_full_claim(
+/// The post-claim root is caller-supplied (the full-leaf fold empties the leaf slot), the
+/// delegate inputs fund the payout, and the collateral input funds a feerate-priced fee burned
+/// from its trailing change (signed with A's key, so the claim rides the mempool's ordinary
+/// submit path — no /inject).
+#[allow(clippy::too_many_arguments)]
+async fn build_full_claim<C: RpcApi + ?Sized>(
+    client: &Arc<C>,
     params: &Params,
     covenant_id: &[u8; 32],
     record: &ExitRecord,
     leaf_index: usize,
     new_root: [u8; 32],
     delegates: Vec<(TransactionOutpoint, u64)>,
-    fee: u64,
+    collateral: &Collateral,
 ) -> (Transaction, Hash) {
     let leaf = &record.leaves[leaf_index];
     let tree = PermissionTreeView::from_leaves(&record.leaves);
-    let args = PermissionSpendArgs {
-        covenant_id: *covenant_id,
-        permission_outpoint: TransactionOutpoint::new(
-            Hash::from_bytes(record.settlement_txid),
-            record.outpoint_index,
-        ),
-        permission_rent: record.rent,
-        old_root: tree.root(),
-        old_unclaimed: record.unclaimed,
-        depth: tree.depth(),
-        leaf_index,
-        leaf_spk: leaf.script_bytes(),
-        leaf_amount: leaf.amount,
-        deduct: leaf.amount,
-        siblings: tree.siblings(leaf_index),
-        new_root,
-        new_unclaimed: record.unclaimed - 1,
-        delegate_inputs: delegates,
+    let build = |fee: u64| {
+        let args = PermissionSpendArgs {
+            covenant_id: *covenant_id,
+            permission_outpoint: TransactionOutpoint::new(
+                Hash::from_bytes(record.settlement_txid),
+                record.outpoint_index,
+            ),
+            permission_rent: record.rent,
+            old_root: tree.root(),
+            old_unclaimed: record.unclaimed,
+            depth: tree.depth(),
+            leaf_index,
+            leaf_spk: leaf.script_bytes(),
+            leaf_amount: leaf.amount,
+            deduct: leaf.amount,
+            siblings: tree.siblings(leaf_index),
+            new_root,
+            new_unclaimed: record.unclaimed - 1,
+            delegate_inputs: delegates.clone(),
+            collateral_input: (collateral.outpoint, collateral.amount),
+            collateral_spk: collateral.spk.clone(),
+            fee,
+            collateral_sig: Vec::new(),
+        };
+        build_permission_spend(&args)
     };
-    let (mut tx, utxos) = build_permission_spend(&args).expect("claim assembly failed");
-    // Burn the fee from the trailing delegate change, mirroring the web encoder's claim_tx:
-    // the burn precedes the storage-mass commit so the commitment covers the final outputs.
-    // The burn changes the tx payload, so the id must be finalized again (storage mass alone
-    // does not affect it).
-    if fee > 0 {
-        let change = tx.outputs.last_mut().expect("claim tx has a delegate change output");
-        change.value -= fee;
-        tx.finalize();
-    }
-    // Toccata txs must commit their KIP-0009 storage mass or the node disqualifies their block.
+
+    // The fee never changes the tx byte length: probe at 0, price from the node's feerate
+    // estimation, then rebuild with the real fee.
+    let probe = build(0).expect("probe claim assembly failed").0;
+    let fee = claim_fee(client, &probe).await;
+    let (mut tx, utxos) = build(fee).expect("claim assembly failed");
+
+    // Sign the collateral input over the built transaction (the sighash excludes signature
+    // scripts), then commit the KIP-0009 storage mass over the final outputs — Toccata txs
+    // must carry it or the node disqualifies their block.
+    let idx = tx.inputs.len() - 1;
+    let sig =
+        sign_input(&PopulatedTransaction::new(&tx, utxos.clone()), idx, &collateral.secret, SIG_HASH_ALL);
+    tx.inputs[idx].signature_script = sig;
+    tx.finalize();
     commit_storage_mass(params, &tx, &utxos);
     let txid = tx.id();
     (tx, txid)
@@ -685,13 +749,16 @@ async fn wait_exit_view<S: Store>(store: &S, root: &[u8; 32]) -> ExitView {
 
 /// Builds a full-leaf claim from a served exit view through the web encoder's `claim_tx`
 /// builder, so the L1 consensus exercises the exact transaction the frontend submits. Every
-/// argument comes from the served view, mirroring the web `claimArgs` mapping.
-fn build_claim_from_view(
+/// argument comes from the served view, mirroring the web `claimArgs` mapping; the fee prices
+/// from the node's feerate estimation (probe at 0, rebuild with the real fee) and burns from
+/// the claimer's collateral UTXO.
+async fn build_claim_from_view<C: RpcApi + ?Sized>(
+    client: &Arc<C>,
     covenant_id: &[u8; 32],
     view: &ExitView,
     leaf_index: usize,
     delegates: Vec<(TransactionOutpoint, u64)>,
-    fee: u64,
+    collateral: &Collateral,
 ) -> (Transaction, Hash) {
     let hex = |bytes: &[u8]| bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
     let leaf = &view.record.leaves[leaf_index];
@@ -704,25 +771,41 @@ fn build_claim_from_view(
             spk_hex: String::new(),
             spk_version: 0,
         })
-        .collect();
-    let bytes = vprog_tictactoe_encoder_wasm::claim_tx(
-        &Hash::from_bytes(*covenant_id).to_string(),
-        &Hash::from_bytes(view.record.settlement_txid).to_string(),
-        view.record.outpoint_index,
-        view.record.rent,
-        &Hash::from_bytes(view.root).to_string(),
-        view.record.unclaimed,
-        view.depth as u32,
-        leaf_index as u32,
-        &hex(leaf.script_bytes()),
-        leaf.amount,
-        &Hash::from_bytes(view.full_claim_roots[leaf_index]).to_string(),
-        view.record.unclaimed - 1,
-        view.siblings[leaf_index].iter().map(|s| hex(s.as_slice())).collect(),
-        delegate_utxos,
-        fee,
-    )
-    .expect("encoder claim assembly failed");
+        .collect::<Vec<_>>();
+    let collateral_utxo = vprog_tictactoe_encoder_wasm::UtxoCandidate {
+        txid_hex: collateral.outpoint.transaction_id.to_string(),
+        index: collateral.outpoint.index,
+        amount: collateral.amount,
+        spk_hex: hex(collateral.spk.script()),
+        spk_version: collateral.spk.version(),
+    };
+    let privkey_hex = hex(&collateral.secret);
+    let build = |fee: u64| {
+        vprog_tictactoe_encoder_wasm::claim_tx(
+            &privkey_hex,
+            &Hash::from_bytes(*covenant_id).to_string(),
+            &Hash::from_bytes(view.record.settlement_txid).to_string(),
+            view.record.outpoint_index,
+            view.record.rent,
+            &Hash::from_bytes(view.root).to_string(),
+            view.record.unclaimed,
+            view.depth as u32,
+            leaf_index as u32,
+            &hex(leaf.script_bytes()),
+            leaf.amount,
+            &Hash::from_bytes(view.full_claim_roots[leaf_index]).to_string(),
+            view.record.unclaimed - 1,
+            view.siblings[leaf_index].iter().map(|s| hex(s.as_slice())).collect(),
+            delegate_utxos.clone(),
+            collateral_utxo.clone(),
+            fee,
+        )
+    };
+
+    let probe = build(0).expect("encoder probe claim assembly failed");
+    let probe_tx: Transaction = borsh::from_slice(&probe).expect("decode encoder probe claim");
+    let fee = claim_fee(client, &probe_tx).await;
+    let bytes = build(fee).expect("encoder claim assembly failed");
     let tx: Transaction = borsh::from_slice(&bytes).expect("decode encoder claim");
     let txid = tx.id();
     (tx, txid)

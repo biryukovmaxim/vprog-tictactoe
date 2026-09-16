@@ -10,7 +10,7 @@ import type { ActivityWitness } from './match';
 import { NETWORK, connectClient, type WalletUtxo } from './wallet';
 import type { RpcClient } from 'kaspa-wasm';
 import { UtxoCandidate, claim_tx, create_game_tx, join_game_tx, network_params, transfer_tx, withdraw_tx } from 'vprog-tictactoe-encoder-wasm';
-import { canAffordClaim, claimArgs } from './claim';
+import { canAffordClaim, claimArgs, claimFee } from './claim';
 import { transferArgs } from './transfer';
 
 /// Minimum sompi a newborn account must be born with; mirrors the guest
@@ -216,9 +216,10 @@ export async function submitWithdraw(opts: {
 
 /// One full-leaf exit claim: spends the settled permission-tree leaf, funded
 /// by the delegate UTXOs at the covenant deposit address (any depositor's,
-/// not the wallet). The payout lands on L1, so the row acks on my L1 UTXO
-/// sum rising; there is no on-needs-funding hook because the pool is not my
-/// address — a short pool means deposit more via create/join.
+/// not the wallet), with the fee burned from the claimer's own collateral
+/// UTXO (signed with the identity key). The payout lands on L1, so the row
+/// acks on my L1 UTXO sum rising; a short pool means deposit more via
+/// create/join, a thin wallet means fund the fee address.
 export async function submitClaim(opts: {
   identity: Identity;
   client: RpcClient;
@@ -243,30 +244,47 @@ export async function submitClaim(opts: {
     spk_hex: e.scriptPublicKey.script,
     spk_version: e.scriptPublicKey.version,
   }));
-  if (!canAffordClaim(delegates, args.leaf_amount, args.fee)) {
+  if (!canAffordClaim(delegates, args.leaf_amount)) {
     throw new Error(`delegate pool at ${depositAddress} cannot cover ${kas(args.leaf_amount)} — deposit more via create/join`);
   }
-  const utxos = delegates.map((d) => new UtxoCandidate(d.txid_hex, d.index, d.amount, d.spk_hex, d.spk_version));
+  // The claimer's own largest UTXO collateralizes the fee; the unburned remainder
+  // returns to it as the trailing change.
+  const own = await identity.wallet.l1Utxos(client);
+  const collateral = pickUtxo(own, 0n);
+  if (!collateral) {
+    throw new Error(`insufficient L1 funds for the claim fee — fund ${identity.wallet.address}`);
+  }
+  // `claim_tx` consumes its UTXO candidates, and the probe build below runs it twice, so the
+  // candidates are constructed fresh per call.
+  const build = (fee: bigint) =>
+    claim_tx(
+      identity.privkeyHex,
+      args.covenant_id_hex,
+      args.permission_txid_hex,
+      args.permission_index,
+      args.permission_rent,
+      args.old_root_hex,
+      args.old_unclaimed,
+      args.depth,
+      args.leaf_index,
+      args.leaf_spk_hex,
+      args.leaf_amount,
+      args.new_root_hex,
+      args.new_unclaimed,
+      args.siblings_hex,
+      delegates.map((d) => new UtxoCandidate(d.txid_hex, d.index, d.amount, d.spk_hex, d.spk_version)),
+      new UtxoCandidate(collateral.txid_hex, collateral.index, collateral.amount, collateral.spk_hex, collateral.spk_version),
+      fee,
+    );
 
-  const bytes = claim_tx(
-    args.covenant_id_hex,
-    args.permission_txid_hex,
-    args.permission_index,
-    args.permission_rent,
-    args.old_root_hex,
-    args.old_unclaimed,
-    args.depth,
-    args.leaf_index,
-    args.leaf_spk_hex,
-    args.leaf_amount,
-    args.new_root_hex,
-    args.new_unclaimed,
-    args.siblings_hex,
-    utxos,
-    args.fee,
-  );
-  // The claim burns CLAIM_FEE from the delegate change, so submitTx accepts
-  // it into the mempool on any node — the demo L1 and testnet alike.
+  // The fee never changes the tx byte length: build once at 0 to measure, price
+  // from the node's feerate estimation, then rebuild and submit.
+  const probe = build(0n);
+  const fee = await claimFee(client, probe);
+  if (fee >= collateral.amount) {
+    throw new Error(`insufficient L1 funds for the claim fee — fund ${identity.wallet.address}`);
+  }
+  const bytes = build(fee);
   const txid = await identity.wallet.submitTx(client, bytes);
   onActivity('claim exits', txid, { kind: 'l1', before: opts.balanceBefore });
   return txid;

@@ -20,7 +20,7 @@ use kaspa_consensus_core::{
 };
 use kaspa_hashes::Hash;
 use kaspa_rpc_core::api::rpc::RpcApi;
-use secp256k1::Keypair;
+use secp256k1::{Keypair, SecretKey};
 use vprog_tictactoe_guest::{
     program::{
         action::encode::{
@@ -70,6 +70,8 @@ pub struct ScenarioReport {
     pub withdraw_txid: Hash,
     /// Schnorr public key of player A; the withdraw destination and exit-leaf owner.
     pub player_a_pubkey: [u8; 32],
+    /// Player A's private key; funds the e2e claim's fee collateral at the payout address.
+    pub player_a_secret: [u8; 32],
     /// Resource ID of the game under test.
     pub game_id: ResourceId,
     /// Resource ID of player A.
@@ -231,7 +233,8 @@ pub async fn run<C: RpcApi + ?Sized>(
         CarrierContext { wallet: &wallet, operator_keypair, subnetwork_id: lane_subnet, params };
 
     let genesis_signer = Bip340Signer::from_secret_key(&cfg.genesis_key);
-    let player_a = Bip340Signer::new();
+    let player_a_secret = SecretKey::new(&mut secp256k1::rand::thread_rng());
+    let player_a = Bip340Signer::from_secret_key(&player_a_secret);
     let player_b = Bip340Signer::new();
 
     let player_a_lock = LockEnum::Schnorr(SchnorrLockView { pubkey: &player_a.pubkey() });
@@ -360,6 +363,7 @@ pub async fn run<C: RpcApi + ?Sized>(
         turn_b_txid,
         withdraw_txid,
         player_a_pubkey: player_a.pubkey(),
+        player_a_secret: player_a_secret.secret_bytes(),
         game_id,
         player_a_user_id,
         player_b_user_id,

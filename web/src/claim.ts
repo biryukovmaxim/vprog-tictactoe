@@ -3,6 +3,7 @@
 //! the delegate-pool affordance. Framework-free by design (no React imports)
 //! — components live in the .tsx files; the wasm call lives in composition.
 
+import type { RpcClient } from 'kaspa-wasm';
 import type { ExitLeaf, ExitRoot } from './da';
 import type { WalletUtxo } from './wallet';
 
@@ -35,17 +36,12 @@ export function claimableExits(roots: ExitRoot[], pubkeyHex: string): ClaimTarge
   );
 }
 
-/// Fee burned from the delegate change so the claim enters the mempool like
-/// an ordinary transaction (the relay floor rejects zero-fee txs). The floor
-/// prices the claim's normalized transient mass (measured ~935k sompi for a
-/// typical spend), so this doubles it; the script-side FEE_CAP (10_000_000
-/// sompi) the redeem script enforces bounds the burn well above.
-export const CLAIM_FEE = 2_000_000n;
-
 /// `claim_tx` arguments assembled from the served shapes; field names mirror
 /// the encoder-wasm parameter names. The DA precomputes the post-claim root
 /// per leaf, so no merkle math happens here. The deduct is always the full
-/// leaf amount (demo lock: full claims only — the encoder pins it).
+/// leaf amount (demo lock: full claims only — the encoder pins it). The fee
+/// is absent: it prices from the node's feerate estimation at submit time
+/// (see `claimFee`) and burns from the claimer's own collateral input.
 export interface ClaimArgs {
   covenant_id_hex: string;
   permission_txid_hex: string;
@@ -60,7 +56,6 @@ export interface ClaimArgs {
   new_root_hex: string;
   new_unclaimed: bigint;
   siblings_hex: string[];
-  fee: bigint;
 }
 
 /// Maps one settled leaf plus its root into the encoder `claim_tx` arguments.
@@ -79,15 +74,26 @@ export function claimArgs(covenantIdHex: string, root: ExitRoot, leaf: ExitLeaf)
     new_root_hex: leaf.full_claim.new_root,
     new_unclaimed: BigInt(leaf.full_claim.new_unclaimed),
     siblings_hex: leaf.siblings,
-    fee: CLAIM_FEE,
   };
 }
 
+/// The claim fee from the node's feerate estimation: the priority bucket's
+/// feerate (sompi/gram) times the tx byte length plus one sigop compute mass
+/// (~10k grams — byte length alone under-prices once the collateral P2PK
+/// signature is added). Over-estimating slightly is fine: the unburned
+/// remainder returns as the collateral change.
+export async function claimFee(client: RpcClient, txBytes: Uint8Array): Promise<bigint> {
+  const { estimate } = await client.getFeeEstimate();
+  const feerate = estimate.priorityBucket.feerate;
+  return BigInt(Math.ceil(feerate * (txBytes.length + 10_000)));
+}
+
 /// Whether the delegate pool can fund the payout: claims aggregate inputs,
-/// so the SUM covering `amount + fee` affords — unlike carriers, whose
-/// single-UTXO spend requires `pickUtxo`'s largest-strictly-covering rule.
-export function canAffordClaim(utxos: WalletUtxo[], leafAmount: bigint, fee: bigint): boolean {
+/// so the SUM covering `amount` affords — unlike carriers, whose single-UTXO
+/// spend requires `pickUtxo`'s largest-strictly-covering rule. The fee never
+/// comes from the pool: it burns from the claimer's own collateral input.
+export function canAffordClaim(utxos: WalletUtxo[], leafAmount: bigint): boolean {
   let total = 0n;
   for (const u of utxos) total += u.amount;
-  return total >= leafAmount + fee;
+  return total >= leafAmount;
 }

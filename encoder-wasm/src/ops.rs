@@ -6,9 +6,14 @@ use std::str::FromStr;
 use kaspa_addresses::Address;
 use kaspa_consensus_core::{
     constants::{STORAGE_MASS_PARAMETER, TX_VERSION_TOCCATA},
+    hashing::sighash_type::SIG_HASH_ALL,
     mass::{UtxoCell, UtxoPlurality, calc_storage_mass},
+    sign::sign_input,
     subnets::SubnetworkId,
-    tx::{ScriptPublicKey, Transaction, TransactionOutpoint, TransactionOutput, UtxoEntry},
+    tx::{
+        PopulatedTransaction, ScriptPublicKey, Transaction, TransactionOutpoint, TransactionOutput,
+        UtxoEntry,
+    },
 };
 use kaspa_hashes::Hash;
 use secp256k1::{Keypair, SECP256K1, SecretKey};
@@ -421,15 +426,16 @@ pub fn withdraw_tx(
 }
 
 /// Builds a full-leaf permission-tree claim spending the settled exit leaf; `delegate_utxos` are
-/// covenant deposit UTXOs funding the payout, and `fee` burns delegate value for relay priority.
+/// covenant deposit UTXOs funding the payout, and `collateral` is the claimer's own P2PK UTXO
+/// funding `fee` (signed with `privkey_hex`, whose key must own the collateral UTXO). The fee
+/// burns from the trailing collateral change; delegates are conserved exact.
 ///
-/// Fee edge: `fee` is subtracted from the trailing delegate change output, so delegate inputs
-/// summing to exactly `deduct + fee` drive that change to zero value, which the network rejects as
-/// dust. Unreachable in the demo (simnet fee is 0); nonzero-fee callers must overfund the delegate
-/// pool past `deduct + fee`.
+/// Fee edge: `fee` must be strictly below the collateral amount (a zero change output is network
+/// dust), which the underlying builder validates.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[allow(clippy::too_many_arguments)]
 pub fn claim_tx(
+    privkey_hex: &str,
     covenant_id_hex: &str,
     permission_txid_hex: &str,
     permission_index: u32,
@@ -444,6 +450,7 @@ pub fn claim_tx(
     new_unclaimed: u64,
     siblings_hex: Vec<String>,
     delegate_utxos: Vec<UtxoCandidate>,
+    collateral: UtxoCandidate,
     fee: u64,
 ) -> Result<Vec<u8>, JsError> {
     let covenant_id = hex32(covenant_id_hex)?;
@@ -459,18 +466,13 @@ pub fn claim_tx(
             Ok((TransactionOutpoint::new(txid, utxo.index), utxo.amount))
         })
         .collect::<Result<Vec<(TransactionOutpoint, u64)>, JsError>>()?;
+    let collateral_txid = Hash::from_str(&collateral.txid_hex)
+        .map_err(|_| JsError::new("invalid collateral txid"))?;
+    let collateral_spk =
+        ScriptPublicKey::new(collateral.spk_version, hex_vec(&collateral.spk_hex)?.into());
 
-    // The demo locks claims to full-leaf deduct; delegate value must cover payout plus fee.
+    // The demo locks claims to full-leaf deduct; delegate value must cover the payout only.
     let deduct = leaf_amount;
-    let total_delegate = delegate_inputs.iter().try_fold(0u64, |acc, (_, amount)| {
-        acc.checked_add(*amount).ok_or_else(|| JsError::new("delegate total overflows"))
-    })?;
-    let required =
-        deduct.checked_add(fee).ok_or_else(|| JsError::new("deduct plus fee overflows"))?;
-    if total_delegate < required {
-        return Err(JsError::new("delegate inputs do not cover the payout plus fee"));
-    }
-
     let leaf_spk = hex_vec(leaf_spk_hex)?;
     let delegate_amounts: Vec<u64> = delegate_inputs.iter().map(|(_, amount)| *amount).collect();
     let args = PermissionSpendArgs {
@@ -488,30 +490,37 @@ pub fn claim_tx(
         new_root: hex32(new_root_hex)?,
         new_unclaimed,
         delegate_inputs,
+        collateral_input: (
+            TransactionOutpoint::new(collateral_txid, collateral.index),
+            collateral.amount,
+        ),
+        collateral_spk,
+        fee,
+        collateral_sig: Vec::new(),
     };
     let (mut tx, utxos) = build_permission_spend(&args).map_err(JsError::new)?;
 
-    // Burn `fee` from the trailing delegate change output (inputs minus outputs). The burn
-    // changes the tx payload, so the id must be finalized again — the storage-mass commit
-    // below does not affect it.
-    if fee > 0 {
-        let change = tx
-            .outputs
-            .last_mut()
-            .ok_or_else(|| JsError::new("claim tx has no output to pay the fee from"))?;
-        change.value -= fee;
-        tx.finalize();
-    }
+    // Sign the collateral input over the built transaction. The sighash replaces the signed
+    // input's script with the prevout SPK, so the signature stays valid once spliced in; the
+    // id must be finalized again — the storage-mass commit below does not affect it.
+    let idx = tx.inputs.len() - 1;
+    let secret = hex32(privkey_hex)?;
+    let sig =
+        sign_input(&PopulatedTransaction::new(&tx, utxos.clone()), idx, &secret, SIG_HASH_ALL);
+    tx.inputs[idx].signature_script = sig;
+    tx.finalize();
 
     // Commit the KIP-0009 storage mass (Toccata txs must carry it or the node disqualifies
     // their block). Cells must mirror the consensus pluralities exactly: the covenant-bound
     // permission input and continuation output occupy two 100-byte storage units each, while
-    // the delegate inputs and the plain outputs occupy one. STORAGE_MASS_PARAMETER is uniform
-    // across every network preset (a custom ParamsOverrides could diverge; out of demo scope).
+    // the delegate inputs, the collateral input, and the plain outputs occupy one.
+    // STORAGE_MASS_PARAMETER is uniform across every network preset (a custom ParamsOverrides
+    // could diverge; out of demo scope).
     let permission_entry = utxos.first().expect("claim builder returns the permission entry");
     let input_cells: Vec<UtxoCell> =
         std::iter::once(UtxoCell::new(permission_entry.plurality(), permission_rent))
             .chain(delegate_amounts.into_iter().map(|amount| UtxoCell::new(1, amount)))
+            .chain(std::iter::once(UtxoCell::new(1, collateral.amount)))
             .collect();
     let output_cells = tx.outputs.iter().map(|o| UtxoCell::new(o.plurality(), o.value));
     let storage_mass =
