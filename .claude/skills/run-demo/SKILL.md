@@ -65,9 +65,10 @@ Full env blocks per mode: runbook steps 2-3. All variables and defaults: `docs/d
 - Data, DA on `:9880` (all `GET`, JSON): `/api/state`, `/api/config`,
   `/api/games?status=open&after={id}&limit=N`, `/api/games/{id}`,
   `/api/accounts/{user-id-hex}`, `/api/exits` (settled leaves, claimable).
-- Claims burn a fee (2M sompi) from the delegate pool and submit through the ordinary
-  `submitTx`/mempool path on any node; a rejected `submitTx` is a real error (short delegate
-  pool, or a node fee policy above the script's 10M burn cap).
+- Claims burn an estimated top-priority fee (node `getFeeEstimate` × claim mass) from one of
+  the wallet's own UTXOs attached as collateral, and submit through the ordinary
+  `submitTx`/mempool path on any node; a rejected `submitTx` is a real error (delegate pool
+  below the leaf, or the wallet holds no UTXO covering the estimated fee).
 
 ## Reset / teardown
 

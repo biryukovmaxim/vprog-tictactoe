@@ -37,8 +37,8 @@ faucet, and the same one-time `ttflow` init. Differences that matter:
 
 - Settlements must carry real proofs: use the CUDA build (`--features cuda`, `RISC0_DEV_MODE`
   unset). Dev stub receipts are for the local simnet demo only.
-- Claims pay fees from the delegate pool and submit through the mempool on tn10 exactly as on
-  the demo L1.
+- Claims pay fees from the claimer's own collateral (feerate-estimated) and submit through
+  the mempool on tn10 exactly as on the demo L1.
 - Start `ttd` against a fresh lane (wipe `ttd-data` when starting over): the bridge cannot
   join an already-live lane.
 

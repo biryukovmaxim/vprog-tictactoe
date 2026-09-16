@@ -86,7 +86,7 @@ DA API (all `GET`, JSON):
 | `ttflow` fails at Init with "transaction submission failed after retries" | operator key unfunded | faucet its logged operator address **twice**, rerun |
 | `ttd` restart exits with "starting block no longer in chain" | data dir holds anchors from a previous chain | `rm -rf ttd-data` (or the `TT_DATA_DIR`), restart demo L1 and `ttd` fresh together |
 | CUDA link fails with `undefined symbol: ngpus()/select_gpu(int)` | sppark's build script cached a no-nvcc result | delete `target-cuda/release/build/sppark-*`, `target-cuda/release/deps/libsppark-*`, `target-cuda/release/.fingerprint/sppark-*`, rebuild with `/usr/local/cuda-12.2/bin` on `PATH` |
-| Web console shows a rejected `submitTx` when claiming | a real error: claims pay a fee and are ordinary mempool txs (delegate pool short, node fee policy above the burn cap) | check the delegate pool covers payout + fee; check the node's relay policy |
+| Web console shows a rejected `submitTx` when claiming | a real error: claims are ordinary fee-paying mempool txs (delegate pool below the leaf, or the wallet holds no UTXO covering the estimated fee) | check the delegate pool covers the leaf and the wallet holds fee collateral; faucet the wallet |
 | `17210`/`9890`/`9880` already in use | stale demo L1 / `ttd` from a previous run | kill them, wipe the data dir, restart fresh |
 | `ttflow` Init rejected | covenant already initialized (Init is genesis-gated) | check `GET /api/config` for `{"initialized": true}`; skip init |
 | `ttd` sits silent for a long stretch after compiling | debug builds sync very slowly | run with `--release` |

@@ -134,15 +134,16 @@ in-page wallet.
    deposit carrier), play turns on the board, and transfer or withdraw from the actions column.
 4. Once a settlement lands (`GET /api/state` reports it, `GET /api/exits` lists the settled
    leaves), claim buttons appear. Claiming pays the leaf out to the wallet; the tx burns a fee
-   from the delegate pool and enters the mempool like any other transaction.
+   from your own collateral and enters the mempool like any other transaction.
 
-**Claims pay fees from the delegate pool.** The claim burns a fixed fee (2M sompi, roughly
-twice the relay floor of a typical claim) from the delegate change output, so the wallet's
-`submitTx` is accepted into the mempool on any node — the demo L1, testnet-10, mainnet. The
-permission redeem script pins the payout exactly and caps the burn (10M sompi per claim), so
-delegate value can only reach the payout, the pool's change, or the fee — never a spare
-output. The demo L1's `/inject` route is no longer used by claims; it remains available for
-ad-hoc direct mining.
+**Claim fees come from your own money, not the deposits.** The claim attaches one of your own
+L1 UTXOs as fee collateral and burns the node's estimated top-priority fee
+(`getFeeEstimate`'s priority bucket × the claim's mass) from it; the unburned remainder comes
+back as change. The permission redeem script conserves delegate (deposit) inputs exactly —
+they fund the payout and nothing else — pins the payout and permission-rent outputs exact, and
+pins the output count, so deposit value can never burn or ride out. The demo L1's `/inject`
+route is no longer used by claims; it remains available for ad-hoc direct mining. Claiming
+needs the wallet to hold a UTXO larger than the estimated fee (the faucet funds this).
 
 ## Testnet-10 instead of the demo L1
 
@@ -154,9 +155,10 @@ everything at the node:
 - Web: `VITE_WRPC_URL=<tn10 wRPC url>`, `VITE_NETWORK=testnet-10`.
 - Fund keys from a tn10 faucet instead of the demo faucet; keep the one-time `ttflow` init.
 
-Claims pay fees from the delegate pool, so they submit through the mempool on tn10 exactly as
-on the demo L1. One gap remains, known: the bridge cannot join an already-live lane — start
-`ttd` on a fresh lane. This path is configured but not yet exercised end to end.
+Claims pay fees from the claimer's own collateral (the node's feerate estimation picks the
+amount), so they submit through the mempool on tn10 exactly as on the demo L1. One gap
+remains, known: the bridge cannot join an already-live lane — start `ttd` on a fresh lane.
+This path is configured but not yet exercised end to end.
 
 ## Automated e2e
 
@@ -169,9 +171,6 @@ TT_E2E=1 RISC0_DEV_MODE=1 cargo test --release -p vprog-tictactoe-driver --test 
 
 ## Current limits
 
-- **A claim's fee burn is capped at 10M sompi** by the permission script; the web's 2M
-  `CLAIM_FEE` doubles the measured relay floor, so a node with a far higher fee policy would
-  reject claims (see step 5).
 - **The bridge cannot join an already-live lane** (it mis-anchors without authoritative tip
   seeding, still to land in vprogs): start the demo L1 and `ttd` fresh together — the demo L1's
   fresh-chain design guarantees this.
