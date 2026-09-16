@@ -170,10 +170,17 @@ TT_E2E=1 RISC0_DEV_MODE=1 cargo test --release -p vprog-tictactoe-driver --test 
 
 ## Current limits
 
-- **Busy-DAG divergence remains possible**: on mixed lanes / orphan mergesets the vprogs bridge
-  can still diverge on merge_idx conventions. The demo L1 is quiet and linear, so it should not
-  appear; if a settlement is rejected with a seq-commit script failure, that is where to look
-  next.
+- **Busy-DAG shapes are untested**: the vprogs bridge re-implements the node's seq-data
+  enumeration and lane-expiry rules, and the two are locked together only by the linear-chain
+  e2e; a node-side change to acceptance-data/RPC ordering would surface as settlements
+  rejected with a seq-commit script failure. The demo L1 is quiet and linear, so it should not
+  appear. (The bridge's merge_idx over the accepted-tx list is the node's mergeset numbering
+  by construction; verified 2026-09-16.)
+- **Lane-tip seeding is best-effort**: if `get_seq_commit_lane_proof` retries exhaust at the
+  anchor, the bridge logs `lane tip seeding failed`, keeps the zero seed, and every derived
+  tip diverges from consensus — every later settlement then fails the seq-commit check.
+- **A reorg past a bundle's proven block** panics the aggregate prover at the lane-proof fetch
+  instead of re-aggregating.
 
 ## Reference
 
