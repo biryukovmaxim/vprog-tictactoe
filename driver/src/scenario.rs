@@ -5,9 +5,11 @@
 //! 2. Player A and Player B deposits.
 //! 3. `CreateGame` by player A (staked, round count).
 //! 4. `JoinGame` by player B.
-//! 5. Player A turn carrier with opening ply and pre-commits.
-//! 6. Player B turn carrier triggering cascade, round win, and match settlement.
-//! 7. Player A winner pot withdrawal.
+//! 5. Optional `Transfer` from player A to player B when `TTFLOW_TRANSFER_AMOUNT` is nonzero.
+//! 6. Player A turn carrier with opening ply and pre-commits.
+//! 7. Player B turn carrier triggering cascade, round win, and match settlement.
+//! 8. Player A withdrawal of the winner pot plus the deposit remainder (one carrier, two exit
+//!    leaves).
 
 use std::sync::Arc;
 
@@ -19,13 +21,14 @@ use kaspa_consensus_core::{
 };
 use kaspa_hashes::Hash;
 use kaspa_rpc_core::api::rpc::RpcApi;
-use secp256k1::Keypair;
+use secp256k1::{Keypair, SecretKey};
 use vprog_tictactoe_guest::{
     program::{
         action::encode::{
             GENESIS_SIG_PTR_TAG, encode_create_game_action, encode_deposit_action,
-            encode_init_action, encode_join_game_action, encode_turn_action,
-            encode_withdraw_action, game_two_user_access, game_user_access, user_config_access,
+            encode_init_action, encode_join_game_action, encode_transfer_action,
+            encode_turn_action, encode_withdraw_action, game_two_user_access, game_user_access,
+            two_user_access, user_config_access,
         },
         resources::{
             game::Cell,
@@ -61,12 +64,18 @@ pub struct ScenarioReport {
     pub create_game_txid: Hash,
     /// Transaction ID of player B's `JoinGame` carrier.
     pub join_game_txid: Hash,
+    /// Transaction ID of player A's `Transfer` carrier, when the transfer step runs.
+    pub transfer_txid: Option<Hash>,
     /// Transaction ID of player A's `Turn` carrier (opening ply and pre-commits).
     pub turn_a_txid: Hash,
     /// Transaction ID of player B's `Turn` carrier (reply ply and pre-commit settling match).
     pub turn_b_txid: Hash,
     /// Transaction ID of player A's `Withdraw` carrier.
     pub withdraw_txid: Hash,
+    /// Schnorr public key of player A; the withdraw destination and exit-leaf owner.
+    pub player_a_pubkey: [u8; 32],
+    /// Player A's private key; funds the e2e claim's fee collateral at the payout address.
+    pub player_a_secret: [u8; 32],
     /// Resource ID of the game under test.
     pub game_id: ResourceId,
     /// Resource ID of player A.
@@ -149,6 +158,25 @@ pub fn build_join_game_payload(joiner_user_id: ResourceId, game_id: ResourceId) 
     )
 }
 
+/// Builds a `Transfer` payload moving in-rollup balance from the source user to the destination.
+///
+/// Both user resources take `Write` access; the signer rides the source user's resource slot.
+pub fn build_transfer_payload(
+    source_user_id: ResourceId,
+    dest_user_id: ResourceId,
+    amount: u64,
+) -> LanePayload {
+    let access = two_user_access(source_user_id, dest_user_id);
+    let action_body = encode_transfer_action(access.source_idx, access.dest_idx, amount);
+    LanePayload::new().access(access.access[0]).access(access.access[1]).action(action_body).signer(
+        SignerSpec {
+            resource_idx: access.source_idx,
+            kind: SignerKind::SigPtr { tag: SchnorrSigPtrSigner::TAG },
+            tail: TailBlock::Sig64,
+        },
+    )
+}
+
 /// Builds player A's turn payload containing an opening move and pre-commits.
 pub fn build_turn_a_payload(
     game_id: ResourceId,
@@ -221,13 +249,16 @@ pub async fn run<C: RpcApi + ?Sized>(
 ) -> Result<ScenarioReport, String> {
     let operator_keypair = Keypair::from_secret_key(secp256k1::SECP256K1, &cfg.private_key);
     let wallet = Wallet::new(&**client, params, operator_keypair);
+    log::info!("operator address (fund this before running): {}", wallet.address());
     let lane_subnet = SubnetworkId::from_namespace(cfg.lane_id.to_be_bytes());
 
     let ctx =
         CarrierContext { wallet: &wallet, operator_keypair, subnetwork_id: lane_subnet, params };
 
     let genesis_signer = Bip340Signer::from_secret_key(&cfg.genesis_key);
-    let player_a = Bip340Signer::new();
+    let player_a_secret =
+        cfg.player_a_key.unwrap_or_else(|| SecretKey::new(&mut secp256k1::rand::thread_rng()));
+    let player_a = Bip340Signer::from_secret_key(&player_a_secret);
     let player_b = Bip340Signer::new();
 
     let player_a_lock = LockEnum::Schnorr(SchnorrLockView { pubkey: &player_a.pubkey() });
@@ -301,6 +332,21 @@ pub async fn run<C: RpcApi + ?Sized>(
     log::info!("Step 5 (JoinGame) accepted: {join_game_txid}");
     tokio::time::sleep(cfg.step_delay).await;
 
+    // Step 5.5: Transfer A->B (skipped unless TTFLOW_TRANSFER_AMOUNT is set).
+    let mut transfer_txid = None;
+    if cfg.transfer_amount > 0 {
+        log::info!("issuing Step 5.5: Transfer A->B ({} sompi)", cfg.transfer_amount);
+        let transfer_payload =
+            build_transfer_payload(player_a_user_id, player_b_user_id, cfg.transfer_amount);
+        let txid = submit_action("transfer player A to player B", &ctx, &transfer_payload, |req| {
+            player_a.sign_digest(req.digest)
+        })
+        .await?;
+        log::info!("Step 5.5 (Transfer A->B) accepted: {txid}");
+        tokio::time::sleep(cfg.step_delay).await;
+        transfer_txid = Some(txid);
+    }
+
     // Step 6: Turn Player A (opening move + pre-commits).
     log::info!("issuing Step 6: Turn Player A (ply + precommits)");
     let turn_a_payload = build_turn_a_payload(game_id, player_a_user_id, player_b_user_id);
@@ -321,12 +367,26 @@ pub async fn run<C: RpcApi + ?Sized>(
     log::info!("Step 7 (Turn Player B) accepted: {turn_b_txid}");
     tokio::time::sleep(cfg.step_delay).await;
 
-    // Step 8: Withdraw Winnings.
-    log::info!("issuing Step 8: Withdraw winner pot");
+    // Step 8: Withdraw Winnings. One carrier drains the pot and the deposit remainder as two
+    // exit leaves, so both settle into the same bundle and later claims chain on one root.
+    log::info!("issuing Step 8: Withdraw pot and remainder");
     let dest_spk = StandardSpk::PubKey(&player_a.pubkey());
-    let withdraw_amount = cfg.stake.checked_mul(2).unwrap_or(cfg.stake);
-    let withdraw_payload =
-        build_withdraw_payload(player_a_user_id, config_id, withdraw_amount, &dest_spk);
+    let pot = cfg.stake.checked_mul(2).unwrap_or(cfg.stake);
+    let withdraw_payload = build_withdraw_payload(player_a_user_id, config_id, pot, &dest_spk);
+    let remainder =
+        cfg.deposit_amount.saturating_sub(cfg.stake).saturating_sub(cfg.transfer_amount);
+    let withdraw_payload = if remainder >= 1_000_000 {
+        // Same min_withdrawal the Init above sets; below it the guest rejects the carrier.
+        let access = user_config_access(player_a_user_id, config_id);
+        withdraw_payload.action(encode_withdraw_action(
+            access.user_idx,
+            access.config_idx,
+            remainder,
+            &dest_spk,
+        ))
+    } else {
+        withdraw_payload
+    };
     let withdraw_txid = submit_action("withdraw winnings", &ctx, &withdraw_payload, |req| {
         player_a.sign_digest(req.digest)
     })
@@ -339,9 +399,12 @@ pub async fn run<C: RpcApi + ?Sized>(
         deposit_b_txid,
         create_game_txid,
         join_game_txid,
+        transfer_txid,
         turn_a_txid,
         turn_b_txid,
         withdraw_txid,
+        player_a_pubkey: player_a.pubkey(),
+        player_a_secret: player_a_secret.secret_bytes(),
         game_id,
         player_a_user_id,
         player_b_user_id,
@@ -495,7 +558,24 @@ mod tests {
         assert_eq!(ix_join.actions.len(), 1);
         assert_eq!(ix_join.actions[0].action_tag, ActionTag::JoinGame);
 
-        // 5. Turn A payload (3 actions)
+        // 5. Transfer payload
+        let p_transfer = build_transfer_payload(player_a_user_id, player_b_user_id, 25_000_000);
+        let bytes_transfer =
+            p_transfer.finish(&rest_preimage, &mut |req| player_a.sign_digest(req.digest));
+        let mut slice_transfer = bytes_transfer.as_slice();
+        let access_transfer = AccessMetadata::decode_vec(&mut slice_transfer).unwrap();
+        assert_eq!(access_transfer.len(), 2);
+        assert!(access_transfer[0].resource_id < access_transfer[1].resource_id);
+        let ix_transfer = decode_ix(slice_transfer, access_transfer.len(), decode_action).unwrap();
+        assert_eq!(ix_transfer.signers.len(), 1);
+        assert_eq!(ix_transfer.actions.len(), 1);
+        assert_eq!(ix_transfer.actions[0].action_tag, ActionTag::Transfer);
+        match &ix_transfer.actions[0].body {
+            ActionBody::Transfer { amount, .. } => assert_eq!(*amount, 25_000_000),
+            _ => panic!("expected Transfer action"),
+        }
+
+        // 6. Turn A payload (3 actions)
         let p_turn_a = build_turn_a_payload(game_id, player_a_user_id, player_b_user_id);
         let bytes_turn_a =
             p_turn_a.finish(&rest_preimage, &mut |req| player_a.sign_digest(req.digest));
@@ -523,7 +603,7 @@ mod tests {
             _ => panic!("expected Turn action"),
         }
 
-        // 6. Turn B payload (2 actions)
+        // 7. Turn B payload (2 actions)
         let p_turn_b = build_turn_b_payload(game_id, player_a_user_id, player_b_user_id);
         let bytes_turn_b =
             p_turn_b.finish(&rest_preimage, &mut |req| player_b.sign_digest(req.digest));
@@ -544,7 +624,7 @@ mod tests {
             _ => panic!("expected Turn action"),
         }
 
-        // 7. Withdraw payload
+        // 8. Withdraw payload
         let dest = StandardSpk::PubKey(&player_a.pubkey());
         let p_withdraw = build_withdraw_payload(player_a_user_id, config_id, 100_000_000, &dest);
         let bytes_withdraw =
@@ -556,5 +636,16 @@ mod tests {
         assert_eq!(ix_withdraw.signers.len(), 1);
         assert_eq!(ix_withdraw.actions.len(), 1);
         assert_eq!(ix_withdraw.actions[0].action_tag, ActionTag::Withdraw);
+
+        // 9. Two-withdraw carrier (pot plus remainder): both actions decode in order.
+        let access = user_config_access(player_a_user_id, config_id);
+        let p_two = build_withdraw_payload(player_a_user_id, config_id, 100_000_000, &dest)
+            .action(encode_withdraw_action(access.user_idx, access.config_idx, 50_000_000, &dest));
+        let bytes_two = p_two.finish(&rest_preimage, &mut |req| player_a.sign_digest(req.digest));
+        let mut slice_two = bytes_two.as_slice();
+        let access_two = AccessMetadata::decode_vec(&mut slice_two).unwrap();
+        let ix_two = decode_ix(slice_two, access_two.len(), decode_action).unwrap();
+        assert_eq!(ix_two.actions.len(), 2);
+        assert!(ix_two.actions.iter().all(|a| a.action_tag == ActionTag::Withdraw));
     }
 }

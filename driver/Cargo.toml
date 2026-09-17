@@ -18,6 +18,7 @@ kaspa-addresses                 = { workspace = true }
 kaspa-consensus-core            = { workspace = true }
 kaspa-core                      = { workspace = true }
 kaspa-hashes                    = { workspace = true }
+kaspa-pow                       = { git = "https://github.com/kaspanet/rusty-kaspa", branch = "master" }
 kaspa-rpc-core                  = { workspace = true }
 kaspa-txscript                  = { workspace = true }
 kaspa-wrpc-client               = { workspace = true }
@@ -32,7 +33,15 @@ vprogs-zk-backend-risc0-api     = { workspace = true }
 vprogs-zk-backend-risc0-app-kit = { workspace = true }
 
 [dev-dependencies]
+axum                               = { workspace = true }
+borsh                              = { workspace = true }
+kaspa-grpc-client                  = { git = "https://github.com/kaspanet/rusty-kaspa", branch = "master" }
+kaspa-testing-integration          = { git = "https://github.com/kaspanet/rusty-kaspa", branch = "master" }
+kaspad                             = { git = "https://github.com/kaspanet/rusty-kaspa", branch = "master" }
+reqwest                            = { version = "0.12", default-features = false, features = ["json"] }
+serde_json                         = { workspace = true }
 tempfile                           = "3"
+vprog-tictactoe-encoder-wasm       = { path = "../encoder-wasm" }
 vprog-tictactoe-node               = { path = "../node" }
 vprogs-node-test-utils             = { workspace = true }
 vprogs-runner                      = { workspace = true }

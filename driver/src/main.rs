@@ -45,6 +45,9 @@ async fn main() {
             println!("Deposit B tx:     {}", report.deposit_b_txid);
             println!("CreateGame tx:    {}", report.create_game_txid);
             println!("JoinGame tx:      {}", report.join_game_txid);
+            if let Some(txid) = &report.transfer_txid {
+                println!("Transfer tx:      {txid}");
+            }
             println!("Turn A tx:        {}", report.turn_a_txid);
             println!("Turn B tx:        {}", report.turn_b_txid);
             println!("Withdraw tx:      {}", report.withdraw_txid);

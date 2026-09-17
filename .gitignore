@@ -10,6 +10,7 @@ docs/internal/
 # Frontend
 web/node_modules/
 web/dist/
+web/tsconfig.tsbuildinfo
 
 # Tooling artifacts
 /.ctx
@@ -22,3 +23,7 @@ target/build-graph/
 # Environment
 .env
 .env.*
+
+# CUDA proving build (separate target dir) and ttd runtime state (any TT_DATA_DIR variant)
+/target-cuda
+/ttd-data*
