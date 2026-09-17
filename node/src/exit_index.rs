@@ -124,6 +124,9 @@ impl ExitIndexer for TicTacToeExitIndexer {
         spent_outpoint: &TransactionOutpoint,
         wb: &mut dyn WriteBatch,
     ) {
+        // The apply-side mark is unconditional, so the unmark must precede any early
+        // return; idempotent, and keyed fully by the spend itself.
+        unmark_leaf_spent(wb, &spend.old_root, spend.leaf_index);
         let was_spent = |e: &EmptiedLeaf| {
             e.leaf_index as usize == spend.leaf_index && e.spend_txid == spend.spend_txid
         };
@@ -148,7 +151,6 @@ impl ExitIndexer for TicTacToeExitIndexer {
         }
         records.insert(spend.old_root, rec.clone());
         put_exit_record(wb, &spend.old_root, &rec);
-        unmark_leaf_spent(wb, &spend.old_root, spend.leaf_index);
     }
 
     fn on_exits_reverted(
@@ -158,9 +160,21 @@ impl ExitIndexer for TicTacToeExitIndexer {
         wb: &mut dyn WriteBatch,
     ) {
         // Anchors stay parked in the runner's registry; only serving hides until re-anchor.
-        let root = PermissionTreeView::from_leaves(&bundle.leaves).root();
-        delete_exit_record(wb, &root);
-        self.records.write().expect("poisoned lock").remove(&root);
+        // A claim advance re-keyed the record onto its continuation root, but leaves are
+        // invariant across advances, so locate the live record by leaf equality and fall
+        // back to the bundle-derived root when the mirror holds no match.
+        // ponytail: identical leaf sets across families hide an arbitrary one; key by
+        // txid-root pair if that collision ever bites.
+        let key = self
+            .records
+            .read()
+            .expect("poisoned lock")
+            .iter()
+            .find(|(_, rec)| rec.leaves == *bundle.leaves)
+            .map(|(key, _)| *key)
+            .unwrap_or_else(|| PermissionTreeView::from_leaves(&bundle.leaves).root());
+        delete_exit_record(wb, &key);
+        self.records.write().expect("poisoned lock").remove(&key);
     }
 
     fn on_exits_recommitted(
@@ -173,6 +187,16 @@ impl ExitIndexer for TicTacToeExitIndexer {
         let (root, rec) = record_for(bundle, settlement);
         put_exit_record(wb, &root, &rec);
         self.records.write().expect("poisoned lock").insert(root, rec);
+        // The re-anchor must also refresh the served latest-settlement row.
+        put_latest_settlement(
+            wb,
+            &LatestSettlement {
+                state_root: bundle.new_state,
+                permission_root: bundle.permission_spk_hash,
+                txid: settlement.tx_id.as_bytes(),
+                daa_score: settlement.daa_score.get(),
+            },
+        );
     }
 }
 
@@ -530,6 +554,13 @@ mod tests {
             new_outpoint_index: 1,
             chain_idx: 10,
         };
+        // The apply-side mark is unconditional, so seed one even though the family is
+        // unknown to the mirror; the revert must clear it despite no-oping elsewhere.
+        let mut wb = store.write_batch();
+        indexer.on_permission_spent(&spend, &mut wb);
+        store.commit(wb);
+        assert!(leaf_spent(&store, &[0xa1; 32], 0).is_some());
+
         let spent = TransactionOutpoint::new(KaspaTransactionId::from_bytes([0xcc; 32]), 1);
         let mut wb = store.write_batch();
         indexer.on_permission_spend_reverted(&spend, &spent, &mut wb);
@@ -538,6 +569,30 @@ mod tests {
         assert_eq!(get_exit_record(&store, &[0xa1; 32]), None);
         assert_eq!(get_exit_record(&store, &[0xa2; 32]), None);
         assert_eq!(leaf_spent(&store, &[0xa1; 32], 0), None);
+        assert!(exit_views(&store).is_empty());
+    }
+
+    #[test]
+    fn exits_reverted_hides_claim_advanced_family() {
+        let dir = TempDir::new().unwrap();
+        let store: RocksDbStore = RocksDbStore::open(dir.path());
+        let indexer = TicTacToeExitIndexer::default();
+        let fam = commit_two_leaf_family(&store, &indexer);
+
+        // A non-terminal claim re-keys the record onto its continuation root.
+        let mut wb = store.write_batch();
+        indexer.on_permission_spent(&fam.spend1, &mut wb);
+        store.commit(wb);
+        assert!(get_exit_record(&store, &fam.root1).is_some());
+
+        // The settlement reverts under the original bundle; the advanced record must
+        // hide even though its key moved off the bundle-derived root.
+        let mut wb = store.write_batch();
+        indexer.on_exits_reverted(&fam.bundle, &fam.settlement, &mut wb);
+        store.commit(wb);
+
+        assert_eq!(get_exit_record(&store, &fam.root0), None);
+        assert_eq!(get_exit_record(&store, &fam.root1), None);
         assert!(exit_views(&store).is_empty());
     }
 
@@ -570,5 +625,16 @@ mod tests {
         assert_eq!(rec.unclaimed, fam.leaves.len() as u64);
         assert_eq!(rec.leaves, fam.leaves);
         assert_eq!(rec.emptied, Vec::new());
+
+        // The re-anchor refreshes the served latest-settlement row, not just the record.
+        assert_eq!(
+            latest_settlement(&store),
+            Some(LatestSettlement {
+                state_root: fam.bundle.new_state,
+                permission_root: fam.bundle.permission_spk_hash,
+                txid: [0xcd; 32],
+                daa_score: 999_222,
+            })
+        );
     }
 }
