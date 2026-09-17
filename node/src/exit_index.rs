@@ -32,9 +32,9 @@ pub struct TicTacToeExitIndexer {
     records: RwLock<HashMap<[u8; 32], ExitRecord>>,
 }
 
-/// Builds a fresh family record for `bundle` under `settlement`'s anchor, keyed by its raw
-/// padded root.
-// ponytail: rent pinned to DEFAULT_PERMISSION_OUTPUT_VALUE until a per-covenant override exists
+/// Builds a fresh family record for `bundle` under `settlement`'s anchor, keyed by its raw padded
+/// root. The rent stays pinned to DEFAULT_PERMISSION_OUTPUT_VALUE until a per-covenant override
+/// exists.
 fn record_for(bundle: &ExitsForBundle, settlement: &SettlementInfo) -> ([u8; 32], ExitRecord) {
     let rec = ExitRecord {
         settlement_txid: settlement.tx_id.as_bytes(),
@@ -163,8 +163,8 @@ impl ExitIndexer for TicTacToeExitIndexer {
         // A claim advance re-keyed the record onto its continuation root, but leaves are
         // invariant across advances, so locate the live record by leaf equality and fall
         // back to the bundle-derived root when the mirror holds no match.
-        // ponytail: identical leaf sets across families hide an arbitrary one; key by
-        // txid-root pair if that collision ever bites.
+        // Identical leaf sets across families hide an arbitrary one; key by txid-root pair
+        // if that collision ever bites.
         let key = self
             .records
             .read()
