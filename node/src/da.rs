@@ -829,6 +829,7 @@ mod tests {
             new_root: root1,
             spend_txid: [0xee; 32],
             new_outpoint_index: 1,
+            chain_idx: 10,
         };
         let mut wb = store.write_batch();
         indexer.on_permission_spent(&spend1, &mut wb);
@@ -867,6 +868,7 @@ mod tests {
             new_root: root2,
             spend_txid: [0xef; 32],
             new_outpoint_index: 1,
+            chain_idx: 11,
         };
         let mut wb = store.write_batch();
         indexer.on_permission_spent(&spend2, &mut wb);
