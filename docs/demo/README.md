@@ -153,11 +153,17 @@ everything at the node:
 - `ttd`: `TT_WRPC_URL=<tn10 wRPC url>` (`TT_NETWORK` already defaults to `tn10`), CUDA build
   with `RISC0_DEV_MODE` unset — on a shared chain, settlements must carry real proofs.
 - Web: `VITE_WRPC_URL=<tn10 wRPC url>`, `VITE_NETWORK=testnet-10`.
-- Fund keys from a tn10 faucet instead of the demo faucet; keep the one-time `ttflow` init.
+- Fund keys by mining instead of the demo faucet:
+  `cargo run --release -p vprog-tictactoe-driver --example wrpc-miner -- <tn10 wRPC url>
+  <pay address>` solo-mines over plain wRPC (no local kaspad) and pays block coinbase to the
+  address; testnet coinbase spends mature after roughly 1000 DAA-score. Keep the one-time
+  `ttflow` init.
 
 Claims pay fees from the claimer's own collateral (the node's feerate estimation picks the
-amount), so they submit through the mempool on tn10 exactly as on the demo L1. This path is
-configured but not yet exercised end to end.
+amount), so they submit through the mempool on tn10 exactly as on the demo L1; the headless
+variant is `cargo run --release -p vprog-tictactoe-driver --example claim` with the same
+`TT_WRPC_URL`/`TT_NETWORK`/`TT_COVENANT_ID` env plus `TTFLOW_PLAYER_A_KEY` and, for the exit
+feed, `TT_DA_URL` of any follower's DA.
 
 ## Automated e2e
 

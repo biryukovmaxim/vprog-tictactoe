@@ -32,6 +32,11 @@ pub struct Config {
     pub step_delay: Duration,
     /// Turn time-to-live written into config `Init`, in DAA-score units.
     pub turn_ttl: u64,
+    /// In-rollup sompis transferred from player A to player B mid-scenario (0 skips the step).
+    pub transfer_amount: u64,
+    /// Fixed player-A secret key, letting the run's exit-leaf owner be known in advance;
+    /// random when unset.
+    pub player_a_key: Option<SecretKey>,
 }
 
 impl Config {
@@ -70,6 +75,11 @@ impl Config {
         let deposit_amount = opt_u64(&lookup, "TTFLOW_DEPOSIT_AMOUNT", 100_000_000);
         let step_delay = Duration::from_millis(opt_u64(&lookup, "TTFLOW_STEP_DELAY_MS", 2000));
         let turn_ttl = opt_u64(&lookup, "TTFLOW_TURN_TTL", 10_000);
+        let transfer_amount = opt_u64(&lookup, "TTFLOW_TRANSFER_AMOUNT", 0);
+        let player_a_key = opt(&lookup, "TTFLOW_PLAYER_A_KEY").map(|hex| {
+            SecretKey::from_str(hex.trim())
+                .expect("TTFLOW_PLAYER_A_KEY must be a 32-byte hex secp256k1 key")
+        });
 
         Self {
             wrpc_url,
@@ -83,6 +93,8 @@ impl Config {
             deposit_amount,
             step_delay,
             turn_ttl,
+            transfer_amount,
+            player_a_key,
         }
     }
 }
@@ -198,6 +210,8 @@ mod tests {
         assert_eq!(cfg.deposit_amount, 100_000_000);
         assert_eq!(cfg.step_delay, Duration::from_millis(2000));
         assert_eq!(cfg.turn_ttl, 10_000);
+        assert_eq!(cfg.transfer_amount, 0);
+        assert!(cfg.player_a_key.is_none());
         assert_eq!(cfg.genesis_key, dev_genesis_keypair(&GENESIS_PUBKEY).secret_key());
     }
 
@@ -210,6 +224,11 @@ mod tests {
         env.insert("TTFLOW_DEPOSIT_AMOUNT", "80000000".into());
         env.insert("TTFLOW_STEP_DELAY_MS", "500".into());
         env.insert("TTFLOW_TURN_TTL", "50000".into());
+        env.insert("TTFLOW_TRANSFER_AMOUNT", "25000000".into());
+        env.insert(
+            "TTFLOW_PLAYER_A_KEY",
+            "0000000000000000000000000000000000000000000000000000000000000005".into(),
+        );
         env.insert(
             "TTFLOW_GENESIS_KEY",
             "0000000000000000000000000000000000000000000000000000000000000004".into(),
@@ -222,6 +241,16 @@ mod tests {
         assert_eq!(cfg.deposit_amount, 80_000_000);
         assert_eq!(cfg.step_delay, Duration::from_millis(500));
         assert_eq!(cfg.turn_ttl, 50_000);
+        assert_eq!(cfg.transfer_amount, 25_000_000);
+        assert_eq!(
+            cfg.player_a_key,
+            Some(
+                SecretKey::from_str(
+                    "0000000000000000000000000000000000000000000000000000000000000005"
+                )
+                .unwrap()
+            )
+        );
         assert_eq!(
             cfg.genesis_key,
             SecretKey::from_str("0000000000000000000000000000000000000000000000000000000000000004")

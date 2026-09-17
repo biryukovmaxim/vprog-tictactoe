@@ -178,6 +178,8 @@ async fn test_e2e_simnet_game_flow() {
         deposit_amount: 100_000_000,
         step_delay: Duration::from_millis(300),
         turn_ttl: 10_000,
+        transfer_amount: 0,
+        player_a_key: None,
     };
 
     let report =

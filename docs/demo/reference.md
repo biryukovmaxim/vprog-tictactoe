@@ -46,6 +46,8 @@ runbook explains the flow; this file is the knob-by-knob reference.
 | `TTFLOW_STAKE` | Stake per player in sompis | `50000000` (0.5 KAS) |
 | `TTFLOW_ROUNDS` | Rounds per match | `1` |
 | `TTFLOW_DEPOSIT_AMOUNT` | Deposit amount per player in sompis | `100000000` (1.0 KAS) |
+| `TTFLOW_TRANSFER_AMOUNT` | In-rollup transfer from player A to B mid-scenario, in sompis (0 skips the step) | `0` |
+| `TTFLOW_PLAYER_A_KEY` | Fixed player-A key (32-byte hex) so the claim example can reuse the run's exit-leaf owner | random |
 | `TTFLOW_STEP_DELAY_MS` | Delay between scenario steps in milliseconds | `2000` |
 | `TTFLOW_TURN_TTL` | Turn TTL in DAA-score units | `10000` |
 
@@ -71,7 +73,7 @@ DA API (all `GET`, JSON):
 |---|---|
 | `/api/state` | lane, covenant id, settlement status |
 | `/api/config` | `{"initialized": bool}` |
-| `/api/games?status=open\|settled&after={id}&limit=N` | `{"games": [...]}`, each with `state_name` (`Open`, `Playing`, ...); status filter + cursor pagination |
+| `/api/games?status=open\|playing\|finished&after={id}&limit=N` | `{"games": [...]}`, each with `state_name` (`Open`, `Playing`, ...); status filter + cursor pagination |
 | `/api/games/{id}` | one game |
 | `/api/accounts/{user-id-hex}` | one account |
 | `/api/exits` | settled exit leaves (claimable) |
