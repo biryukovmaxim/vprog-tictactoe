@@ -212,6 +212,14 @@ pub fn leaf_spent<S: Store>(store: &S, root: &[u8; 32], leaf_index: usize) -> Op
     borsh::from_slice(&val).ok()
 }
 
+/// Deletes a leaf's spent mark from the index keyspace, leaving the leaf unspent.
+///
+/// Inverse of `mark_leaf_spent`; idempotent, since deleting an absent key is a no-op.
+pub fn unmark_leaf_spent(wb: &mut dyn WriteBatch, root: &[u8; 32], leaf_index: usize) {
+    let key = spent_mark_key(root, leaf_index);
+    wb.delete(StateSpace::Index, &key);
+}
+
 /// Stores the latest settlement, overwriting any previous one.
 pub fn put_latest_settlement(wb: &mut dyn WriteBatch, rec: &LatestSettlement) {
     let key = latest_settlement_key();
@@ -365,6 +373,30 @@ mod tests {
 
         let fetched = leaf_spent(&store, &root, 0);
         assert_eq!(fetched, Some(mark));
+    }
+
+    #[test]
+    fn test_unmark_leaf_spent_undoes_and_is_idempotent() {
+        let dir = TempDir::new().unwrap();
+        let store: RocksDbStore = RocksDbStore::open(dir.path());
+        let root = [0x55; 32];
+        let mark = test_spent_mark(0x66);
+
+        let mut wb = store.write_batch();
+        mark_leaf_spent(&mut wb, &root, 1, &mark);
+        store.commit(wb);
+        assert_eq!(leaf_spent(&store, &root, 1), Some(mark));
+
+        let mut wb = store.write_batch();
+        unmark_leaf_spent(&mut wb, &root, 1);
+        store.commit(wb);
+        assert_eq!(leaf_spent(&store, &root, 1), None, "unmarked leaf must read as unspent");
+
+        // Deleting an absent key is a no-op, so a second unmark must not fail.
+        let mut wb = store.write_batch();
+        unmark_leaf_spent(&mut wb, &root, 1);
+        store.commit(wb);
+        assert_eq!(leaf_spent(&store, &root, 1), None);
     }
 
     #[test]
