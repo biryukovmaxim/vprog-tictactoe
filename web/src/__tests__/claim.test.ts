@@ -200,6 +200,7 @@ function claimClient(delegateAmounts: bigint[], ownAmount: bigint, pubkeyHex: st
   const client = {
     getUtxosByAddresses: async ({ addresses }: { addresses: string[] }) =>
       addresses[0] === DEPOSIT ? { entries: delegateEntries } : { entries: ownEntries },
+    getBlockDagInfo: async () => ({ virtualDaaScore: 10n ** 12n }),
     getFeeEstimate: async () => ({ estimate: { priorityBucket: { feerate: 1 } } }),
     submitTransaction,
   } as never as RpcClient;

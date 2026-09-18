@@ -37,6 +37,22 @@ function kas(amount: bigint): string {
   return `${(Number(amount) / Number(SOMPI)).toFixed(2)} KAS`;
 }
 
+/// One labeled, copyable hex/address line.
+function Copyable({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    await navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1_500);
+  };
+  return (
+    <span className="addr">
+      {label}: {value}{' '}
+      <button onClick={copy}>{copied ? 'copied' : 'copy'}</button>
+    </span>
+  );
+}
+
 export function KeyBar({ onIdentity, needsFunding = false }: { onIdentity: (id: Identity | null) => void; needsFunding?: boolean }) {
   const [privkey, setPrivkey] = useState('');
   const [identity, setIdentity] = useState<Identity | null>(null);
@@ -44,7 +60,6 @@ export function KeyBar({ onIdentity, needsFunding = false }: { onIdentity: (id: 
   const [l1, setL1] = useState<bigint | null>(null);
   const [l2, setL2] = useState<bigint | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const da = useDa();
 
   useEffect(() => onIdentity(identity), [identity, onIdentity]);
@@ -105,13 +120,6 @@ export function KeyBar({ onIdentity, needsFunding = false }: { onIdentity: (id: 
     }
   };
 
-  const copy = async () => {
-    if (!identity) return;
-    await navigator.clipboard.writeText(identity.wallet.address);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1_500);
-  };
-
   return (
     <div className="keybar">
       <input
@@ -124,10 +132,9 @@ export function KeyBar({ onIdentity, needsFunding = false }: { onIdentity: (id: 
       <button onClick={load}>Load</button>
       {identity && (
         <>
-          <span className="addr" title="this address must receive L1 funds">
-            addr: {identity.wallet.address}{' '}
-          </span>
-          <button onClick={copy}>{copied ? 'copied' : 'copy'}</button>
+          <Copyable label="addr" value={identity.wallet.address} />
+          <Copyable label="id" value={identity.userIdHex} />
+          <Copyable label="pk" value={identity.wallet.pubkeyHex} />
           <span>L2: {l2 === null ? '…' : kas(l2)}</span>
           <span>L1: {l1 === null ? '…' : kas(l1)}</span>
           {needsFunding && (

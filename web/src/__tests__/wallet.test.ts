@@ -17,6 +17,8 @@ import { PrivateKey, Transaction } from 'kaspa-wasm';
 /// secp256k1 scalar 7 — same fixed key as the encoder crate tests.
 const PRIVKEY = '0'.repeat(63) + '7';
 const LANE = '33'.repeat(20);
+/// Non-palindromic funding txid: pins the raw-order hex convention of the decoder.
+const TXID = '0123456789abcdef'.repeat(4);
 
 beforeAll(async () => {
   const encoderWasm = readFileSync(createRequire(import.meta.url).resolve('vprog-tictactoe-encoder-wasm/vprog_tictactoe_encoder_wasm_bg.wasm'));
@@ -42,7 +44,7 @@ describe('pubkey agreement between encoder and kaspa-wasm', () => {
 /// A real, signed, unfunded `CreateGame` carrier built from JS.
 function createGameBytes(): Uint8Array {
   const ids = my_ids(PRIVKEY);
-  const utxo = new UtxoCandidate('21'.repeat(32), 3, 1_000_000_000n, `20${ids.pubkey_hex}ac`, 0);
+  const utxo = new UtxoCandidate(TXID, 3, 1_000_000_000n, `20${ids.pubkey_hex}ac`, 0);
   return create_game_tx(
     PRIVKEY,
     network_params('simnet'),
@@ -64,7 +66,7 @@ describe('borsh tx decode of real encoder output', () => {
     const tx = txFromBorsh(createGameBytes());
     expect(tx.version).toBe(1);
     expect(tx.inputs).toHaveLength(1);
-    expect(tx.inputs[0].previousOutpoint.transactionId).toBe('21'.repeat(32));
+    expect(tx.inputs[0].previousOutpoint.transactionId).toBe(TXID);
     expect(tx.inputs[0].previousOutpoint.index).toBe(3);
     expect(tx.inputs[0].signatureScript.length).toBeGreaterThan(0);
     expect(tx.outputs).toHaveLength(1); // unfunded create: change only

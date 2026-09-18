@@ -108,6 +108,7 @@ function mockClient(pubkeyHex: string, amounts: bigint[]) {
   );
   const client = {
     getUtxosByAddresses: async () => ({ entries }),
+    getBlockDagInfo: async () => ({ virtualDaaScore: 10n ** 12n }),
     submitTransaction,
   } as never as RpcClient;
   return { client, submitTransaction };

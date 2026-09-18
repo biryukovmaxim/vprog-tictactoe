@@ -79,14 +79,19 @@ export function loadKey(privkeyHex: string): Wallet {
     address,
     pubkeyHex,
     async l1Utxos(client: RpcClient): Promise<WalletUtxo[]> {
+      // Spendable only: coinbase outputs need 100 daa-score maturity, and this
+      // wallet class is typically a miner payout address with fresh rewards.
+      const { virtualDaaScore } = await client.getBlockDagInfo();
       const { entries } = await client.getUtxosByAddresses({ addresses: [address] });
-      return entries.map((e) => ({
-        txid_hex: e.outpoint.transactionId,
-        index: e.outpoint.index,
-        amount: e.amount,
-        spk_hex: e.scriptPublicKey.script,
-        spk_version: e.scriptPublicKey.version,
-      }));
+      return entries
+        .filter((e) => !e.isCoinbase || BigInt(e.blockDaaScore) + 100n <= BigInt(virtualDaaScore))
+        .map((e) => ({
+          txid_hex: e.outpoint.transactionId,
+          index: e.outpoint.index,
+          amount: e.amount,
+          spk_hex: e.scriptPublicKey.script,
+          spk_version: e.scriptPublicKey.version,
+        }));
     },
     submitTx: (client: RpcClient, bytes: Uint8Array) => submitTx(client, bytes),
   };
@@ -116,7 +121,9 @@ async function submitTx(client: RpcClient, bytes: Uint8Array): Promise<string> {
 //                 covenant Option{0, 1: {authorizing_input u16, covenant_id [u8;32]}} }]
 //   lock_time u64, subnetwork_id [u8;20], gas u64, payload Vec<u8>,
 //   storage_mass u64, id [u8;32]
-// Hashes render in display order (byte-reversed hex) like kaspa `Display`.
+// Hash cross the wasm boundary as plain raw-order hex: this kaspa-wasm build
+// has symmetric plain Display/FromStr, so reversing here would flip the
+// outpoint txid and the node would reject the spend as an orphan.
 
 class Reader {
   pos = 0;
@@ -156,9 +163,9 @@ function hex(bytes: Uint8Array): string {
   return s;
 }
 
-/// kaspa hash display hex: raw bytes reversed.
+/// kaspa hash hex: plain raw-order bytes (see the decoder header note).
 function hashHex(raw: Uint8Array): string {
-  return hex(raw.slice().reverse());
+  return hex(raw);
 }
 
 /// Decode borsh tx bytes into the plain `ITransaction` object the wasm
