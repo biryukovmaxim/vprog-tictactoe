@@ -72,7 +72,7 @@ export function outcomeLine(
 /// balance for transfers and withdrawals, my L1 UTXO sum rising for exit
 /// claims (the payout lands on L1, the L2 side is untouched).
 export type ActivityWitness =
-  | { kind: 'board'; gameId: string; board: number[] }
+  | { kind: 'board'; gameId: string; board: number[]; cell?: number }
   | { kind: 'myGames'; before: number }
   | { kind: 'balance'; before: bigint | null }
   | { kind: 'l1'; before: bigint | null };
@@ -128,4 +128,26 @@ function acked(witness: ActivityWitness | undefined, view: ActivityView): boolea
 
 function sameBoard(a: number[], b: number[]): boolean {
   return a.length === b.length && a.every((c, i) => c === b[i]);
+}
+
+/// A healthy carrier executes in seconds on this stack, so a row still pending
+/// this long after submit almost certainly never applied — the usual story is
+/// a guest rejection (invalid move, joining your own game, stale game state)
+/// that neither the DA nor the L1 chain reports back.
+export const STUCK_AFTER_MS = 120_000;
+
+/// Whether a pending row has waited past any healthy confirmation window.
+export function rowStuck(row: ActivityRow, now: number): boolean {
+  return row.status === 'pending' && now - row.at > STUCK_AFTER_MS;
+}
+
+/// Whether a queued turn may be submitted right now: the game is live, it is
+/// my move on an empty cell, and nothing for this game is in flight — my own
+/// carrier would double-submit, and an opponent carrier sitting in the L1
+/// queue would flip the turn parity under ours before it executes.
+export function turnDispatchable(game: DaGame, myUserId: string, myTurnInFlight: boolean, anyTurnInFlight: boolean, cell: number): boolean {
+  if (game.state !== 1) return false;
+  if (!isMyTurn(game, myUserId)) return false;
+  if (game.board[cell] !== 0) return false;
+  return !myTurnInFlight && !anyTurnInFlight;
 }

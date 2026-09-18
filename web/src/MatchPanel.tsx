@@ -1,67 +1,49 @@
 //! Match column: header round/phase, to-move line, board, tally, stake/pot,
 //! and the outcome banner. Clicks submit one single-Turn carrier each, over
 //! the same wallet/pickUtxo/fee-pad pipeline the create/join entries use.
+//! Pending turns render as ghost marks (any mover's, straight from the L1
+//! queue), queued premoves as numbered ghosts that fire when they become
+//! legal — so the board stays clickable ahead of your turn.
 
 import { useState } from 'react';
-import { FEE_ESTIMATE, kas, pickUtxo, sharedClient } from './composition';
-import type { DaGame } from './da';
+import { kas, sharedClient, submitTurn } from './composition';
+import { inFlightTurns, useLaneCarriers } from './carriers';
 import type { Identity } from './KeyBar';
-import { Board } from './Board';
+import { Board, type Ghost } from './Board';
 import { isMyTurn, outcomeLine, seatOf, toMoveMark, type ActivityWitness } from './match';
 import { useDa, useGame } from './state';
-import type { RpcClient } from 'kaspa-wasm';
-import { NETWORK } from './wallet';
-import { network_params, turn_tx, UtxoCandidate } from 'vprog-tictactoe-encoder-wasm';
 
-/// One Turn carrier: signs `turn_tx` for `cell` and reports the activity row
-/// with the pre-submit board as the on-L2 witness. Turns move no L2 balance,
-/// so the single-UTXO gate only needs to cover the carrier fee.
-async function submitTurn(opts: {
-  identity: Identity;
-  client: RpcClient;
-  lane: string;
-  game: DaGame;
+/// One queued premove for this game (App owns the queue and the dispatcher).
+export interface QueuedTurnView {
+  id: number;
   cell: number;
-  onActivity: (label: string, txid: string, witness?: ActivityWitness) => void;
-  onNeedsFunding: (needed: bigint) => void;
-}): Promise<void> {
-  const { identity, client, lane, game, cell, onActivity, onNeedsFunding } = opts;
-  const utxos = await identity.wallet.l1Utxos(client);
-  const picked = pickUtxo(utxos, FEE_ESTIMATE);
-  if (!picked) {
-    onNeedsFunding(FEE_ESTIMATE);
-    throw new Error(`insufficient L1 funds — fund ${identity.wallet.address}`);
-  }
-  const opponent = game.players[0] === identity.userIdHex ? game.players[1] : game.players[0];
-  if (!opponent) throw new Error('waiting for the opponent to join');
-  const bytes = turn_tx(
-    identity.privkeyHex,
-    network_params(NETWORK),
-    new UtxoCandidate(picked.txid_hex, picked.index, picked.amount, picked.spk_hex, picked.spk_version),
-    identity.wallet.address,
-    lane,
-    game.id,
-    identity.userIdHex,
-    opponent,
-    cell,
-  );
-  const txid = await identity.wallet.submitTx(client, bytes);
-  onActivity(`turn ${cell}`, txid, { kind: 'board', gameId: game.id, board: game.board });
 }
 
 export function MatchPanel({
   identity,
   gameId,
+  myTurnInFlight,
+  queue,
+  onEnqueue,
+  onCancelQueued,
   onActivity,
   onNeedsFunding,
 }: {
   identity: Identity;
   gameId: string | null;
+  /// One of my turns for this game is submitted but not yet on L2; direct
+  /// submits pause until it lands (clicks fall through to the queue).
+  myTurnInFlight: boolean;
+  /// My queued premoves for this game, oldest first.
+  queue: QueuedTurnView[];
+  onEnqueue: (gameId: string, cell: number) => void;
+  onCancelQueued: (id: number) => void;
   onActivity: (label: string, txid: string, witness?: ActivityWitness) => void;
   onNeedsFunding: (needed: bigint) => void;
 }) {
   const da = useDa();
   const game = useGame(gameId);
+  const laneCarriers = useLaneCarriers();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -82,23 +64,44 @@ export function MatchPanel({
   const mover = toMoveMark(game.board) === 1 ? 'X' : 'O';
   const outcome = outcomeLine(game.state, game.players, identity.userIdHex, BigInt(game.stake));
 
+  // Ghosts: in-flight turns of any mover (from the L1 queue) at the current
+  // to-move mark, then my queued premoves numbered in firing order.
+  const inFlight = inFlightTurns(laneCarriers, game.id);
+  // My mark in the current round: the creator plays `creator_mark` in even
+  // rounds and the opposite in odd ones (guest `mark_for_seat`).
+  const completedRounds = game.round_wins[0] + game.round_wins[1] + game.draws;
+  const seat0Mark: 1 | 2 = completedRounds % 2 === 0 ? (game.creator_mark === 2 ? 2 : 1) : game.creator_mark === 1 ? 2 : 1;
+  const myGhostMark: 1 | 2 = seat === 1 ? (seat0Mark === 1 ? 2 : 1) : seat0Mark;
+  const ghosts: Ghost[] = [
+    ...inFlight.map((t) => ({ cell: t.cell, mark: toMoveMark(game.board) as 1 | 2 })),
+    ...queue.map((q, i) => ({ cell: q.cell, mark: myGhostMark, order: i + 1 })),
+  ];
+
   const play = async (cell: number) => {
-    if (busy) return;
+    if (busy || game.state !== 1 || game.board[cell] !== 0) return;
     const lane = da.state?.lane_subnet;
     if (!lane) {
       setErr('waiting for DA state');
       return;
     }
-    setErr(null);
-    setBusy(true);
-    try {
-      await submitTurn({ identity, client: await sharedClient(), lane, game, cell, onActivity, onNeedsFunding });
-    } catch (e) {
-      setErr(String(e));
-    } finally {
-      setBusy(false);
+    // Direct submit only from a clean slate; anything else is a premove.
+    if (myTurn && !myTurnInFlight && queue.length === 0 && inFlight.length === 0) {
+      setErr(null);
+      setBusy(true);
+      try {
+        await submitTurn({ identity, client: await sharedClient(), lane, game, cell, onActivity, onNeedsFunding });
+      } catch (e) {
+        setErr(String(e));
+      } finally {
+        setBusy(false);
+      }
+    } else {
+      setErr(null);
+      onEnqueue(game.id, cell);
     }
   };
+
+  const oppInFlight = inFlight.some((t) => t.userId !== identity.userIdHex);
 
   return (
     <div className="stack">
@@ -114,7 +117,19 @@ export function MatchPanel({
       ) : (
         game.state === 0 && <div className="hint">waiting for a joiner</div>
       )}
-      <Board board={game.board} enabled={myTurn && !busy} onCell={play} />
+      {myTurnInFlight && <div className="hint">your move is on L1 — the board unlocks when it lands on L2…</div>}
+      {!myTurnInFlight && oppInFlight && <div className="hint">opponent's move is on L1…</div>}
+      <Board board={game.board} enabled={game.state === 1} ghosts={ghosts} onCell={play} />
+      {queue.length > 0 && (
+        <div className="hint">
+          queued:{' '}
+          {queue.map((q) => (
+            <button key={q.id} className="qchip" onClick={() => onCancelQueued(q.id)} title="cancel this premove">
+              cell {q.cell} ✕
+            </button>
+          ))}
+        </div>
+      )}
       <div>
         wins {game.round_wins[0]}–{game.round_wins[1]} · draws {game.draws}
       </div>

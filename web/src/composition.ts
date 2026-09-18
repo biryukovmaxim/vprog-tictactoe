@@ -4,12 +4,12 @@
 //! lives entirely inside the encoder — the web only passes `deposit_amount`.
 
 import { useEffect, useState } from 'react';
-import { fetchAccount, type ExitLeaf, type ExitRoot } from './da';
+import { fetchAccount, type DaGame, type ExitLeaf, type ExitRoot } from './da';
 import type { Identity } from './KeyBar';
 import type { ActivityWitness } from './match';
 import { NETWORK, connectClient, type WalletUtxo } from './wallet';
 import type { RpcClient } from 'kaspa-wasm';
-import { UtxoCandidate, claim_tx, create_game_tx, join_game_tx, network_params, transfer_tx, withdraw_tx } from 'vprog-tictactoe-encoder-wasm';
+import { UtxoCandidate, claim_tx, create_game_tx, join_game_tx, network_params, transfer_tx, turn_tx, withdraw_tx } from 'vprog-tictactoe-encoder-wasm';
 import { canAffordClaim, claimArgs, claimFee } from './claim';
 import { transferArgs } from './transfer';
 
@@ -135,6 +135,44 @@ export async function submitEntry(opts: {
   const txid = await identity.wallet.submitTx(client, bytes);
   onActivity(`${entry.kind} game`, txid);
   return { txid, deposit };
+}
+
+/// One single-`Turn` carrier: signs `turn_tx` for `cell` and reports the
+/// activity row with the pre-submit board as the on-L2 witness. Turns move no
+/// L2 balance, so the single-UTXO gate only needs to cover the carrier fee.
+/// Shared by the match panel's direct clicks and the premove-queue dispatcher.
+export async function submitTurn(opts: {
+  identity: Identity;
+  client: RpcClient;
+  /// Lane subnet hex from /api/state.
+  lane: string;
+  game: DaGame;
+  cell: number;
+  onActivity: (label: string, txid: string, witness?: ActivityWitness) => void;
+  onNeedsFunding: (needed: bigint) => void;
+}): Promise<void> {
+  const { identity, client, lane, game, cell, onActivity, onNeedsFunding } = opts;
+  const utxos = await identity.wallet.l1Utxos(client);
+  const picked = pickUtxo(utxos, FEE_ESTIMATE);
+  if (!picked) {
+    onNeedsFunding(FEE_ESTIMATE);
+    throw new Error(`insufficient L1 funds — fund ${identity.wallet.address}`);
+  }
+  const opponent = game.players[0] === identity.userIdHex ? game.players[1] : game.players[0];
+  if (!opponent) throw new Error('waiting for the opponent to join');
+  const bytes = turn_tx(
+    identity.privkeyHex,
+    network_params(NETWORK),
+    new UtxoCandidate(picked.txid_hex, picked.index, picked.amount, picked.spk_hex, picked.spk_version),
+    identity.wallet.address,
+    lane,
+    game.id,
+    identity.userIdHex,
+    opponent,
+    cell,
+  );
+  const txid = await identity.wallet.submitTx(client, bytes);
+  onActivity(`turn ${cell}`, txid, { kind: 'board', gameId: game.id, board: game.board, cell });
 }
 
 /// One L2 transfer carrier: no deposit, change-only — the single-UTXO
@@ -296,6 +334,8 @@ export interface ActivityRow {
   id: number;
   label: string;
   txid: string;
+  /// Wall-clock ms at submit; drives the pending-too-long flag in match.ts.
+  at: number;
   status: 'pending' | 'on L2' | 'settled';
   /// What DA change acks this row; drives the chip walk.
   witness?: ActivityWitness;

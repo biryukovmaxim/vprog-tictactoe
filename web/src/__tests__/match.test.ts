@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { DaGame, GameStatus } from '../da';
-import { advanceActivity, isMyTurn, outcomeLine, toMoveMark, type ActivityWitness } from '../match';
+import { advanceActivity, isMyTurn, outcomeLine, rowStuck, STUCK_AFTER_MS, toMoveMark, type ActivityWitness } from '../match';
 import type { ActivityRow } from '../composition';
 
 const ME = 'aa'.repeat(32);
@@ -136,8 +136,8 @@ describe('outcomeLine', () => {
 // ---------------------------------------------------------------------------
 // Activity-chip walker.
 
-function row(status: ActivityRow['status'], witness?: ActivityWitness, settledTxid?: string | null): ActivityRow {
-  return { id: 1, label: 'turn 4', txid: 'ff'.repeat(32), status, ...(witness ? { witness } : {}), ...(settledTxid !== undefined ? { settledTxid } : {}) };
+function row(status: ActivityRow['status'], witness?: ActivityWitness, settledTxid?: string | null, at = 0): ActivityRow {
+  return { id: 1, label: 'turn 4', txid: 'ff'.repeat(32), status, at, ...(witness ? { witness } : {}), ...(settledTxid !== undefined ? { settledTxid } : {}) };
 }
 
 function view(
@@ -220,5 +220,19 @@ describe('advanceActivity (trust chips over DA polls)', () => {
   it('settled rows and witness-less rows stay as they are', () => {
     const rows = [row('settled', undefined, 'st-1'), row('pending')];
     expect(advanceActivity(rows, view({}, 'st-9'))).toBe(rows);
+  });
+});
+
+describe('rowStuck (pending past the healthy window)', () => {
+  it('a fresh pending row is not stuck', () => {
+    expect(rowStuck(row('pending', undefined, undefined, 1_000), 1_000 + 10_000)).toBe(false);
+  });
+
+  it('a pending row past STUCK_AFTER_MS is stuck', () => {
+    expect(rowStuck(row('pending', undefined, undefined, 1_000), 1_000 + STUCK_AFTER_MS + 1)).toBe(true);
+  });
+
+  it('acknowledged rows never flag', () => {
+    expect(rowStuck(row('on L2', undefined, 'st-1', 1_000), 1_000 + STUCK_AFTER_MS * 10)).toBe(false);
   });
 });

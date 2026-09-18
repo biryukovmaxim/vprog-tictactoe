@@ -62,7 +62,11 @@ export function OpenGames({
       <h3>open games</h3>
       {err && <div className="err">{err}</div>}
       {da.games.open.length === 0 && <p className="hint">no open games — create one below</p>}
-      {da.games.open.map((g) => {
+      {da.games.open
+        // My own open games have no Join for me (the guest rejects a creator
+        // joining their own game); they list in my games above instead.
+        .filter((g) => g.players[0] !== identity.userIdHex)
+        .map((g) => {
         const stake = BigInt(g.stake);
         // Join stays enabled when the L2 balance covers the stake, or when a
         // single L1 UTXO affords the auto-deposit; unknown balances cannot gate.
@@ -90,7 +94,7 @@ export function OpenGames({
             </button>
           </div>
         );
-      })}
+        })}
     </div>
   );
 }
