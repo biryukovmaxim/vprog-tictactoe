@@ -375,7 +375,13 @@ pub fn transfer_tx(
     dest_pubkey_hex: Option<String>,
 ) -> Result<Vec<u8>, JsError> {
     let identity = Identity::from_privkey_hex(privkey_hex)?;
-    let access = two_user_access(identity.user_id(), resource_id(dest_user_id_hex)?);
+    let dest_id = resource_id(dest_user_id_hex)?;
+    if dest_id == identity.user_id() {
+        return Err(JsError::new(
+            "self-transfer is not supported: it would repeat one resource id in the access list",
+        ));
+    }
+    let access = two_user_access(identity.user_id(), dest_id);
     let action = if dest_exists {
         encode_transfer_action(access.source_idx, access.dest_idx, amount)
     } else {

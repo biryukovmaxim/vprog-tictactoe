@@ -517,6 +517,23 @@ mod tests {
             )
             .is_err()
         );
+
+        // Self-transfer is rejected: it would repeat one resource id in the access list.
+        #[cfg(target_arch = "wasm32")]
+        assert!(
+            transfer_tx(
+                &test_privkey_hex(),
+                &net,
+                &utxo,
+                &address.to_string(),
+                &lane_subnet_hex(),
+                &hex32_str(&my_user_id),
+                true,
+                1_000,
+                None,
+            )
+            .is_err()
+        );
     }
 
     #[test]
