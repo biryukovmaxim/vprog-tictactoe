@@ -15,7 +15,8 @@ export function MyGames({
   onSelect: (gameId: string) => void;
 }) {
   const da = useDa();
-  const mine = [...da.games.playing, ...da.games.finished].filter(
+  // Own open games list here too: OpenGames hides them (no self-join).
+  const mine = [...da.games.open, ...da.games.playing, ...da.games.finished].filter(
     (g) => g.players[0] === identity.userIdHex || g.players[1] === identity.userIdHex,
   );
 
@@ -23,13 +24,16 @@ export function MyGames({
     <div className="stack">
       <h3>my games</h3>
       {mine.length === 0 && <p className="hint">no games yet — create or join one</p>}
-      {mine.map((g) => (
-        <button key={g.id} className={`game-row${g.id === selectedId ? ' selected' : ''}`} onClick={() => onSelect(g.id)}>
-          <span>{g.state_name}</span>
-          <span>stake {kas(g.stake)}</span>
-          <span>vs {shortHex(g.players[0] === identity.userIdHex ? (g.players[1] ?? g.players[0]) : g.players[0])}</span>
-        </button>
-      ))}
+      {mine.map((g) => {
+        const other = g.players[0] === identity.userIdHex ? g.players[1] : g.players[0];
+        return (
+          <button key={g.id} className={`game-row${g.id === selectedId ? ' selected' : ''}`} onClick={() => onSelect(g.id)}>
+            <span>{g.state_name}</span>
+            <span>stake {kas(g.stake)}</span>
+            <span>vs {other ? shortHex(other) : 'waiting for opponent'}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
