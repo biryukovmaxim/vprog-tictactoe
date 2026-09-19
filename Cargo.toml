@@ -21,24 +21,25 @@ resolver = "3"
   kaspa-txscript       = { git = "https://github.com/kaspanet/rusty-kaspa", branch = "master" }
   kaspa-wrpc-client    = { git = "https://github.com/kaspanet/rusty-kaspa", branch = "master" }
 
-  # vprogs stack. The reorg-claim-exit branch (bridge live-lane join fix plus
-  # the reorg journal and revert hooks) carries app-kit, runtime-processor,
+  # vprogs stack. The storage-write-drain branch (reorg-claim-exit plus the
+  # write-worker shutdown drain, vprogs#147) carries the bridge live-lane join
+  # fix, the reorg journal and revert hooks, app-kit, runtime-processor,
   # indexer hooks, and the exit index.
-  vprogs-core-types                  = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-claim-exit" }
-  vprogs-l1-types                    = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-claim-exit" }
-  vprogs-l1-wallet                   = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-claim-exit" }
-  vprogs-node-test-utils             = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-claim-exit" }
-  vprogs-runner                      = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-claim-exit" }
-  vprogs-scheduling-scheduler        = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-claim-exit" }
-  vprogs-state-ptr-latest            = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-claim-exit" }
-  vprogs-state-version               = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-claim-exit" }
-  vprogs-storage-canonical-chain     = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-claim-exit" }
-  vprogs-storage-rocksdb-store       = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-claim-exit" }
-  vprogs-storage-types               = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-claim-exit" }
-  vprogs-zk-abi                      = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-claim-exit" }
-  vprogs-zk-backend-risc0-api        = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-claim-exit" }
-  vprogs-zk-backend-risc0-app-kit    = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-claim-exit" }
-  vprogs-zk-backend-risc0-test-suite = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-claim-exit" }
+  vprogs-core-types                  = { git = "https://github.com/kaspanet/vprogs", branch = "storage-write-drain" }
+  vprogs-l1-types                    = { git = "https://github.com/kaspanet/vprogs", branch = "storage-write-drain" }
+  vprogs-l1-wallet                   = { git = "https://github.com/kaspanet/vprogs", branch = "storage-write-drain" }
+  vprogs-node-test-utils             = { git = "https://github.com/kaspanet/vprogs", branch = "storage-write-drain" }
+  vprogs-runner                      = { git = "https://github.com/kaspanet/vprogs", branch = "storage-write-drain" }
+  vprogs-scheduling-scheduler        = { git = "https://github.com/kaspanet/vprogs", branch = "storage-write-drain" }
+  vprogs-state-ptr-latest            = { git = "https://github.com/kaspanet/vprogs", branch = "storage-write-drain" }
+  vprogs-state-version               = { git = "https://github.com/kaspanet/vprogs", branch = "storage-write-drain" }
+  vprogs-storage-canonical-chain     = { git = "https://github.com/kaspanet/vprogs", branch = "storage-write-drain" }
+  vprogs-storage-rocksdb-store       = { git = "https://github.com/kaspanet/vprogs", branch = "storage-write-drain" }
+  vprogs-storage-types               = { git = "https://github.com/kaspanet/vprogs", branch = "storage-write-drain" }
+  vprogs-zk-abi                      = { git = "https://github.com/kaspanet/vprogs", branch = "storage-write-drain" }
+  vprogs-zk-backend-risc0-api        = { git = "https://github.com/kaspanet/vprogs", branch = "storage-write-drain" }
+  vprogs-zk-backend-risc0-app-kit    = { git = "https://github.com/kaspanet/vprogs", branch = "storage-write-drain" }
+  vprogs-zk-backend-risc0-test-suite = { git = "https://github.com/kaspanet/vprogs", branch = "storage-write-drain" }
 
   # Shared host deps.
   axum       = "0.8"
@@ -58,12 +59,12 @@ resolver = "3"
 # vprogs deps at biryukovmaxim/vprogs; redirect them to the same kaspanet branch so
 # every vprogs crate in the graph resolves from a single source.
 [patch."https://github.com/biryukovmaxim/vprogs"]
-vprogs-core-codec                         = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-claim-exit" }
-vprogs-core-hashing                       = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-claim-exit" }
-vprogs-core-merkle-tree                   = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-claim-exit" }
-vprogs-core-smt                           = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-claim-exit" }
-vprogs-core-types                         = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-claim-exit" }
-vprogs-l1-utils                           = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-claim-exit" }
-vprogs-zk-abi                             = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-claim-exit" }
-vprogs-zk-backend-risc0-api               = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-claim-exit" }
-vprogs-zk-backend-risc0-runtime-processor = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-claim-exit" }
+vprogs-core-codec                         = { git = "https://github.com/kaspanet/vprogs", branch = "storage-write-drain" }
+vprogs-core-hashing                       = { git = "https://github.com/kaspanet/vprogs", branch = "storage-write-drain" }
+vprogs-core-merkle-tree                   = { git = "https://github.com/kaspanet/vprogs", branch = "storage-write-drain" }
+vprogs-core-smt                           = { git = "https://github.com/kaspanet/vprogs", branch = "storage-write-drain" }
+vprogs-core-types                         = { git = "https://github.com/kaspanet/vprogs", branch = "storage-write-drain" }
+vprogs-l1-utils                           = { git = "https://github.com/kaspanet/vprogs", branch = "storage-write-drain" }
+vprogs-zk-abi                             = { git = "https://github.com/kaspanet/vprogs", branch = "storage-write-drain" }
+vprogs-zk-backend-risc0-api               = { git = "https://github.com/kaspanet/vprogs", branch = "storage-write-drain" }
+vprogs-zk-backend-risc0-runtime-processor = { git = "https://github.com/kaspanet/vprogs", branch = "storage-write-drain" }
