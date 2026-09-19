@@ -55,6 +55,8 @@ impl Config {
         let seed_depth = opt_u64(&lookup, "TT_SEED_DEPTH", 500);
         let min_confirmations = opt(&lookup, "TT_MIN_CONFIRMATIONS")
             .map(|s| s.parse().expect("TT_MIN_CONFIRMATIONS must be a u64"));
+        let adaptive_filter_disabled = opt(&lookup, "TT_DISABLE_ADAPTIVE_FILTER")
+            .is_some_and(|s| s != "0");
         let prove = opt(&lookup, "TT_PROVE").is_some_and(|s| s != "0");
         let start_mode = opt(&lookup, "TT_START_MODE")
             .map(|s| match s.to_lowercase().as_str() {
@@ -79,6 +81,7 @@ impl Config {
             start_from,
             seed_depth,
             min_confirmations,
+            adaptive_filter_disabled,
             prove,
             start_mode,
         };
@@ -191,6 +194,7 @@ mod tests {
         assert_eq!(cfg.runner.data_dir, PathBuf::from("./ttd-data"));
         assert_eq!(cfg.runner.seed_depth, 500);
         assert!(!cfg.runner.prove);
+        assert!(!cfg.runner.adaptive_filter_disabled);
         assert_eq!(cfg.runner.network_id, parse_network("tn10"));
         assert!(cfg.runner.start_mode.is_none());
         assert_eq!(cfg.da_bind, "127.0.0.1:9880");
