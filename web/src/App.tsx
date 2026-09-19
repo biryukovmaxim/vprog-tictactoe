@@ -44,6 +44,7 @@ export default function App() {
   const [fundNeed, setFundNeed] = useState<bigint | null>(null);
   const da = useDa();
   const balances = useMyBalances(identity);
+  const myL1 = balances.utxos?.reduce((sum, u) => sum + u.amount, 0n) ?? null;
   const laneCarriers = useLaneCarriers();
   const onIdentity = useCallback((id: Identity | null) => setIdentity(id), []);
   const myUserId = identity?.userIdHex ?? '';
@@ -65,7 +66,7 @@ export default function App() {
         settledTxid: da.state?.settled?.txid ?? null,
         myUserId,
         myBalance: balances.l2,
-        myL1: balances.utxos?.reduce((sum, u) => sum + u.amount, 0n) ?? null,
+        myL1,
       }),
     );
   }, [da, myUserId, balances.l2, balances.utxos]);
@@ -127,7 +128,7 @@ export default function App() {
 
   return (
     <>
-      <KeyBar onIdentity={onIdentity} needsFunding={needsFunding} />
+      <KeyBar onIdentity={onIdentity} l1={myL1} needsFunding={needsFunding} />
       {identity && <SettlementBanner identity={identity} />}
       {identity && <LaneQueue />}
       {!da.reachable && <div className="banner">DA server unreachable — retrying…</div>}

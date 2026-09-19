@@ -362,7 +362,11 @@ export function sharedClient(): Promise<RpcClient> {
 
 /// My L2 balance and live L1 UTXOs polled every 2 s; `null` while the first
 /// poll is in flight, last-good retained on errors. Feeds affordance gates
-/// (single-UTXO, via canAfford) and the fund-me hint.
+/// (single-UTXO, via canAfford) and the fund-me hint. One poll at a time: a
+/// tick is skipped while the previous is still running, because stacked
+/// requests on the shared wRPC connection grow an unbounded queue against a
+/// slow node and every later submit rides behind it into the client's 60 s
+/// request timeout.
 export interface MyBalances {
   utxos: WalletUtxo[] | null;
   l2: bigint | null;
@@ -377,7 +381,10 @@ export function useMyBalances(identity: Identity | null): MyBalances {
       return;
     }
     let stop = false;
+    let running = false;
     const tick = async () => {
+      if (running) return;
+      running = true;
       try {
         const client = await sharedClient();
         const [account, utxos] = await Promise.all([fetchAccount(identity.userIdHex), identity.wallet.l1Utxos(client)]);
@@ -390,6 +397,8 @@ export function useMyBalances(identity: Identity | null): MyBalances {
         }
       } catch {
         /* keep last good */
+      } finally {
+        running = false;
       }
     };
     tick();

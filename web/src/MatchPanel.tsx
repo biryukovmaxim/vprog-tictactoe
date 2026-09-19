@@ -78,14 +78,18 @@ export function MatchPanel({
   ];
 
   const play = async (cell: number) => {
-    if (busy || game.state !== 1 || game.board[cell] !== 0) return;
+    if (game.state !== 1 || game.board[cell] !== 0) return;
     const lane = da.state?.lane_subnet;
     if (!lane) {
       setErr('waiting for DA state');
       return;
     }
-    // Direct submit only from a clean slate; anything else is a premove.
-    if (myTurn && !myTurnInFlight && queue.length === 0 && inFlight.length === 0) {
+    // Direct submit only from a clean slate; anything else is a premove. A
+    // click while a previous submit is still awaiting its response must land
+    // in the queue too: the carrier may already be mined (board fresh, ghost
+    // gone) while `busy` is still true, and swallowing the click here loses
+    // the move with no row, no error, and no retry.
+    if (!busy && myTurn && !myTurnInFlight && queue.length === 0 && inFlight.length === 0) {
       setErr(null);
       setBusy(true);
       try {

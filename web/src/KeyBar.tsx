@@ -1,11 +1,11 @@
 //! KeyBar: privkey input (memory only), derived address + copy, L2/L1 balances.
 
 import { useEffect, useState } from 'react';
+import { sharedClient } from './composition';
 import { fetchAccount } from './da';
 import { useDa } from './state';
-import { connectClient, initKaspa, loadKey, NETWORK, type Wallet } from './wallet';
+import { initKaspa, loadKey, NETWORK, type Wallet } from './wallet';
 import initEncoder, { my_ids } from 'vprog-tictactoe-encoder-wasm';
-import type { RpcClient } from 'kaspa-wasm';
 
 let encoderInit: Promise<unknown> | null = null;
 
@@ -53,18 +53,27 @@ function Copyable({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function KeyBar({ onIdentity, needsFunding = false }: { onIdentity: (id: Identity | null) => void; needsFunding?: boolean }) {
+/// L1 total comes from App's `useMyBalances` poll; KeyBar once ran its own
+/// duplicate L1 poll on a second connection, which only added load to the
+/// shared node.
+export function KeyBar({
+  onIdentity,
+  l1 = null,
+  needsFunding = false,
+}: {
+  onIdentity: (id: Identity | null) => void;
+  l1?: bigint | null;
+  needsFunding?: boolean;
+}) {
   const [privkey, setPrivkey] = useState('');
   const [identity, setIdentity] = useState<Identity | null>(null);
-  const [client, setClient] = useState<RpcClient | null>(null);
-  const [l1, setL1] = useState<bigint | null>(null);
   const [l2, setL2] = useState<bigint | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const da = useDa();
 
   useEffect(() => onIdentity(identity), [identity, onIdentity]);
 
-  // L2 balance follows the 2 s DA poll; L1 follows a matching local poll.
+  // L2 balance follows the 2 s DA poll.
   useEffect(() => {
     if (!identity) {
       setL2(null);
@@ -83,25 +92,6 @@ export function KeyBar({ onIdentity, needsFunding = false }: { onIdentity: (id: 
     };
   }, [identity]);
 
-  useEffect(() => {
-    if (!identity || !client) {
-      setL1(null);
-      return;
-    }
-    let stop = false;
-    const tick = () =>
-      identity.wallet
-        .l1Utxos(client)
-        .then((utxos) => !stop && setL1(utxos.reduce((sum, u) => sum + u.amount, 0n)))
-        .catch(() => !stop && setL1(null));
-    tick();
-    const id = setInterval(tick, 2_000);
-    return () => {
-      stop = true;
-      clearInterval(id);
-    };
-  }, [identity, client]);
-
   const load = async () => {
     setErr(null);
     try {
@@ -110,12 +100,9 @@ export function KeyBar({ onIdentity, needsFunding = false }: { onIdentity: (id: 
       setPrivkey('');
       // L1 connect is gated separately: an L1-down at key-load time must not
       // tear the identity down — surface the error and keep the key loaded.
-      connectClient()
-        .then(setClient)
-        .catch((e) => setErr(`L1 connect failed: ${String(e)}`));
+      sharedClient().catch((e) => setErr(`L1 connect failed: ${String(e)}`));
     } catch (e) {
       setIdentity(null);
-      setClient(null);
       setErr(String(e));
     }
   };

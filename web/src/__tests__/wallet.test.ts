@@ -100,3 +100,21 @@ describe('submitTx', () => {
     expect(arg.transaction).toBeInstanceOf(Transaction);
   });
 });
+
+describe('l1Utxos dag-info cache', () => {
+  it('skips getBlockDagInfo within the TTL and filters immature coinbases', async () => {
+    const getBlockDagInfo = vi.fn(async () => ({ virtualDaaScore: 1_000n }));
+    const entries = [
+      { outpoint: { transactionId: TXID, index: 0 }, amount: 5n, scriptPublicKey: { version: 0, script: '' }, blockDaaScore: 950n, isCoinbase: true },
+      { outpoint: { transactionId: TXID, index: 1 }, amount: 7n, scriptPublicKey: { version: 0, script: '' }, blockDaaScore: 0n, isCoinbase: false },
+    ];
+    const client = { getBlockDagInfo, getUtxosByAddresses: async () => ({ entries }) } as never;
+    const wallet = loadKey(PRIVKEY);
+    // First call primes the cache; the coinbase 200 DAA below the tip is
+    // immature (needs 100) and must drop, the plain UTXO must stay.
+    await expect(wallet.l1Utxos(client)).resolves.toHaveLength(1);
+    // Second call within the TTL must not touch getBlockDagInfo again.
+    await wallet.l1Utxos(client);
+    expect(getBlockDagInfo).toHaveBeenCalledOnce();
+  });
+});

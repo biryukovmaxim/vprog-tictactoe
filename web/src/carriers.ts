@@ -15,6 +15,9 @@ import { sharedClient } from './composition';
 import { useDa } from './state';
 
 const POLL_MS = 4_000;
+/// How long a failing poll's last-good in-flight view may keep gating the
+/// premove dispatcher before it is dropped as stale.
+const STALE_CARRIERS_MS = 15_000;
 
 /// One decoded action, resource ids resolved through the payload's access list.
 export type LaneAction =
@@ -214,7 +217,15 @@ export function LaneCarriersProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!lane) return;
     let stop = false;
+    let running = false;
+    let lastOk = 0;
     const tick = async () => {
+      // One poll at a time: getMempoolEntries is the heaviest call on the
+      // shared connection (the whole pool), and stacked copies of it grow an
+      // unbounded queue that starves every later request into the client's
+      // 60 s timeout.
+      if (running) return;
+      running = true;
       try {
         const client = await sharedClient();
         const r = await client.getMempoolEntries({ includeOrphanPool: false, filterTransactionPool: false });
@@ -228,9 +239,15 @@ export function LaneCarriersProvider({ children }: { children: ReactNode }) {
             decoded.push({ txid, actions: [{ kind: 'other', tag: -1 }] });
           }
         }
+        lastOk = Date.now();
         if (!stop) setCarriers(decoded);
       } catch {
-        /* keep last good */
+        // A stale in-flight view gates the premove dispatcher's parity guard
+        // shut forever; an empty one only risks a parity race the guest
+        // rejects at submit. Drop it once it ages out.
+        if (!stop && Date.now() - lastOk > STALE_CARRIERS_MS) setCarriers([]);
+      } finally {
+        running = false;
       }
     };
     tick();

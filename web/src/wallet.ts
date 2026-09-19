@@ -52,6 +52,19 @@ export interface Wallet {
   submitTx(client: RpcClient, bytes: Uint8Array): Promise<string>;
 }
 
+/// Cached tip DAA score for the coinbase-maturity filter. getBlockDagInfo is
+/// the most expensive call in the 2 s balance poll (whole seconds against a
+/// remote node) and maturity only needs coarse freshness — a 30 s stale tip
+/// can pass a coinbase at most 30 s early, which the node rejects at submit
+/// time anyway.
+let cachedDaaScore: { at: number; value: bigint } | null = null;
+const DAG_INFO_TTL_MS = 30_000;
+
+/// Coinbase maturity in DAA score: the local simnet/devnet L1 matures after
+/// 100, public networks after 1000. Spending below it is a hard rejection
+/// ("spends an immature UTXO"), so the filter must not be optimistic here.
+const COINBASE_MATURITY = NETWORK === 'simnet' || NETWORK === 'devnet' ? 100n : 1000n;
+
 function networkType(name: string): NetworkType {
   switch (name) {
     case 'mainnet':
@@ -81,10 +94,16 @@ export function loadKey(privkeyHex: string): Wallet {
     async l1Utxos(client: RpcClient): Promise<WalletUtxo[]> {
       // Spendable only: coinbase outputs need 100 daa-score maturity, and this
       // wallet class is typically a miner payout address with fresh rewards.
-      const { virtualDaaScore } = await client.getBlockDagInfo();
+      const now = Date.now();
+      let tip = cachedDaaScore && now - cachedDaaScore.at < DAG_INFO_TTL_MS ? cachedDaaScore.value : null;
+      if (tip === null) {
+        tip = BigInt((await client.getBlockDagInfo()).virtualDaaScore);
+        cachedDaaScore = { at: now, value: tip };
+      }
+      const virtualDaaScore = tip;
       const { entries } = await client.getUtxosByAddresses({ addresses: [address] });
       return entries
-        .filter((e) => !e.isCoinbase || BigInt(e.blockDaaScore) + 100n <= BigInt(virtualDaaScore))
+        .filter((e) => !e.isCoinbase || BigInt(e.blockDaaScore) + COINBASE_MATURITY <= BigInt(virtualDaaScore))
         .map((e) => ({
           txid_hex: e.outpoint.transactionId,
           index: e.outpoint.index,
