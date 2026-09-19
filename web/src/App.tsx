@@ -18,7 +18,7 @@ import { OpenGames } from './OpenGames';
 import { SettlementBanner } from './SettlementBanner';
 import { TransferForm } from './TransferForm';
 import { WithdrawForm } from './WithdrawForm';
-import { advanceActivity, myGamesCount, turnDispatchable, type ActivityWitness } from './match';
+import { advanceActivity, myGamesCount, turnDispatchable, turnInFlight, type ActivityWitness } from './match';
 import { useDa } from './state';
 
 /// Strictly monotonic activity-row id: `rows.length` duplicates once the
@@ -51,6 +51,7 @@ export default function App() {
   /// Unwitnessed rows (the T7 create/join calls) default to the my-games
   /// count witness: both entries land when a game of mine appears.
   const onActivity = (label: string, txid: string, witness?: ActivityWitness) => {
+    console.info('[action]', label, txid);
     const w = witness ?? { kind: 'myGames' as const, before: myGamesCount(da.games, myUserId) };
     setActivity((rows) => [{ id: nextActivityId++, label, txid, at: Date.now(), status: 'pending' as const, witness: w }, ...rows].slice(0, 50));
   };
@@ -73,9 +74,10 @@ export default function App() {
 
   /// One of my turn carriers for the selected game is still in flight: the
   /// board must not accept another click until it lands (the old board let a
-  /// second click double-submit into a guaranteed rejection).
-  const myTurnInFlight =
-    selectedGame !== null && activity.some((r) => r.status === 'pending' && r.witness?.kind === 'board' && r.witness.gameId === selectedGame);
+  /// second click double-submit into a guaranteed rejection). Rows past the
+  /// healthy window stop gating — their carrier landed with no L2 effect and
+  /// the game is still mine to move.
+  const myTurnInFlight = selectedGame !== null && turnInFlight(activity, selectedGame, Date.now());
 
   const onEnqueue = useCallback((gameId: string, cell: number) => {
     setQueue((q) => [...q, { id: nextQueueId++, gameId, cell }]);
@@ -107,7 +109,7 @@ export default function App() {
     if (!da.state?.lane_subnet) return;
     for (const [gameId, head] of heads) {
       const game = all.find((g) => g.id === gameId)!;
-      const mineInFlight = activity.some((r) => r.status === 'pending' && r.witness?.kind === 'board' && r.witness.gameId === gameId);
+      const mineInFlight = turnInFlight(activity, gameId, Date.now());
       const anyInFlight = inFlightTurns(laneCarriers, gameId).length > 0;
       if (!turnDispatchable(game, myUserId, mineInFlight, anyInFlight, head.cell)) continue;
       dispatching.current = true;

@@ -17,7 +17,10 @@ export function ActivityLog({ rows, now = Date.now() }: { rows: ActivityRow[]; n
           const stuck = rowStuck(r, now);
           return (
             <li key={r.id}>
-              {r.label} · {shortHex(r.txid)}{' '}
+              {r.label} ·{' '}
+              <button className="qchip" title={`${r.txid} — click to copy`} onClick={() => void navigator.clipboard?.writeText(r.txid)}>
+                {shortHex(r.txid)}
+              </button>{' '}
               <span
                 className={`chip ${chipClass(r.status, stuck)}`}
                 title={stuck ? 'submitted but never landed on L2 — the carrier was most likely rejected' : undefined}

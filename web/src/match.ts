@@ -141,6 +141,14 @@ export function rowStuck(row: ActivityRow, now: number): boolean {
   return row.status === 'pending' && now - row.at > STUCK_AFTER_MS;
 }
 
+/// Whether one of my submitted turns for `gameId` still holds the board shut:
+/// a pending turn row inside the healthy window. A row past it has had no L2
+/// effect (see `rowStuck`) and must stop gating — a rejected carrier would
+/// otherwise lock the board forever waiting for a landing that already failed.
+export function turnInFlight(rows: ActivityRow[], gameId: string, now: number): boolean {
+  return rows.some((r) => r.status === 'pending' && !rowStuck(r, now) && r.witness?.kind === 'board' && r.witness.gameId === gameId);
+}
+
 /// Whether a queued turn may be submitted right now: the game is live, it is
 /// my move on an empty cell, and nothing for this game is in flight — my own
 /// carrier would double-submit, and an opponent carrier sitting in the L1

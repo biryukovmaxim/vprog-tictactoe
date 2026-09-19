@@ -126,6 +126,9 @@ export async function connectClient(): Promise<RpcClient> {
 
 async function submitTx(client: RpcClient, bytes: Uint8Array): Promise<string> {
   const tx = new Transaction(txFromBorsh(bytes));
+  // The id is computed locally, so this line names the carrier even when the
+  // submit response never arrives (remote-node lost submits).
+  console.info('[submit]', tx.id);
   const { transactionId } = await client.submitTransaction({ transaction: tx, allowOrphan: false });
   return transactionId;
 }

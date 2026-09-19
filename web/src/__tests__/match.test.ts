@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { DaGame, GameStatus } from '../da';
-import { advanceActivity, isMyTurn, outcomeLine, rowStuck, STUCK_AFTER_MS, toMoveMark, type ActivityWitness } from '../match';
+import { advanceActivity, isMyTurn, outcomeLine, rowStuck, STUCK_AFTER_MS, toMoveMark, turnInFlight, type ActivityWitness } from '../match';
 import type { ActivityRow } from '../composition';
 
 const ME = 'aa'.repeat(32);
@@ -234,5 +234,25 @@ describe('rowStuck (pending past the healthy window)', () => {
 
   it('acknowledged rows never flag', () => {
     expect(rowStuck(row('on L2', undefined, 'st-1', 1_000), 1_000 + STUCK_AFTER_MS * 10)).toBe(false);
+  });
+});
+
+describe('turnInFlight (board gate over pending turn rows)', () => {
+  const gameId = '11'.repeat(32);
+  const turnRow = (at: number) => row('pending', { kind: 'board', gameId, board: Array<number>(9).fill(0) }, undefined, at);
+
+  it('gates while a fresh pending turn row for the game exists', () => {
+    expect(turnInFlight([turnRow(1_000)], gameId, 1_000 + 10_000)).toBe(true);
+  });
+
+  it('stops gating once the row outlives the healthy window — a rejected carrier must not lock the board forever', () => {
+    expect(turnInFlight([turnRow(1_000)], gameId, 1_000 + STUCK_AFTER_MS + 1)).toBe(false);
+  });
+
+  it('ignores other games, non-turn rows, and acknowledged turns', () => {
+    expect(turnInFlight([turnRow(0)], '22'.repeat(32), 0)).toBe(false);
+    expect(turnInFlight([row('pending', { kind: 'balance', before: 0n })], gameId, 0)).toBe(false);
+    expect(turnInFlight([row('on L2', { kind: 'board', gameId, board: Array<number>(9).fill(0) })], gameId, 0)).toBe(false);
+    expect(turnInFlight([], gameId, 0)).toBe(false);
   });
 });
