@@ -42,8 +42,9 @@ faucet, and the same one-time `ttflow` init. Differences that matter:
 - Wipe `ttd-data` when starting over: stale anchors kill restarts with "starting block no
   longer in chain".
 
-This path is configured but not yet exercised end to end; the verified flow is the simnet
-runbook above.
+Exercised end to end on tn10 (fresh covenant, full match, real CUDA proofs, claims) — see
+[`docs/demo/tn10-multi-server-setup.md`](docs/demo/tn10-multi-server-setup.md) for the
+multi-machine walkthrough; the simnet runbook above remains the quick local path.
 
 ## Dev
 

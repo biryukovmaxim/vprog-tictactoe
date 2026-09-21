@@ -28,6 +28,8 @@ runbook explains the flow; this file is the knob-by-knob reference.
 | `TT_BOOTSTRAP_TXID` | 32-byte hex anchor transaction ID | none |
 | `TT_START_FROM` | 32-byte hex starting block hash | none |
 | `TT_SEED_DEPTH` | Depth below sink for bridge catchup scan | `500` |
+| `TT_MIN_CONFIRMATIONS` | Confirmations floor below the sink; the bridge's adaptive reorg filter may still follow higher | unset (adaptive threshold alone) |
+| `TT_DISABLE_ADAPTIVE_FILTER` | Switch the bridge's adaptive reorg filter off; the follow threshold becomes exactly the confirmations floor | `0` (adaptive on) |
 | `TT_PROVE` | Enable prover and settler worker | `0` |
 | `TT_START_MODE` | Start mode (`fresh`, `resume`, `catchup`) | auto |
 | `TT_DA_BIND` | Bind address for the DA HTTP server | `127.0.0.1:9880` |

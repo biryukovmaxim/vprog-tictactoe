@@ -165,6 +165,9 @@ variant is `cargo run --release -p vprog-tictactoe-driver --example claim` with 
 `TT_WRPC_URL`/`TT_NETWORK`/`TT_COVENANT_ID` env plus `TTFLOW_PLAYER_A_KEY` and, for the exit
 feed, `TT_DA_URL` of any follower's DA.
 
+The full multi-machine walkthrough (L1 node, CUDA prover, app server + web), as last
+verified on tn10, is [tn10-multi-server-setup.md](tn10-multi-server-setup.md).
+
 ## Automated e2e
 
 The whole flow headlessly — in-process simnet, init, deposits, a full match, settlement,
