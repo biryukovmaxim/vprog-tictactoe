@@ -18,7 +18,7 @@ kaspa-addresses                 = { workspace = true }
 kaspa-consensus-core            = { workspace = true }
 kaspa-core                      = { workspace = true }
 kaspa-hashes                    = { workspace = true }
-kaspa-pow                       = { git = "https://github.com/kaspanet/rusty-kaspa", branch = "master" }
+kaspa-pow                       = { workspace = true }
 kaspa-rpc-core                  = { workspace = true }
 kaspa-txscript                  = { workspace = true }
 kaspa-wrpc-client               = { workspace = true }
@@ -35,9 +35,9 @@ vprogs-zk-backend-risc0-app-kit = { workspace = true }
 [dev-dependencies]
 axum                               = { workspace = true }
 borsh                              = { workspace = true }
-kaspa-grpc-client                  = { git = "https://github.com/kaspanet/rusty-kaspa", branch = "master" }
-kaspa-testing-integration          = { git = "https://github.com/kaspanet/rusty-kaspa", branch = "master" }
-kaspad                             = { git = "https://github.com/kaspanet/rusty-kaspa", branch = "master" }
+kaspa-grpc-client                  = { workspace = true }
+kaspa-testing-integration          = { workspace = true }
+kaspad                             = { workspace = true }
 reqwest                            = { version = "0.12", default-features = false, features = ["json"] }
 serde_json                         = { workspace = true }
 tempfile                           = "3"

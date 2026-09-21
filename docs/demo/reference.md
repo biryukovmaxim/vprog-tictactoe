@@ -92,4 +92,3 @@ DA API (all `GET`, JSON):
 | `17210`/`9890`/`9880` already in use | stale demo L1 / `ttd` from a previous run | kill them, wipe the data dir, restart fresh |
 | `ttflow` Init rejected | covenant already initialized (Init is genesis-gated) | check `GET /api/config` for `{"initialized": true}`; skip init |
 | `ttd` sits silent for a long stretch after compiling | debug builds sync very slowly | run with `--release` |
-| Settlement rejected with a seq-commit script failure | lane-tip seeding failed at the bridge's anchor (best-effort; all tips then diverge), or a node-side acceptance-data/RPC ordering change on busy-DAG shapes (untested) | grep the bridge log for `lane tip seeding failed`; see the runbook's "Current limits" |

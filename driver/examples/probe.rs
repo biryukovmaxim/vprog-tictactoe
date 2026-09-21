@@ -84,7 +84,9 @@ async fn main() {
                     resp.chain_block_accepted_transactions.len(),
                     resp.removed_chain_block_hashes.len(),
                 ),
-                Err(e) => println!("vcc v2 threshold {threshold:?}: FAILED in {:?}: {e}", t.elapsed()),
+                Err(e) => {
+                    println!("vcc v2 threshold {threshold:?}: FAILED in {:?}: {e}", t.elapsed())
+                }
             }
         }
     }

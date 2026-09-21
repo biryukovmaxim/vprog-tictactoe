@@ -11,7 +11,7 @@ use std::{sync::Arc, time::Duration};
 
 use kaspa_addresses::{Address, Prefix, Version};
 use kaspa_consensus_core::{
-    config::params::{ForkActivation, Params},
+    config::params::Params,
     hashing::sighash_type::SIG_HASH_ALL,
     mass::BlockMassLimits,
     network::{NetworkId, NetworkType},
@@ -81,8 +81,7 @@ async fn test_e2e_simnet_game_flow() {
             network_id,
             Some(|p| {
                 p.blockrate.coinbase_maturity = 1;
-                p.toccata_activation = ForkActivation::always();
-                p.prior_block_mass_limits = BlockMassLimits::with_shared_limit(2_000_000);
+                p.block_mass_limits = BlockMassLimits::with_shared_limit(2_000_000);
             }),
         )
         .await,
@@ -131,6 +130,7 @@ async fn test_e2e_simnet_game_flow() {
         start_from: None,
         seed_depth: 500,
         min_confirmations: None,
+        adaptive_filter_disabled: false,
         prove: true,
         start_mode: Some(StartMode::Fresh),
     };
@@ -413,6 +413,7 @@ async fn test_e2e_simnet_game_flow() {
         start_from: Some(deploy_anchor),
         seed_depth: 500,
         min_confirmations: None,
+        adaptive_filter_disabled: false,
         prove: false,
         start_mode: Some(StartMode::Catchup),
     };

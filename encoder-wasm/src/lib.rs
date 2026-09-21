@@ -588,7 +588,7 @@ mod tests {
     fn run_input(tx: &Transaction, utxos: &[UtxoEntry], idx: usize) -> Result<(), String> {
         let sig_cache = Cache::new(10_000);
         let reused = SigHashReusedValuesUnsync::new();
-        let flags = EngineFlags { covenants_enabled: true, ..Default::default() };
+        let flags = EngineFlags::default();
         let populated = PopulatedTransaction::new(tx, utxos.to_vec());
         let cov_ctx =
             CovenantsContext::from_tx(&populated).expect("covenant continuity must succeed");
