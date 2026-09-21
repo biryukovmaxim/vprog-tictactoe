@@ -28,7 +28,7 @@ fmt-check:
 check: fmt-check
     @if ls -d node driver >/dev/null 2>&1; then cargo clippy --tests -- -D warnings; fi
     @if [ -d guest ]; then \
-        cargo clippy --tests --manifest-path guest/Cargo.toml -- -D warnings; \
+        cargo clippy --tests --manifest-path guest/Cargo.toml -- -D warnings && \
         cd guest && cargo +risc0 check --target riscv32im-risc0-zkvm-elf; \
     fi
 
