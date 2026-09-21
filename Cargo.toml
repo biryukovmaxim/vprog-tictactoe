@@ -25,25 +25,26 @@ resolver = "3"
   kaspa-wrpc-client         = { git = "https://github.com/kaspanet/rusty-kaspa", rev = "eb0a856d4e1ef9d884c5997bc43408091f5a5632" }
   kaspad                    = { git = "https://github.com/kaspanet/rusty-kaspa", rev = "eb0a856d4e1ef9d884c5997bc43408091f5a5632" }
 
-  # vprogs stack. The settle-resume branch (write-worker shutdown drain, fatal
-  # lane seeding, and the settlement-resume journal) carries the bridge
-  # live-lane join fix, the reorg journal and revert hooks, app-kit,
+  # vprogs stack. The reorg-safety branch adds reorg-safe store restore and
+  # deferred dead lane proofs on top of settle-resume (write-worker shutdown
+  # drain, fatal lane seeding, settlement-resume journal); it carries the
+  # bridge live-lane join fix, the reorg journal and revert hooks, app-kit,
   # runtime-processor, indexer hooks, and the exit index.
-  vprogs-core-types                  = { git = "https://github.com/kaspanet/vprogs", branch = "settle-resume" }
-  vprogs-l1-types                    = { git = "https://github.com/kaspanet/vprogs", branch = "settle-resume" }
-  vprogs-l1-wallet                   = { git = "https://github.com/kaspanet/vprogs", branch = "settle-resume" }
-  vprogs-node-test-utils             = { git = "https://github.com/kaspanet/vprogs", branch = "settle-resume" }
-  vprogs-runner                      = { git = "https://github.com/kaspanet/vprogs", branch = "settle-resume" }
-  vprogs-scheduling-scheduler        = { git = "https://github.com/kaspanet/vprogs", branch = "settle-resume" }
-  vprogs-state-ptr-latest            = { git = "https://github.com/kaspanet/vprogs", branch = "settle-resume" }
-  vprogs-state-version               = { git = "https://github.com/kaspanet/vprogs", branch = "settle-resume" }
-  vprogs-storage-canonical-chain     = { git = "https://github.com/kaspanet/vprogs", branch = "settle-resume" }
-  vprogs-storage-rocksdb-store       = { git = "https://github.com/kaspanet/vprogs", branch = "settle-resume" }
-  vprogs-storage-types               = { git = "https://github.com/kaspanet/vprogs", branch = "settle-resume" }
-  vprogs-zk-abi                      = { git = "https://github.com/kaspanet/vprogs", branch = "settle-resume" }
-  vprogs-zk-backend-risc0-api        = { git = "https://github.com/kaspanet/vprogs", branch = "settle-resume" }
-  vprogs-zk-backend-risc0-app-kit    = { git = "https://github.com/kaspanet/vprogs", branch = "settle-resume" }
-  vprogs-zk-backend-risc0-test-suite = { git = "https://github.com/kaspanet/vprogs", branch = "settle-resume" }
+  vprogs-core-types                  = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
+  vprogs-l1-types                    = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
+  vprogs-l1-wallet                   = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
+  vprogs-node-test-utils             = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
+  vprogs-runner                      = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
+  vprogs-scheduling-scheduler        = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
+  vprogs-state-ptr-latest            = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
+  vprogs-state-version               = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
+  vprogs-storage-canonical-chain     = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
+  vprogs-storage-rocksdb-store       = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
+  vprogs-storage-types               = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
+  vprogs-zk-abi                      = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
+  vprogs-zk-backend-risc0-api        = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
+  vprogs-zk-backend-risc0-app-kit    = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
+  vprogs-zk-backend-risc0-test-suite = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
 
   # Shared host deps.
   axum       = "0.8"
@@ -63,12 +64,12 @@ resolver = "3"
 # vprogs deps at biryukovmaxim/vprogs; redirect them to the same kaspanet branch so
 # every vprogs crate in the graph resolves from a single source.
 [patch."https://github.com/biryukovmaxim/vprogs"]
-vprogs-core-codec                         = { git = "https://github.com/kaspanet/vprogs", branch = "settle-resume" }
-vprogs-core-hashing                       = { git = "https://github.com/kaspanet/vprogs", branch = "settle-resume" }
-vprogs-core-merkle-tree                   = { git = "https://github.com/kaspanet/vprogs", branch = "settle-resume" }
-vprogs-core-smt                           = { git = "https://github.com/kaspanet/vprogs", branch = "settle-resume" }
-vprogs-core-types                         = { git = "https://github.com/kaspanet/vprogs", branch = "settle-resume" }
-vprogs-l1-utils                           = { git = "https://github.com/kaspanet/vprogs", branch = "settle-resume" }
-vprogs-zk-abi                             = { git = "https://github.com/kaspanet/vprogs", branch = "settle-resume" }
-vprogs-zk-backend-risc0-api               = { git = "https://github.com/kaspanet/vprogs", branch = "settle-resume" }
-vprogs-zk-backend-risc0-runtime-processor = { git = "https://github.com/kaspanet/vprogs", branch = "settle-resume" }
+vprogs-core-codec                         = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
+vprogs-core-hashing                       = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
+vprogs-core-merkle-tree                   = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
+vprogs-core-smt                           = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
+vprogs-core-types                         = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
+vprogs-l1-utils                           = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
+vprogs-zk-abi                             = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
+vprogs-zk-backend-risc0-api               = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
+vprogs-zk-backend-risc0-runtime-processor = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }

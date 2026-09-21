@@ -177,11 +177,6 @@ withdraw, exit records, two sequential claims, and payouts (dev stub proofs):
 TT_E2E=1 RISC0_DEV_MODE=1 cargo test --release -p vprog-tictactoe-driver --test e2e_simnet -- --nocapture
 ```
 
-## Current limits
-
-- **A reorg past a bundle's proven block** panics the aggregate prover at the lane-proof fetch
-  instead of re-aggregating.
-
 ## Reference
 
 Run modes, environment variables, ports, HTTP endpoints, and failure-signature fixes:
