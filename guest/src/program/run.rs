@@ -113,8 +113,8 @@ pub fn run<'a, P: DepositPolicy<Lock<'a> = LockEnum<'a>>>(
 /// pending. Sig-pointer variants read the resource's lock, so an absent (or not-yet-born)
 /// target defers; the genesis and prev-tx witness variants carry their own authority and
 /// resolve immediately.
-fn resolve_pending<'a>(
-    pending: &mut alloc::vec::Vec<&'a (u8, SignerEnum)>,
+fn resolve_pending(
+    pending: &mut alloc::vec::Vec<&(u8, SignerEnum)>,
     auth: &mut AuthContext,
     ctx: &SignerResolveContext<'_>,
     resources: &[Resource<'_>],
