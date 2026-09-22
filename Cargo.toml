@@ -30,21 +30,21 @@ resolver = "3"
   # drain, fatal lane seeding, settlement-resume journal); it carries the
   # bridge live-lane join fix, the reorg journal and revert hooks, app-kit,
   # runtime-processor, indexer hooks, and the exit index.
-  vprogs-core-types                  = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
-  vprogs-l1-types                    = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
-  vprogs-l1-wallet                   = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
-  vprogs-node-test-utils             = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
-  vprogs-runner                      = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
-  vprogs-scheduling-scheduler        = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
-  vprogs-state-ptr-latest            = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
-  vprogs-state-version               = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
-  vprogs-storage-canonical-chain     = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
-  vprogs-storage-rocksdb-store       = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
-  vprogs-storage-types               = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
-  vprogs-zk-abi                      = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
-  vprogs-zk-backend-risc0-api        = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
-  vprogs-zk-backend-risc0-app-kit    = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
-  vprogs-zk-backend-risc0-test-suite = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
+  vprogs-core-types                  = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
+  vprogs-l1-types                    = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
+  vprogs-l1-wallet                   = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
+  vprogs-node-test-utils             = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
+  vprogs-runner                      = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
+  vprogs-scheduling-scheduler        = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
+  vprogs-state-ptr-latest            = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
+  vprogs-state-version               = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
+  vprogs-storage-canonical-chain     = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
+  vprogs-storage-rocksdb-store       = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
+  vprogs-storage-types               = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
+  vprogs-zk-abi                      = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
+  vprogs-zk-backend-risc0-api        = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
+  vprogs-zk-backend-risc0-app-kit    = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
+  vprogs-zk-backend-risc0-test-suite = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
 
   # Shared host deps.
   axum       = "0.8"
@@ -64,12 +64,12 @@ resolver = "3"
 # vprogs deps at biryukovmaxim/vprogs; redirect them to the same kaspanet branch so
 # every vprogs crate in the graph resolves from a single source.
 [patch."https://github.com/biryukovmaxim/vprogs"]
-vprogs-core-codec                         = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
-vprogs-core-hashing                       = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
-vprogs-core-merkle-tree                   = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
-vprogs-core-smt                           = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
-vprogs-core-types                         = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
-vprogs-l1-utils                           = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
-vprogs-zk-abi                             = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
-vprogs-zk-backend-risc0-api               = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
-vprogs-zk-backend-risc0-runtime-processor = { git = "https://github.com/kaspanet/vprogs", branch = "reorg-safety" }
+vprogs-core-codec                         = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
+vprogs-core-hashing                       = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
+vprogs-core-merkle-tree                   = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
+vprogs-core-smt                           = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
+vprogs-core-types                         = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
+vprogs-l1-utils                           = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
+vprogs-zk-abi                             = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
+vprogs-zk-backend-risc0-api               = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
+vprogs-zk-backend-risc0-runtime-processor = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
