@@ -8698,7 +8698,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-atomics"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "arc-swap",
  "crossbeam-queue",
@@ -8712,7 +8712,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-codec"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "thiserror 2.0.20",
  "zerocopy",
@@ -8721,7 +8721,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-hashing"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "blake3",
  "sha2",
@@ -8730,7 +8730,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-macros"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -8740,7 +8740,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-merkle-tree"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "vprogs-core-hashing",
 ]
@@ -8748,7 +8748,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-smt"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "tap",
  "vprogs-core-codec",
@@ -8760,7 +8760,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-types"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "borsh",
  "rkyv",
@@ -8771,7 +8771,7 @@ dependencies = [
 [[package]]
 name = "vprogs-l1-bridge"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "arc-swap",
  "crossbeam-queue",
@@ -8798,7 +8798,7 @@ dependencies = [
 [[package]]
 name = "vprogs-l1-types"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "borsh",
  "kaspa-consensus-core",
@@ -8813,7 +8813,7 @@ dependencies = [
 [[package]]
 name = "vprogs-l1-utils"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "blake3",
 ]
@@ -8821,7 +8821,7 @@ dependencies = [
 [[package]]
 name = "vprogs-l1-wallet"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "kaspa-addresses",
  "kaspa-consensus-core",
@@ -8839,7 +8839,7 @@ dependencies = [
 [[package]]
 name = "vprogs-node-framework"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "log",
  "tap",
@@ -8859,7 +8859,7 @@ dependencies = [
 [[package]]
 name = "vprogs-node-test-utils"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "kaspa-addresses",
  "kaspa-consensus-core",
@@ -8890,7 +8890,7 @@ dependencies = [
 [[package]]
 name = "vprogs-runner"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "borsh",
  "clap",
@@ -8932,7 +8932,7 @@ dependencies = [
 [[package]]
 name = "vprogs-scheduling-execution-workers"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "crossbeam-deque",
  "crossbeam-queue",
@@ -8947,7 +8947,7 @@ dependencies = [
 [[package]]
 name = "vprogs-scheduling-scheduler"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "arc-swap",
  "borsh",
@@ -8979,7 +8979,7 @@ dependencies = [
 [[package]]
 name = "vprogs-state-batch-metadata"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "borsh",
  "vprogs-core-types",
@@ -8989,7 +8989,7 @@ dependencies = [
 [[package]]
 name = "vprogs-state-metadata"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "borsh",
  "vprogs-core-smt",
@@ -9000,7 +9000,7 @@ dependencies = [
 [[package]]
 name = "vprogs-state-proof-receipt"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "borsh",
  "vprogs-storage-types",
@@ -9010,7 +9010,7 @@ dependencies = [
 [[package]]
 name = "vprogs-state-ptr-latest"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "borsh",
  "vprogs-core-types",
@@ -9020,7 +9020,7 @@ dependencies = [
 [[package]]
 name = "vprogs-state-ptr-rollback"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "borsh",
  "vprogs-core-types",
@@ -9031,7 +9031,7 @@ dependencies = [
 [[package]]
 name = "vprogs-state-settlement-journal"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "borsh",
  "kaspa-hashes",
@@ -9042,7 +9042,7 @@ dependencies = [
 [[package]]
 name = "vprogs-state-version"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "borsh",
  "tap",
@@ -9056,7 +9056,7 @@ dependencies = [
 [[package]]
 name = "vprogs-storage-canonical-chain"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "arc-swap",
  "vprogs-core-atomics",
@@ -9066,7 +9066,7 @@ dependencies = [
 [[package]]
 name = "vprogs-storage-manager"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "crossbeam-queue",
  "crossbeam-utils",
@@ -9077,7 +9077,7 @@ dependencies = [
 [[package]]
 name = "vprogs-storage-rocksdb-store"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "num_cpus",
  "rocksdb",
@@ -9092,7 +9092,7 @@ dependencies = [
 [[package]]
 name = "vprogs-storage-types"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "borsh",
  "vprogs-core-smt",
@@ -9103,7 +9103,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-abi"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "borsh",
  "kaspa-consensus-core",
@@ -9127,7 +9127,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-aggregate-prover"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "arc-swap",
  "kaspa-hashes",
@@ -9152,7 +9152,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-api"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "ark-bn254 0.6.0",
  "ark-groth16 0.6.0",
@@ -9178,7 +9178,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-app-kit"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "kaspa-addresses",
  "kaspa-consensus-core",
@@ -9201,7 +9201,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-covenant"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "ark-bn254 0.6.0",
  "ark-groth16 0.6.0",
@@ -9220,7 +9220,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-runtime-processor"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "k256",
  "risc0-zkvm",
@@ -9236,7 +9236,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-settler"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "kaspa-addresses",
  "kaspa-consensus-core",
@@ -9259,7 +9259,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-test-suite"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "kaspa-addresses",
  "kaspa-consensus-core",
@@ -9293,7 +9293,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-batch-prover"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "kaspa-hashes",
  "kaspa-rpc-core",
@@ -9313,7 +9313,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-transaction-prover"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "borsh",
  "tap",
@@ -9329,7 +9329,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-vm"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#58efe4a0a79f6e9fa931b517d0fde8d25828e707"
+source = "git+https://github.com/kaspanet/vprogs?branch=guest-hardening#291d4f29ba15aa6f8b2b024e17a005b072c07c0c"
 dependencies = [
  "faster-hex",
  "log",
