@@ -60,16 +60,5 @@ resolver = "3"
   tower      = { version = "0.5", features = ["util"] }
   tower-http = { version = "0.6", features = ["cors", "fs"] }
 
-# The runtime-processor (own Cargo.lock, not a vprogs workspace member) pins its
-# vprogs deps at biryukovmaxim/vprogs; redirect them to the same kaspanet branch so
-# every vprogs crate in the graph resolves from a single source.
-[patch."https://github.com/biryukovmaxim/vprogs"]
-vprogs-core-codec                         = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
-vprogs-core-hashing                       = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
-vprogs-core-merkle-tree                   = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
-vprogs-core-smt                           = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
-vprogs-core-types                         = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
-vprogs-l1-utils                           = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
-vprogs-zk-abi                             = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
-vprogs-zk-backend-risc0-api               = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
-vprogs-zk-backend-risc0-runtime-processor = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
+# Every vprogs crate in the graph (workspace members and the excluded guest
+# crate alike) pins the same kaspanet branch, so no fork patching is needed.
