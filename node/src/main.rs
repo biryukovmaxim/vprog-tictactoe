@@ -27,6 +27,7 @@ async fn main() {
     let client = connect_wrpc(&cfg.runner.wrpc_url, network_id).await;
     log::info!("connected to {}", cfg.runner.wrpc_url);
 
+    let exit_indexer = Arc::new(TicTacToeExitIndexer::default());
     let handles = start_runner(
         &cfg.runner,
         &client,
@@ -34,10 +35,14 @@ async fn main() {
         elfs.as_elfs(),
         delegate_entry_spk_hash,
         Some(Indexer(Arc::new(TicTacToeIndexer))),
-        Some(Arc::new(TicTacToeExitIndexer::default())),
+        Some(exit_indexer.clone()),
     )
     .await
     .unwrap_or_else(|e| panic!("runner start failed: {e}"));
+
+    // Warm restart: families settled before this process live only in the store, so re-seed
+    // the exit indexer's mirror from it before any of their claims arrive.
+    exit_indexer.reseed(handles.node.api().storage().store().as_ref());
 
     let da_state = vprog_tictactoe_node::da::DaState {
         store: handles.node.api().storage().store().clone(),

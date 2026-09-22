@@ -11,25 +11,42 @@ use std::{collections::HashMap, sync::RwLock};
 use kaspa_consensus_core::tx::TransactionOutpoint;
 use vprogs_l1_types::{PermissionSpend, SettlementInfo};
 use vprogs_runner::{ExitIndexer, ExitsForBundle};
-use vprogs_storage_types::WriteBatch;
+use vprogs_storage_types::{Store, WriteBatch};
 use vprogs_zk_backend_risc0_api::PermissionTreeView;
 
 use crate::da_store::{
-    EmptiedLeaf, ExitRecord, LatestSettlement, SpentMark, delete_exit_record, mark_leaf_spent,
-    put_exit_record, put_latest_settlement, unmark_leaf_spent,
+    EmptiedLeaf, ExitRecord, LatestSettlement, SpentMark, delete_exit_record, exit_roots,
+    get_exit_record, mark_leaf_spent, put_exit_record, put_latest_settlement, unmark_leaf_spent,
 };
 
 /// Secondary exit indexer recording exit bundles and advancing them on permission spends.
 ///
 /// Settlements and spends arrive in L1 order, so a cold start (or a catchup replay that
 /// re-pairs the settlement) always seeds the in-memory mirror below before a family's spends
-/// arrive. A warm restart mid-family, whose mirror cannot re-seed without the pairing, hides
-/// the affected family from serving instead of serving stale claimable args.
+/// arrive. A spend under a root with no stored record hides the family from serving instead
+/// of serving stale claimable args.
 #[derive(Default)]
 pub struct TicTacToeExitIndexer {
     /// Live family records keyed by their current raw root; a write-through mirror of the
     /// stored records (the trait hook receives no store handle to read them back).
     records: RwLock<HashMap<[u8; 32], ExitRecord>>,
+}
+
+impl TicTacToeExitIndexer {
+    /// Re-seeds the in-memory mirror from the stored records, so a family settled before this
+    /// process keeps advancing on its next spend instead of hiding.
+    ///
+    /// Safe to call while indexer hooks run: a mirror entry a concurrent hook wrote is never
+    /// clobbered, and a superseded key re-added from a store read that raced a commit is inert
+    /// (claims spend the continuation root).
+    pub fn reseed<S: Store>(&self, store: &S) {
+        let mut records = self.records.write().expect("poisoned lock");
+        for root in exit_roots(store) {
+            if let Some(rec) = get_exit_record(store, &root) {
+                records.entry(root).or_insert(rec);
+            }
+        }
+    }
 }
 
 /// Builds a fresh family record for `bundle` under `settlement`'s anchor, keyed by its raw padded
@@ -351,7 +368,7 @@ mod tests {
     }
 
     #[test]
-    fn test_unseeded_spend_hides_family_but_writes_mark() {
+    fn restart_reseeds_mirror_and_family_stays_served() {
         let dir = TempDir::new().unwrap();
         let store: RocksDbStore = RocksDbStore::open(dir.path());
         // A record restored from storage but a cold mirror: a restarted indexer.
@@ -372,6 +389,9 @@ mod tests {
         put_exit_record(&mut wb, &root, &rec);
         store.commit(wb);
 
+        // Warm restart: re-seed the mirror from the stored records before any spend arrives.
+        indexer.reseed(&store);
+
         let spend = PermissionSpend {
             covenant_id: [0x01; 32],
             old_root: root,
@@ -390,10 +410,48 @@ mod tests {
         indexer.on_permission_spent(&spend, &mut wb);
         store.commit(wb);
 
-        assert_eq!(get_exit_record(&store, &root), None, "unservable family must be hidden");
+        // The terminal spend drains the family in place instead of hiding it.
+        let drained = get_exit_record(&store, &root).expect("re-seeded family must stay served");
+        assert_eq!(drained.unclaimed, 0);
+        assert_eq!(
+            drained.emptied,
+            vec![EmptiedLeaf { leaf_index: 0, spend_txid: [0xee; 32], deduct: 50_000_000 }]
+        );
         assert_eq!(
             leaf_spent(&store, &root, 0),
             Some(SpentMark { spend_txid: [0xee; 32], deduct: 50_000_000, new_root: [0xdd; 32] })
+        );
+    }
+
+    #[test]
+    fn spend_under_absent_record_writes_mark_only() {
+        let dir = TempDir::new().unwrap();
+        let store: RocksDbStore = RocksDbStore::open(dir.path());
+        let indexer = TicTacToeExitIndexer::default();
+
+        // No record exists anywhere for this root; the spend mark must still be written.
+        let spend = PermissionSpend {
+            covenant_id: [0x01; 32],
+            old_root: [0xa1; 32],
+            old_unclaimed: 1,
+            depth: 1,
+            leaf_index: 0,
+            leaf_spk_bytes: vec![0x02; 32],
+            leaf_amount: 50_000_000,
+            deduct: 50_000_000,
+            new_root: [0xa2; 32],
+            spend_txid: [0xee; 32],
+            new_outpoint_index: 1,
+            chain_idx: 10,
+        };
+        let mut wb = store.write_batch();
+        indexer.on_permission_spent(&spend, &mut wb);
+        store.commit(wb);
+
+        assert_eq!(get_exit_record(&store, &[0xa1; 32]), None);
+        assert_eq!(
+            leaf_spent(&store, &[0xa1; 32], 0),
+            Some(SpentMark { spend_txid: [0xee; 32], deduct: 50_000_000, new_root: [0xa2; 32] })
         );
     }
 
