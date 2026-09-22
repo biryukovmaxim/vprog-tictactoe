@@ -60,5 +60,5 @@ resolver = "3"
   tower      = { version = "0.5", features = ["util"] }
   tower-http = { version = "0.6", features = ["cors", "fs"] }
 
-# Every vprogs crate in the graph (workspace members and the excluded guest
-# crate alike) pins the same kaspanet branch, so no fork patching is needed.
+  # Every vprogs crate in the graph (workspace members and the excluded guest
+  # crate alike) pins the same kaspanet branch, so no fork patching is needed.
