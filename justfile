@@ -76,6 +76,30 @@ web-vendor:
         --transform 's,^\.,package,' .
     echo "web/vendor: vprog-tictactoe-encoder-wasm-$v.tgz kaspa-wasm-$kv.tgz"
 
+# Build the guest zkVM ELF in Docker (risczero/risc0-guest-builder image), the
+# vprogs zk/backend build-guests.sh pattern: no local rzup toolchain needed.
+# Same flags as `just build-guest` — cargo runs from guest/ so its
+# .cargo/config.toml (which travels with the build context) supplies the
+# getrandom cfg; no RUSTFLAGS env, which would override it. Orphaned context
+# layers accumulate; run `docker builder prune` when disk fills.
+build-guest-docker:
+    #!/bin/sh
+    set -eu
+    printf '%s\n' \
+        'FROM risczero/risc0-guest-builder:r0.1.97.0 AS build' \
+        'WORKDIR /src' \
+        'COPY . .' \
+        'RUN --mount=type=cache,target=/root/.cargo/registry \' \
+        '    --mount=type=cache,target=/root/.cargo/git \' \
+        '    --mount=type=cache,id=tt-guest-target,target=/src/guest/target \' \
+        '    (cd guest && cargo +risc0 build --release --locked --target riscv32im-risc0-zkvm-elf) \' \
+        ' && mkdir -p /output \' \
+        ' && cp guest/target/riscv32im-risc0-zkvm-elf/release/vprog-tictactoe-guest /output/program.elf' \
+        'FROM scratch AS export' \
+        'COPY --from=build /output/ /' \
+      | docker build --output=guest/compiled -f - .
+    ls -la guest/compiled/program.elf
+
 # Find unused dependencies (nightly toolchain required).
 udeps:
     @if ls -d node driver >/dev/null 2>&1; then cargo +nightly udeps --all-targets; fi

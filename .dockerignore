@@ -1,0 +1,9 @@
+.git
+.claude
+.superpowers
+**/target
+guest/compiled
+web/node_modules
+web/dist
+web/vendor
+docs/internal
