@@ -16,9 +16,9 @@ Branches and pins:
 
 - vprog-tictactoe: `master` (everything verified here has merged; host crates resolve
   through the git pins in `Cargo.toml`).
-- vprogs: branch `settle-resume` — the same branch the `Cargo.toml` pins consume; the
-  clone is only needed for the backend ELFs, which are committed to the repo (no build
-  step).
+- vprogs: default clone — host crates and the guest resolve through the git pins in this
+  repo's `Cargo.toml`; the clone is only needed for the backend ELFs, which are committed
+  to the repo (no build step).
 - rusty-kaspa (L1 only): the commit this repo's `Cargo.toml` pins for rusty-kaspa
   (master has been mid-refactor; do not assume it builds).
 
@@ -44,19 +44,14 @@ is dropped by rusty peers).
 ## 2. Prover (CUDA machine)
 
 ```bash
-git clone -b settle-resume https://github.com/kaspanet/vprogs.git
+git clone https://github.com/kaspanet/vprogs.git
 git clone https://github.com/biryukovmaxim/vprog-tictactoe.git
 cd vprog-tictactoe
 ```
 
-The guest zkVM ELF is gitignored — build it once (needs the RISC Zero toolchain, see
-https://dev.risczero.com — the `just` shortcut is `just build-guest`):
-
-```bash
-cd guest && cargo +risc0 build --release --target riscv32im-risc0-zkvm-elf && \
-  mkdir -p compiled && \
-  cp target/riscv32im-risc0-zkvm-elf/release/vprog-tictactoe-guest compiled/program.elf && cd ..
-```
+The guest zkVM ELF is gitignored — build it once with `just build-guest-docker` (Docker,
+no local RISC Zero toolchain) or `just build-guest` (local rzup `risc0` toolchain, see
+https://dev.risczero.com); both write `guest/compiled/program.elf`.
 
 Build the CUDA node (`target-cuda` keeps it separate from CPU builds):
 

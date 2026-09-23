@@ -33,6 +33,8 @@ just check        # fmt-check + clippy --tests with warnings denied, workspace +
 just udeps        # unused-dependency scan (nightly)
 just test         # workspace + guest crate tests (L1 e2e is env-gated, off by default)
 just build-guest  # guest zkVM ELF, release, via the rzup `risc0` toolchain (`rzup install` once)
+just build-guest-docker  # same ELF via the risc0 builder Docker image, no local toolchain
+just web-vendor   # vendored wasm npm tarballs into web/vendor (gitignored build outputs; CI builds the same)
 ```
 
 Run the relevant recipes before every commit; `just check` (which includes `fmt-check`) and
@@ -59,9 +61,10 @@ Run the relevant recipes before every commit; `just check` (which includes `fmt-
 
 ## vprogs dependency
 
-- vprogs is consumed as an external dependency through Cargo manifests only (currently a local path
-  pin against the clone on branch `guest-batteries`; a git or crates.io pin replaces it later
-  without code changes here).
+- vprogs is consumed as an external dependency through Cargo manifests only: git pins on
+  branch `guest-hardening` — in the workspace `Cargo.toml` for host crates, declared directly
+  in `guest/Cargo.toml` for the guest crate (excluded from the workspace). A sibling clone is
+  needed only at runtime, for the backend ELFs committed to the vprogs repo.
 - The guest's battery is vprogs' runtime-processor **lib**: lock/signer traits *and variant impls*,
   auth, the unlocker types, the generic `ApplyContext` (parameterized by the app's auth context;
   the runtime sets the type parameter via the `ApplyContext` alias in `runtime.rs`), tx-input

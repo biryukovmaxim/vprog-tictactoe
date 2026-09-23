@@ -12,12 +12,12 @@ Both modes run the identical flow below; only step 2 differs.
 
 ## Prerequisites
 
-- A [vprogs](../../vprogs) clone next to this repo, with backend ELFs built
-  (`zk/backend/risc0/batch-processor/compiled/program.elf` and
-  `zk/backend/risc0/batch-aggregator/compiled/program.elf`)
+- A [vprogs](../../vprogs) clone next to this repo — needed only for the backend ELFs, which
+  are committed there (`zk/backend/risc0/batch-processor/compiled/program.elf` and
+  `zk/backend/risc0/batch-aggregator/compiled/program.elf`; no build step)
 - Rust (stable; nightly only for `just fmt` / `fmt-check` / `udeps`), `just`, `taplo`;
   Node/npm for the frontend
-- Guest ELF: `just build-guest`
+- Guest ELF: `just build-guest` (or `just build-guest-docker`, which needs only Docker)
 - CUDA mode only: CUDA 12.2 at `/usr/local/cuda-12.2` with `bin/` on `PATH` (nvcc), at
   build and run time
 

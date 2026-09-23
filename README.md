@@ -52,14 +52,17 @@ For serving the built bundle from a public URL (production deploys), see
 
 ## Dev
 
-Requires the [vprogs](../vprogs) clone next to this repo, a Rust stable toolchain (nightly
-only for `just fmt`), `just`, `taplo`, and a Node toolchain for the frontend.
+Builds need a Rust stable toolchain (nightly only for `just fmt`), `just`, `taplo`, and a
+Node toolchain for the frontend; vprogs and rusty-kaspa arrive through the git pins in
+`Cargo.toml`. A [vprogs](../vprogs) clone next to this repo is needed only to run the demo
+(its committed backend ELFs).
 
 ```bash
-just check        # clippy, warnings denied
-just test         # workspace + guest tests
-just build-guest  # compile guest ELF to guest/compiled/program.elf
-just web-vendor   # build the vendored wasm tarballs into web/vendor (once per fresh clone)
+just check               # clippy, warnings denied
+just test                # workspace + guest tests
+just build-guest         # compile guest ELF to guest/compiled/program.elf
+just build-guest-docker  # same ELF via Docker, no local RISC Zero toolchain
+just web-vendor          # build the vendored wasm tarballs into web/vendor (once per fresh clone)
 cd web && npm install && npm run test && npm run build
 ```
 

@@ -25,7 +25,7 @@ Every environment variable, port, endpoint, and failure signature: `docs/demo/re
 | Follow / serve data only | `0` | `1` | default | demo L1 |
 | Fast local proving (default) | `1` | `1` | default | demo L1 |
 | Real proofs (CUDA) | `1` | unset | `--features cuda`, `CARGO_TARGET_DIR=target-cuda`, `/usr/local/cuda-12.2/bin` on `PATH` | demo L1 |
-| testnet-10 | `1` | unset | cuda | `TT_WRPC_URL=<tn10>`; keys funded from a tn10 faucet; claims cannot mine there (known gap) |
+| testnet-10 | `1` | unset | cuda | `TT_WRPC_URL=<tn10>`; keys funded by mining (`wrpc-miner` example); claims pay fees through the mempool, same as simnet |
 
 Full env blocks per mode: runbook steps 2-3. All variables and defaults: `docs/demo/reference.md`.
 
