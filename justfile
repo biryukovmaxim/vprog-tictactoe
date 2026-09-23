@@ -55,11 +55,13 @@ web-vendor:
     tar -C encoder-wasm/pkg -czf "web/vendor/vprog-tictactoe-encoder-wasm-$v.tgz" \
         --transform 's,^\.,package,' .
     rev=$(sed -n 's/.*rusty-kaspa?rev=\([0-9a-f]\{40\}\).*/\1/p' Cargo.lock | head -1)
+    [ -n "$rev" ] || { echo "no rusty-kaspa rev found in Cargo.lock" >&2; exit 1; }
     dir="${XDG_CACHE_HOME:-$HOME/.cache}/vprog-tictactoe-web-vendor/rusty-kaspa-$rev"
     if [ ! -d "$dir/wasm" ]; then
         mkdir -p "$dir"
         git -C "$dir" init -q
-        git -C "$dir" remote add origin https://github.com/kaspanet/rusty-kaspa
+        git -C "$dir" remote add origin https://github.com/kaspanet/rusty-kaspa 2>/dev/null \
+            || git -C "$dir" remote set-url origin https://github.com/kaspanet/rusty-kaspa
         git -C "$dir" fetch -q --depth 1 origin "$rev"
         git -C "$dir" checkout -q FETCH_HEAD
     fi

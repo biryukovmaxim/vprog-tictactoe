@@ -91,6 +91,7 @@ jobs:
           path: files
       - name: Attach artifacts to release
         env:
+          GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         run: |
           # find, not a glob: web-dist nests (assets/…), ** needs globstar
