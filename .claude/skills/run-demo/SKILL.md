@@ -16,7 +16,7 @@ Every environment variable, port, endpoint, and failure signature: `docs/demo/re
 | demo L1 | `cargo run -p vprog-tictactoe-driver --example demo-l1` | in-process simnet: wRPC `ws://127.0.0.1:17210`, faucet + `/inject` on `:9890`; fresh chain every run |
 | `ttd` | `cargo run -p vprog-tictactoe-node` | node + prover + settler + DA on `:9880` |
 | `ttflow` | `cargo run -p vprog-tictactoe-driver` | one-time genesis-gated covenant `Init`, then one scripted match |
-| web | `cd web && npm run dev` | browser UI (optional; agents do not need it) |
+| web | `cd web && npm run dev` | browser UI (optional; agents do not need it; fresh clones need `just web-vendor` first) |
 
 ## Pick a mode
 
@@ -30,6 +30,11 @@ Every environment variable, port, endpoint, and failure signature: `docs/demo/re
 Full env blocks per mode: runbook steps 2-3. All variables and defaults: `docs/demo/reference.md`.
 
 ## Startup order (simnet)
+
+One-time per clone (runbook prerequisites): backend ELFs from a vprogs clone at the
+branch pinned in `Cargo.toml` (`TT_BATCH_ELF`/`TT_AGGREGATOR_ELF`), and
+`guest/compiled/program.elf` via `just build-guest` or `just build-guest-docker`
+(`TT_PROGRAM_ELF` default). Then:
 
 1. Kill stale processes and wipe node state: nothing may listen on `17210`/`9890`/`9880`
    (a previous run's demo L1 or `ttd`), then `rm -rf ttd-data` (or the `TT_DATA_DIR` in

@@ -52,12 +52,14 @@ runbook explains the flow; this file is the knob-by-knob reference.
 | `TTFLOW_PLAYER_A_KEY` | Fixed player-A key (32-byte hex) so the claim example can reuse the run's exit-leaf owner | random |
 | `TTFLOW_STEP_DELAY_MS` | Delay between scenario steps in milliseconds | `2000` |
 | `TTFLOW_TURN_TTL` | Turn TTL in DAA-score units | `10000` |
+| `TT_DA_URL` | DA base URL for the exit feed (used by the `claim` example) | `http://127.0.0.1:9880` |
 
 ## Demo L1 and web
 
 | Variable | Description | Default |
 |---|---|---|
 | `TT_DEMO_L1_INTERVAL_MS` | Demo L1 mining interval | `1000` |
+| `TT_E2E` | Gate for the `e2e_simnet` integration test (`1` enables; also needs the guest ELF) | unset (skipped) |
 | `VITE_WRPC_URL` | L1 wRPC URL for the in-page wallet | `ws://127.0.0.1:17210` |
 | `VITE_NETWORK` | Network for the in-page wallet (`simnet`, `testnet-10`, ...) | `simnet` |
 

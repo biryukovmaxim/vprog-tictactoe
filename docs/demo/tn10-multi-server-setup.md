@@ -16,9 +16,11 @@ Branches and pins:
 
 - vprog-tictactoe: `master` (everything verified here has merged; host crates resolve
   through the git pins in `Cargo.toml`).
-- vprogs: default clone — host crates and the guest resolve through the git pins in this
-  repo's `Cargo.toml`; the clone is only needed for the backend ELFs, which are committed
-  to the repo (no build step).
+- vprogs: clone, then check out **the branch pinned in this repo's `Cargo.toml`**
+  (currently `fix/g2-access-read-enforcement`) — host crates and the guest resolve
+  through those git pins, and the clone is only needed for the backend ELFs, which are
+  committed to the repo (no build step). ELFs from any other rev (including `master`)
+  mismatch the pinned host crates.
 - rusty-kaspa (L1 only): the commit this repo's `Cargo.toml` pins for rusty-kaspa
   (master has been mid-refactor; do not assume it builds).
 
@@ -45,13 +47,16 @@ is dropped by rusty peers).
 
 ```bash
 git clone https://github.com/kaspanet/vprogs.git
+git -C vprogs checkout fix/g2-access-read-enforcement   # the branch pinned in Cargo.toml
 git clone https://github.com/biryukovmaxim/vprog-tictactoe.git
 cd vprog-tictactoe
 ```
 
 The guest zkVM ELF is gitignored — build it once with `just build-guest-docker` (Docker,
 no local RISC Zero toolchain) or `just build-guest` (local rzup `risc0` toolchain, see
-https://dev.risczero.com); both write `guest/compiled/program.elf`.
+https://dev.risczero.com); both write `guest/compiled/program.elf`. The CI `artifacts`
+workflow ships the same file (`program-elf` artifact) if you would rather fetch than
+build.
 
 Build the CUDA node (`target-cuda` keeps it separate from CPU builds):
 
@@ -135,7 +140,9 @@ mkdir -p $HOME/tt-data && nohup env \
 curl -s http://127.0.0.1:9880/api/state    # readiness: covenant id present
 ```
 
-Frontend (proxies `/api` to the local DA on `:9880`):
+Frontend (proxies `/api` to the local DA on `:9880`; fresh clones need the wasm vendor
+tarballs first — `just web-vendor`, or unpack the CI `wasm-vendor` artifact into
+`web/vendor/`):
 
 ```bash
 cd web && npm install && npm run dev -- --host 0.0.0.0   # http://<app-server>:5173

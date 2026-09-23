@@ -61,10 +61,11 @@ Run the relevant recipes before every commit; `just check` (which includes `fmt-
 
 ## vprogs dependency
 
-- vprogs is consumed as an external dependency through Cargo manifests only: git pins on
-  branch `restore-stale-read` — in the workspace `Cargo.toml` for host crates, declared directly
+- vprogs is consumed as an external dependency through Cargo manifests only: git pins on the
+  PR-stack head branch named in the workspace `Cargo.toml` (host crates) and declared directly
   in `guest/Cargo.toml` for the guest crate (excluded from the workspace). A sibling clone is
-  needed only at runtime, for the backend ELFs committed to the vprogs repo.
+  needed only at runtime, for the backend ELFs committed to the vprogs repo — checked out at
+  that same pinned branch, since the ELFs' image IDs are rev-matched to the pins.
 - The guest's battery is vprogs' runtime-processor **lib**: lock/signer traits *and variant impls*,
   auth, the unlocker types, the generic `ApplyContext` (parameterized by the app's auth context;
   the runtime sets the type parameter via the `ApplyContext` alias in `runtime.rs`), tx-input

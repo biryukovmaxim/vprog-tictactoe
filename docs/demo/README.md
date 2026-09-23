@@ -12,14 +12,38 @@ Both modes run the identical flow below; only step 2 differs.
 
 ## Prerequisites
 
-- A [vprogs](../../vprogs) clone next to this repo — needed only for the backend ELFs, which
-  are committed there (`zk/backend/risc0/batch-processor/compiled/program.elf` and
-  `zk/backend/risc0/batch-aggregator/compiled/program.elf`; no build step)
+Toolchain:
+
 - Rust (stable; nightly only for `just fmt` / `fmt-check` / `udeps`), `just`, `taplo`;
   Node/npm for the frontend
-- Guest ELF: `just build-guest` (or `just build-guest-docker`, which needs only Docker)
 - CUDA mode only: CUDA 12.2 at `/usr/local/cuda-12.2` with `bin/` on `PATH` (nvcc), at
   build and run time
+
+Three artifacts are build outputs, not committed files. Build each locally, or fetch it
+from a CI `artifacts` run (Actions tab → `artifacts` → *Run workflow* / past runs; the
+fetch commands are in [ops/deploy-web.md](../ops/deploy-web.md)):
+
+| Artifact | Local build | CI artifact |
+|---|---|---|
+| guest ELF → `guest/compiled/program.elf` | `just build-guest` (rzup `risc0` toolchain) or `just build-guest-docker` (Docker only) | `program-elf` |
+| wasm vendor tarballs → `web/vendor/*.tgz` | `just web-vendor` (wasm-pack + the `wasm32-unknown-unknown` rustup target) | `wasm-vendor` |
+| backend ELFs (batch processor + aggregator) | none — committed to vprogs | — |
+
+**Backend ELFs must come from the pinned vprogs rev.** Host crates resolve through the
+git pins in `Cargo.toml` (currently branch `fix/g2-access-read-enforcement`; the branch
+name in every `vprogs-*` pin line is the one to use). The guest wire format changes
+across vprogs branches, so ELFs from a checkout at any other rev — including `master` —
+silently mismatch the pinned host. Clone vprogs next to this repo at the pinned branch:
+
+```bash
+git clone https://github.com/kaspanet/vprogs ../vprogs
+git -C ../vprogs checkout fix/g2-access-read-enforcement
+```
+
+The paths the runbook uses are then `../vprogs/zk/backend/risc0/batch-processor/compiled/program.elf`
+and `../vprogs/zk/backend/risc0/batch-aggregator/compiled/program.elf`. (After any cargo
+build, the same rev is also checked out under `~/.cargo/git/checkouts/vprogs-*/` —
+pointing the env vars there works too and skips the clone.)
 
 ## Running
 
@@ -112,6 +136,10 @@ cargo run -p vprog-tictactoe-driver
 ```
 
 ### 4. Web frontend
+
+Fresh clones need the vendored wasm tarballs first (`just web-vendor` from the repo
+root, or unpack the CI `wasm-vendor` artifact into `web/vendor/`) — `npm install`
+consumes them as `file:` dependencies and fails without them. Then:
 
 ```bash
 cd web

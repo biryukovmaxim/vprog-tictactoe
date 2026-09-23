@@ -20,15 +20,24 @@ is reused from the vprogs framework and the Kaspa stack.
 The full runbook with funding, live limits, and troubleshooting is
 [`docs/demo/README.md`](docs/demo/README.md). Short version:
 
+0. **One-time setup** — three build outputs, each built locally or fetched from a CI
+   `artifacts` run (see the runbook's prerequisites for the full story):
+   - backend ELFs: a [vprogs](../vprogs) clone next to this repo, **checked out at the
+     vprogs branch pinned in `Cargo.toml`** (`fix/g2-access-read-enforcement`); the ELFs
+     are committed there, and any other rev mismatches the pinned host crates
+   - guest ELF: `just build-guest-docker` (Docker; or `just build-guest` with the rzup
+     `risc0` toolchain) → `guest/compiled/program.elf`
+   - web vendor tarballs: `just web-vendor` (wasm-pack), required before the first
+     `npm install` in `web/`
 1. **Demo L1** — `cargo run -p vprog-tictactoe-driver --example demo-l1`: in-process simnet,
    wRPC on `ws://127.0.0.1:17210`, faucet on `http://127.0.0.1:9890`.
 2. **Node + DA** — run `ttd` (`cargo run -p vprog-tictactoe-node`) with `TT_PROVE=1
    RISC0_DEV_MODE=1`, the backend ELFs, and a funded operator key; DA on `127.0.0.1:9880`.
 3. **Init** — run `ttflow` (`cargo run -p vprog-tictactoe-driver`) once for the
    genesis-gated config `Init` (it then plays a scripted match).
-4. **Web** — `cd web && npm install && npm run dev` (`just web-vendor` builds the vendored
-   wasm tarballs first, fresh clones); paste a 32-byte hex key, fund it from the faucet,
-   create/join a game, play, transfer, withdraw, and claim settled exits.
+4. **Web** — `cd web && npm install && npm run dev`; paste a 32-byte hex key, fund it
+   from the faucet, create/join a game, play, transfer, withdraw, and claim settled
+   exits.
 
 ### Testnet-10
 
@@ -54,8 +63,12 @@ For serving the built bundle from a public URL (production deploys), see
 
 Builds need a Rust stable toolchain (nightly only for `just fmt`), `just`, `taplo`, and a
 Node toolchain for the frontend; vprogs and rusty-kaspa arrive through the git pins in
-`Cargo.toml`. A [vprogs](../vprogs) clone next to this repo is needed only to run the demo
-(its committed backend ELFs).
+`Cargo.toml`. `just web-vendor` additionally needs `wasm-pack` and the
+`wasm32-unknown-unknown` rustup target. A [vprogs](../vprogs) clone next to this repo is
+needed only to run the demo (its committed backend ELFs, at the pinned branch — see step
+0). CI builds the same three artifacts in the `artifacts` workflow (guest ELF, wasm
+tarballs, web bundle; tags attach them to a release) — the fetch-and-deploy path is
+[`docs/ops/deploy-web.md`](docs/ops/deploy-web.md).
 
 ```bash
 just check               # clippy, warnings denied
