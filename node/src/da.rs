@@ -581,7 +581,7 @@ mod tests {
         };
 
         // Seed canonical chain with version 1.
-        let mut manager = store.canonical_chain_manager::<u64>();
+        let mut manager = store.canonical_chain_manager::<u64>(0);
         manager.append(1u64);
 
         let creator_id = ResourceId::from([0x10; 32]);

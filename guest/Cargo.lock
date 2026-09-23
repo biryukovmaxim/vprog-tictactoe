@@ -1879,7 +1879,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-codec"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=restore-stale-read#63549226653ca81229f51b3f58a40bc601e78474"
+source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Fg2-access-read-enforcement#ea7b823eb47e4bec001dfd6c84fcef89770ccea1"
 dependencies = [
  "thiserror",
  "zerocopy",
@@ -1888,7 +1888,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-hashing"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=restore-stale-read#63549226653ca81229f51b3f58a40bc601e78474"
+source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Fg2-access-read-enforcement#ea7b823eb47e4bec001dfd6c84fcef89770ccea1"
 dependencies = [
  "blake3",
  "sha2",
@@ -1897,7 +1897,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-merkle-tree"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=restore-stale-read#63549226653ca81229f51b3f58a40bc601e78474"
+source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Fg2-access-read-enforcement#ea7b823eb47e4bec001dfd6c84fcef89770ccea1"
 dependencies = [
  "vprogs-core-hashing",
 ]
@@ -1905,7 +1905,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-smt"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=restore-stale-read#63549226653ca81229f51b3f58a40bc601e78474"
+source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Fg2-access-read-enforcement#ea7b823eb47e4bec001dfd6c84fcef89770ccea1"
 dependencies = [
  "tap",
  "vprogs-core-codec",
@@ -1917,7 +1917,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-types"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=restore-stale-read#63549226653ca81229f51b3f58a40bc601e78474"
+source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Fg2-access-read-enforcement#ea7b823eb47e4bec001dfd6c84fcef89770ccea1"
 dependencies = [
  "borsh",
  "rkyv",
@@ -1928,7 +1928,7 @@ dependencies = [
 [[package]]
 name = "vprogs-l1-utils"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=restore-stale-read#63549226653ca81229f51b3f58a40bc601e78474"
+source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Fg2-access-read-enforcement#ea7b823eb47e4bec001dfd6c84fcef89770ccea1"
 dependencies = [
  "blake3",
 ]
@@ -1936,7 +1936,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-abi"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=restore-stale-read#63549226653ca81229f51b3f58a40bc601e78474"
+source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Fg2-access-read-enforcement#ea7b823eb47e4bec001dfd6c84fcef89770ccea1"
 dependencies = [
  "kaspa-hashes",
  "kaspa-seq-commit",
@@ -1954,7 +1954,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-api"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=restore-stale-read#63549226653ca81229f51b3f58a40bc601e78474"
+source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Fg2-access-read-enforcement#ea7b823eb47e4bec001dfd6c84fcef89770ccea1"
 dependencies = [
  "blake2b_simd",
  "log",
@@ -1968,7 +1968,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-runtime-processor"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=restore-stale-read#63549226653ca81229f51b3f58a40bc601e78474"
+source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Fg2-access-read-enforcement#ea7b823eb47e4bec001dfd6c84fcef89770ccea1"
 dependencies = [
  "k256",
  "risc0-zkvm",
