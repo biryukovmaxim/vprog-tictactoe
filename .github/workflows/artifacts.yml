@@ -1,0 +1,98 @@
+name: artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      wrpc-url:
+        description: wRPC endpoint baked into the web build (VITE_WRPC_URL)
+        required: false
+        default: ws://127.0.0.1:17210
+      network:
+        description: kaspa network for the web build (VITE_NETWORK)
+        required: false
+        default: tn10
+  push:
+    tags: ["v*"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  guest-elf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - name: Build guest ELF
+        run: just build-guest-docker
+      - uses: actions/upload-artifact@v4
+        with:
+          name: program-elf
+          path: guest/compiled/program.elf
+          if-no-files-found: error
+
+  wasm-vendor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just,wasm-pack
+      - uses: Swatinem/rust-cache@v2
+      - name: Build vendor tarballs
+        run: just web-vendor
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wasm-vendor
+          path: web/vendor/*.tgz
+          if-no-files-found: error
+
+  web-dist:
+    needs: wasm-vendor
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: wasm-vendor
+          path: web/vendor
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - name: Build web bundle
+        working-directory: web
+        env:
+          # bracket syntax: input names carry a hyphen, dot access parses as subtraction
+          VITE_WRPC_URL: ${{ inputs['wrpc-url'] || 'ws://127.0.0.1:17210' }}
+          VITE_NETWORK: ${{ inputs['network'] || 'tn10' }}
+        run: |
+          npm ci
+          npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [guest-elf, wasm-vendor, web-dist]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: files
+      - name: Attach artifacts to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # find, not a glob: web-dist nests (assets/…), ** needs globstar
+          gh release create "$GITHUB_REF_NAME" $(find files -type f) \
+            --generate-notes --title "$GITHUB_REF_NAME"
