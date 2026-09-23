@@ -40,6 +40,42 @@ build-guest:
         cp target/riscv32im-risc0-zkvm-elf/release/vprog-tictactoe-guest compiled/program.elf && \
         ls -la compiled/program.elf
 
+# Build the two vendored wasm npm tarballs into web/vendor (gitignored build
+# outputs; CI builds the same): the encoder from this repo's encoder-wasm
+# crate, and kaspa-wasm from rusty-kaspa at the rev pinned in Cargo.lock.
+# Requires wasm-pack and the wasm32-unknown-unknown rustup target. The rusty
+# checkout lives in the user cache dir, outside the repo tree, so source
+# sweeps over the repo (format checks and friends) never see it.
+web-vendor:
+    #!/bin/sh
+    set -eu
+    mkdir -p web/vendor
+    wasm-pack build encoder-wasm --release --target web
+    v=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' encoder-wasm/pkg/package.json | head -1)
+    tar -C encoder-wasm/pkg -czf "web/vendor/vprog-tictactoe-encoder-wasm-$v.tgz" \
+        --transform 's,^\.,package,' .
+    rev=$(sed -n 's/.*rusty-kaspa?rev=\([0-9a-f]\{40\}\).*/\1/p' Cargo.lock | head -1)
+    dir="${XDG_CACHE_HOME:-$HOME/.cache}/vprog-tictactoe-web-vendor/rusty-kaspa-$rev"
+    if [ ! -d "$dir/wasm" ]; then
+        mkdir -p "$dir"
+        git -C "$dir" init -q
+        git -C "$dir" remote add origin https://github.com/kaspanet/rusty-kaspa
+        git -C "$dir" fetch -q --depth 1 origin "$rev"
+        git -C "$dir" checkout -q FETCH_HEAD
+    fi
+    wasm-pack build "$dir/wasm" --release --target web --features wasm32-core,wasm32-rpc
+    # The pinned rev names the wasm lib kaspa_wasm, but the app and its tests
+    # resolve the package artifacts as kaspa.js / kaspa_bg.wasm (the naming
+    # upstream ships on npm), so restore those names after the build.
+    for f in "$dir/wasm/pkg"/kaspa_wasm*; do
+        mv "$f" "${f%kaspa_wasm*}kaspa${f#*kaspa_wasm}"
+    done
+    sed -i 's/kaspa_wasm/kaspa/g' "$dir/wasm/pkg/kaspa.js" "$dir/wasm/pkg/package.json"
+    kv=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$dir/wasm/pkg/package.json" | head -1)
+    tar -C "$dir/wasm/pkg" -czf "web/vendor/kaspa-wasm-$kv.tgz" \
+        --transform 's,^\.,package,' .
+    echo "web/vendor: vprog-tictactoe-encoder-wasm-$v.tgz kaspa-wasm-$kv.tgz"
+
 # Find unused dependencies (nightly toolchain required).
 udeps:
     @if ls -d node driver >/dev/null 2>&1; then cargo +nightly udeps --all-targets; fi

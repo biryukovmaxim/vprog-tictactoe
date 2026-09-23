@@ -11,6 +11,10 @@ docs/internal/
 web/node_modules/
 web/dist/
 web/tsconfig.tsbuildinfo
+web/vendor/*.tgz
+
+# Tooling scratch
+.superpowers/
 
 # Tooling artifacts
 /.ctx

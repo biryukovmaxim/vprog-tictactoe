@@ -26,8 +26,9 @@ The full runbook with funding, live limits, and troubleshooting is
    RISC0_DEV_MODE=1`, the backend ELFs, and a funded operator key; DA on `127.0.0.1:9880`.
 3. **Init** — run `ttflow` (`cargo run -p vprog-tictactoe-driver`) once for the
    genesis-gated config `Init` (it then plays a scripted match).
-4. **Web** — `cd web && npm install && npm run dev`; paste a 32-byte hex key, fund it from
-   the faucet, create/join a game, play, transfer, withdraw, and claim settled exits.
+4. **Web** — `cd web && npm install && npm run dev` (`just web-vendor` builds the vendored
+   wasm tarballs first, fresh clones); paste a 32-byte hex key, fund it from the faucet,
+   create/join a game, play, transfer, withdraw, and claim settled exits.
 
 ### Testnet-10
 
@@ -55,7 +56,8 @@ only for `just fmt`), `just`, `taplo`, and a Node toolchain for the frontend.
 just check        # clippy, warnings denied
 just test         # workspace + guest tests
 just build-guest  # compile guest ELF to guest/compiled/program.elf
-cd web && npm run test && npm run build
+just web-vendor   # build the vendored wasm tarballs into web/vendor (once per fresh clone)
+cd web && npm install && npm run test && npm run build
 ```
 
 Environment variables, run modes, ports, and failure signatures: see the
