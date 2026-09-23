@@ -25,26 +25,28 @@ resolver = "3"
   kaspa-wrpc-client         = { git = "https://github.com/kaspanet/rusty-kaspa", rev = "eb0a856d4e1ef9d884c5997bc43408091f5a5632" }
   kaspad                    = { git = "https://github.com/kaspanet/rusty-kaspa", rev = "eb0a856d4e1ef9d884c5997bc43408091f5a5632" }
 
-  # vprogs stack. The reorg-safety branch adds reorg-safe store restore and
-  # deferred dead lane proofs on top of settle-resume (write-worker shutdown
-  # drain, fatal lane seeding, settlement-resume journal); it carries the
+  # vprogs stack, pinned to the PR-stack head (restore-stale-read): reorg-safe
+  # store restore and deferred dead lane proofs on top of settle-resume (write-
+  # worker shutdown drain, fatal lane seeding, settlement-resume journal); the
   # bridge live-lane join fix, the reorg journal and revert hooks, app-kit,
-  # runtime-processor, indexer hooks, and the exit index.
-  vprogs-core-types                  = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
-  vprogs-l1-types                    = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
-  vprogs-l1-wallet                   = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
-  vprogs-node-test-utils             = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
-  vprogs-runner                      = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
-  vprogs-scheduling-scheduler        = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
-  vprogs-state-ptr-latest            = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
-  vprogs-state-version               = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
-  vprogs-storage-canonical-chain     = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
-  vprogs-storage-rocksdb-store       = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
-  vprogs-storage-types               = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
-  vprogs-zk-abi                      = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
-  vprogs-zk-backend-risc0-api        = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
-  vprogs-zk-backend-risc0-app-kit    = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
-  vprogs-zk-backend-risc0-test-suite = { git = "https://github.com/kaspanet/vprogs", branch = "guest-hardening" }
+  # runtime-processor, indexer hooks, and the exit index; the pp-finalization
+  # window, canonical reads below the restore base, and the restored read-only
+  # state fix.
+  vprogs-core-types                  = { git = "https://github.com/kaspanet/vprogs", branch = "restore-stale-read" }
+  vprogs-l1-types                    = { git = "https://github.com/kaspanet/vprogs", branch = "restore-stale-read" }
+  vprogs-l1-wallet                   = { git = "https://github.com/kaspanet/vprogs", branch = "restore-stale-read" }
+  vprogs-node-test-utils             = { git = "https://github.com/kaspanet/vprogs", branch = "restore-stale-read" }
+  vprogs-runner                      = { git = "https://github.com/kaspanet/vprogs", branch = "restore-stale-read" }
+  vprogs-scheduling-scheduler        = { git = "https://github.com/kaspanet/vprogs", branch = "restore-stale-read" }
+  vprogs-state-ptr-latest            = { git = "https://github.com/kaspanet/vprogs", branch = "restore-stale-read" }
+  vprogs-state-version               = { git = "https://github.com/kaspanet/vprogs", branch = "restore-stale-read" }
+  vprogs-storage-canonical-chain     = { git = "https://github.com/kaspanet/vprogs", branch = "restore-stale-read" }
+  vprogs-storage-rocksdb-store       = { git = "https://github.com/kaspanet/vprogs", branch = "restore-stale-read" }
+  vprogs-storage-types               = { git = "https://github.com/kaspanet/vprogs", branch = "restore-stale-read" }
+  vprogs-zk-abi                      = { git = "https://github.com/kaspanet/vprogs", branch = "restore-stale-read" }
+  vprogs-zk-backend-risc0-api        = { git = "https://github.com/kaspanet/vprogs", branch = "restore-stale-read" }
+  vprogs-zk-backend-risc0-app-kit    = { git = "https://github.com/kaspanet/vprogs", branch = "restore-stale-read" }
+  vprogs-zk-backend-risc0-test-suite = { git = "https://github.com/kaspanet/vprogs", branch = "restore-stale-read" }
 
   # Shared host deps.
   axum       = "0.8"

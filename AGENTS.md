@@ -62,7 +62,7 @@ Run the relevant recipes before every commit; `just check` (which includes `fmt-
 ## vprogs dependency
 
 - vprogs is consumed as an external dependency through Cargo manifests only: git pins on
-  branch `guest-hardening` — in the workspace `Cargo.toml` for host crates, declared directly
+  branch `restore-stale-read` — in the workspace `Cargo.toml` for host crates, declared directly
   in `guest/Cargo.toml` for the guest crate (excluded from the workspace). A sibling clone is
   needed only at runtime, for the backend ELFs committed to the vprogs repo.
 - The guest's battery is vprogs' runtime-processor **lib**: lock/signer traits *and variant impls*,
