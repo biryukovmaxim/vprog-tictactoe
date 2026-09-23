@@ -47,6 +47,9 @@ Exercised end to end on tn10 (fresh covenant, full match, real CUDA proofs, clai
 [`docs/demo/tn10-multi-server-setup.md`](docs/demo/tn10-multi-server-setup.md) for the
 multi-machine walkthrough; the simnet runbook above remains the quick local path.
 
+For serving the built bundle from a public URL (production deploys), see
+[`docs/ops/deploy-web.md`](docs/ops/deploy-web.md).
+
 ## Dev
 
 Requires the [vprogs](../vprogs) clone next to this repo, a Rust stable toolchain (nightly
