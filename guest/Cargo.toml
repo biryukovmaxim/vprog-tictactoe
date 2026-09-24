@@ -22,12 +22,12 @@ zerocopy    = { version = "0.8", default-features = false, features = ["derive"]
 # workspace, so workspace inheritance is unavailable here. guest-hardening
 # carries runtime-processor alongside the rest of the stack.
 # Never vendored: only manifests reference vprogs.
-vprogs-core-codec = { git = "https://github.com/kaspanet/vprogs", branch = "fix/g2-access-read-enforcement" }
-vprogs-core-types = { git = "https://github.com/kaspanet/vprogs", branch = "fix/g2-access-read-enforcement", default-features = false }
-vprogs-l1-utils = { git = "https://github.com/kaspanet/vprogs", branch = "fix/g2-access-read-enforcement" }
-vprogs-zk-abi = { git = "https://github.com/kaspanet/vprogs", branch = "fix/g2-access-read-enforcement", default-features = false }
-vprogs-zk-backend-risc0-api = { git = "https://github.com/kaspanet/vprogs", branch = "fix/g2-access-read-enforcement", default-features = false, features = [
+vprogs-core-codec = { git = "https://github.com/kaspanet/vprogs", branch = "fix/reorg-boundary-duplicate-bundles" }
+vprogs-core-types = { git = "https://github.com/kaspanet/vprogs", branch = "fix/reorg-boundary-duplicate-bundles", default-features = false }
+vprogs-l1-utils = { git = "https://github.com/kaspanet/vprogs", branch = "fix/reorg-boundary-duplicate-bundles" }
+vprogs-zk-abi = { git = "https://github.com/kaspanet/vprogs", branch = "fix/reorg-boundary-duplicate-bundles", default-features = false }
+vprogs-zk-backend-risc0-api = { git = "https://github.com/kaspanet/vprogs", branch = "fix/reorg-boundary-duplicate-bundles", default-features = false, features = [
   "guest",
 ] }
 # The battery: runtime-processor's lib is consumed as the reusable guest machinery.
-vprogs-zk-backend-risc0-runtime-processor = { git = "https://github.com/kaspanet/vprogs", branch = "fix/g2-access-read-enforcement", default-features = false }
+vprogs-zk-backend-risc0-runtime-processor = { git = "https://github.com/kaspanet/vprogs", branch = "fix/reorg-boundary-duplicate-bundles", default-features = false }
