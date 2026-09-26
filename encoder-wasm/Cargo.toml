@@ -18,6 +18,7 @@ kaspa-hashes                    = { workspace = true }
 secp256k1                       = { workspace = true }
 vprog-tictactoe-guest           = { path = "../guest" }
 vprogs-core-types               = { workspace = true }
+vprogs-l1-wallet                = { workspace = true }
 vprogs-zk-abi                   = { workspace = true }
 vprogs-zk-backend-risc0-app-kit = { workspace = true }
 wasm-bindgen                    = "0.2"

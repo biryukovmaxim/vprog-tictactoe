@@ -16,7 +16,8 @@ use vprogs_zk_backend_risc0_api::PermissionTreeView;
 
 use crate::da_store::{
     EmptiedLeaf, ExitRecord, LatestSettlement, SpentMark, delete_exit_record, exit_roots,
-    get_exit_record, mark_leaf_spent, put_exit_record, put_latest_settlement, unmark_leaf_spent,
+    get_exit_record, latest_settlement, mark_leaf_spent, put_exit_record, put_latest_settlement,
+    unmark_leaf_spent,
 };
 
 /// Secondary exit indexer recording exit bundles and advancing them on permission spends.
@@ -30,10 +31,14 @@ pub struct TicTacToeExitIndexer {
     /// Live family records keyed by their current raw root; a write-through mirror of the
     /// stored records (the trait hook receives no store handle to read them back).
     records: RwLock<HashMap<[u8; 32], ExitRecord>>,
+    /// Last served latest-settlement row, kept so a settlement that emits no exits can carry
+    /// the covenant's still-live permission root forward (the trait hook receives no store
+    /// handle to read the row back).
+    latest: RwLock<Option<LatestSettlement>>,
 }
 
 impl TicTacToeExitIndexer {
-    /// Re-seeds the in-memory mirror from the stored records, so a family settled before this
+    /// Re-seeds the in-memory mirrors from the stored records, so a family settled before this
     /// process keeps advancing on its next spend instead of hiding.
     ///
     /// Safe to call while indexer hooks run: a mirror entry a concurrent hook wrote is never
@@ -46,6 +51,18 @@ impl TicTacToeExitIndexer {
                 records.entry(root).or_insert(rec);
             }
         }
+        // Hooks only ever advance the served row, so seeding an already-set mirror would
+        // clobber a newer observation with a staler store read.
+        let mut latest = self.latest.write().expect("poisoned lock");
+        if latest.is_none() {
+            *latest = latest_settlement(store);
+        }
+    }
+
+    /// Writes the served latest-settlement row and mirrors it for the next carry-forward.
+    fn serve_latest(&self, wb: &mut dyn WriteBatch, row: LatestSettlement) {
+        put_latest_settlement(wb, &row);
+        *self.latest.write().expect("poisoned lock") = Some(row);
     }
 }
 
@@ -77,11 +94,30 @@ impl ExitIndexer for TicTacToeExitIndexer {
         let (root, rec) = record_for(bundle, settlement);
         put_exit_record(wb, &root, &rec);
         self.records.write().expect("poisoned lock").insert(root, rec);
-        put_latest_settlement(
+        self.serve_latest(
             wb,
-            &LatestSettlement {
+            LatestSettlement {
                 state_root: bundle.new_state,
                 permission_root: bundle.permission_spk_hash,
+                txid: settlement.tx_id.as_bytes(),
+                daa_score: settlement.daa_score.get(),
+            },
+        );
+    }
+
+    fn on_settlement_observed(&self, settlement: &SettlementInfo, wb: &mut dyn WriteBatch) {
+        // A settlement that emits no exits carries a zero permission commitment and leaves
+        // the covenant's permission tree unchanged, so the last known root is the honest
+        // value to serve.
+        let permission_root = match self.latest.read().expect("poisoned lock").as_ref() {
+            Some(prev) if settlement.permission_spk_hash == [0u8; 32] => prev.permission_root,
+            _ => settlement.permission_spk_hash,
+        };
+        self.serve_latest(
+            wb,
+            LatestSettlement {
+                state_root: settlement.new_state,
+                permission_root,
                 txid: settlement.tx_id.as_bytes(),
                 daa_score: settlement.daa_score.get(),
             },
@@ -205,9 +241,9 @@ impl ExitIndexer for TicTacToeExitIndexer {
         put_exit_record(wb, &root, &rec);
         self.records.write().expect("poisoned lock").insert(root, rec);
         // The re-anchor must also refresh the served latest-settlement row.
-        put_latest_settlement(
+        self.serve_latest(
             wb,
-            &LatestSettlement {
+            LatestSettlement {
                 state_root: bundle.new_state,
                 permission_root: bundle.permission_spk_hash,
                 txid: settlement.tx_id.as_bytes(),
@@ -692,6 +728,72 @@ mod tests {
                 permission_root: fam.bundle.permission_spk_hash,
                 txid: [0xcd; 32],
                 daa_score: 999_222,
+            })
+        );
+    }
+
+    #[test]
+    fn observed_settlement_advances_served_tip() {
+        let dir = TempDir::new().unwrap();
+        let store: RocksDbStore = RocksDbStore::open(dir.path());
+        let indexer = TicTacToeExitIndexer::default();
+
+        // A settled row from an earlier process: the fresh indexer carries its permission root.
+        let mut wb = store.write_batch();
+        put_latest_settlement(
+            &mut wb,
+            &LatestSettlement {
+                state_root: [0xaa; 32],
+                permission_root: [0xbb; 32],
+                txid: [0xcc; 32],
+                daa_score: 789_101,
+            },
+        );
+        store.commit(wb);
+        indexer.reseed(&store);
+
+        // An observed settlement that emitted no exits (zero permission commitment) advances
+        // the served tip while the covenant's permission tree is unchanged.
+        let bare = SettlementInfo {
+            tx_id: TransactionId::from_bytes([0xce; 32]),
+            new_state: [0xaf; 32],
+            daa_score: U64::new(790_202),
+            ..Default::default()
+        };
+        let mut wb = store.write_batch();
+        indexer.on_settlement_observed(&bare, &mut wb);
+        store.commit(wb);
+
+        assert_eq!(
+            latest_settlement(&store),
+            Some(LatestSettlement {
+                state_root: [0xaf; 32],
+                permission_root: [0xbb; 32],
+                txid: [0xce; 32],
+                daa_score: 790_202,
+            })
+        );
+
+        // An observed settlement that emitted exits carries its own fresh permission
+        // commitment, paired or not.
+        let with_exits = SettlementInfo {
+            tx_id: TransactionId::from_bytes([0xcf; 32]),
+            new_state: [0xb0; 32],
+            daa_score: U64::new(791_303),
+            permission_spk_hash: [0xdd; 32],
+            ..Default::default()
+        };
+        let mut wb = store.write_batch();
+        indexer.on_settlement_observed(&with_exits, &mut wb);
+        store.commit(wb);
+
+        assert_eq!(
+            latest_settlement(&store),
+            Some(LatestSettlement {
+                state_root: [0xb0; 32],
+                permission_root: [0xdd; 32],
+                txid: [0xcf; 32],
+                daa_score: 791_303,
             })
         );
     }

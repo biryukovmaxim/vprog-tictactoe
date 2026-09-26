@@ -17,7 +17,7 @@ Branches and pins:
 - vprog-tictactoe: `master` (everything verified here has merged; host crates resolve
   through the git pins in `Cargo.toml`).
 - vprogs: clone, then check out **the branch pinned in this repo's `Cargo.toml`**
-  (currently `fix/g2-access-read-enforcement`) — host crates and the guest resolve
+  (currently `fix/settlement-watch-wedge`) — host crates and the guest resolve
   through those git pins, and the clone is only needed for the backend ELFs, which are
   committed to the repo (no build step). ELFs from any other rev (including `master`)
   mismatch the pinned host crates.
@@ -47,7 +47,7 @@ is dropped by rusty peers).
 
 ```bash
 git clone https://github.com/kaspanet/vprogs.git
-git -C vprogs checkout fix/g2-access-read-enforcement   # the branch pinned in Cargo.toml
+git -C vprogs checkout fix/settlement-watch-wedge   # the branch pinned in Cargo.toml
 git clone https://github.com/biryukovmaxim/vprog-tictactoe.git
 cd vprog-tictactoe
 ```

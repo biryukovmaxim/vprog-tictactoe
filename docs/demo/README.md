@@ -30,14 +30,14 @@ fetch commands are in [ops/deploy-web.md](../ops/deploy-web.md)):
 | backend ELFs (batch processor + aggregator) | none — committed to vprogs | — |
 
 **Backend ELFs must come from the pinned vprogs rev.** Host crates resolve through the
-git pins in `Cargo.toml` (currently branch `fix/g2-access-read-enforcement`; the branch
+git pins in `Cargo.toml` (currently branch `fix/settlement-watch-wedge`; the branch
 name in every `vprogs-*` pin line is the one to use). The guest wire format changes
 across vprogs branches, so ELFs from a checkout at any other rev — including `master` —
 silently mismatch the pinned host. Clone vprogs next to this repo at the pinned branch:
 
 ```bash
 git clone https://github.com/kaspanet/vprogs ../vprogs
-git -C ../vprogs checkout fix/g2-access-read-enforcement
+git -C ../vprogs checkout fix/settlement-watch-wedge
 ```
 
 The paths the runbook uses are then `../vprogs/zk/backend/risc0/batch-processor/compiled/program.elf`

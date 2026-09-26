@@ -130,6 +130,7 @@ async fn faucet(
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid address: {e}")))?;
 
     let wallet = Wallet::new(&state.grpc, &state.params, state.keypair);
+    let fee_policy = wallet.fee_policy().await;
     // The fallible pieces of Wallet::pay_to_address: its own expects would take the whole
     // demo down on a payout the immature coinbase cannot fund yet.
     let utxos = wallet
@@ -145,6 +146,7 @@ async fn faucet(
         count: 1,
         keypair: state.keypair,
         change_address: wallet.address(),
+        fee_policy,
         params: &state.params,
     })
     .map_err(|e| {

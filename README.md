@@ -23,7 +23,7 @@ The full runbook with funding, live limits, and troubleshooting is
 0. **One-time setup** — three build outputs, each built locally or fetched from a CI
    `artifacts` run (see the runbook's prerequisites for the full story):
    - backend ELFs: a [vprogs](../vprogs) clone next to this repo, **checked out at the
-     vprogs branch pinned in `Cargo.toml`** (`fix/g2-access-read-enforcement`); the ELFs
+     vprogs branch pinned in `Cargo.toml`** (`fix/settlement-watch-wedge`); the ELFs
      are committed there, and any other rev mismatches the pinned host crates
    - guest ELF: `just build-guest-docker` (Docker; or `just build-guest` with the rzup
      `risc0` toolchain) → `guest/compiled/program.elf`

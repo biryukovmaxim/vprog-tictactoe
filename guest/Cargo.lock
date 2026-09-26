@@ -1879,7 +1879,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-codec"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Freorg-boundary-duplicate-bundles#3a61c0ba608b7a710b16a3e397565adb42c9ba08"
+source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Fsettlement-watch-wedge#081af9b9de0689b61e1a456cf296a4ad9e562b73"
 dependencies = [
  "thiserror",
  "zerocopy",
@@ -1888,7 +1888,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-hashing"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Freorg-boundary-duplicate-bundles#3a61c0ba608b7a710b16a3e397565adb42c9ba08"
+source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Fsettlement-watch-wedge#081af9b9de0689b61e1a456cf296a4ad9e562b73"
 dependencies = [
  "blake3",
  "sha2",
@@ -1897,7 +1897,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-merkle-tree"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Freorg-boundary-duplicate-bundles#3a61c0ba608b7a710b16a3e397565adb42c9ba08"
+source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Fsettlement-watch-wedge#081af9b9de0689b61e1a456cf296a4ad9e562b73"
 dependencies = [
  "vprogs-core-hashing",
 ]
@@ -1905,7 +1905,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-smt"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Freorg-boundary-duplicate-bundles#3a61c0ba608b7a710b16a3e397565adb42c9ba08"
+source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Fsettlement-watch-wedge#081af9b9de0689b61e1a456cf296a4ad9e562b73"
 dependencies = [
  "tap",
  "vprogs-core-codec",
@@ -1917,7 +1917,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-types"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Freorg-boundary-duplicate-bundles#3a61c0ba608b7a710b16a3e397565adb42c9ba08"
+source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Fsettlement-watch-wedge#081af9b9de0689b61e1a456cf296a4ad9e562b73"
 dependencies = [
  "borsh",
  "rkyv",
@@ -1928,7 +1928,7 @@ dependencies = [
 [[package]]
 name = "vprogs-l1-utils"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Freorg-boundary-duplicate-bundles#3a61c0ba608b7a710b16a3e397565adb42c9ba08"
+source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Fsettlement-watch-wedge#081af9b9de0689b61e1a456cf296a4ad9e562b73"
 dependencies = [
  "blake3",
 ]
@@ -1936,7 +1936,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-abi"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Freorg-boundary-duplicate-bundles#3a61c0ba608b7a710b16a3e397565adb42c9ba08"
+source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Fsettlement-watch-wedge#081af9b9de0689b61e1a456cf296a4ad9e562b73"
 dependencies = [
  "kaspa-hashes",
  "kaspa-seq-commit",
@@ -1954,7 +1954,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-api"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Freorg-boundary-duplicate-bundles#3a61c0ba608b7a710b16a3e397565adb42c9ba08"
+source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Fsettlement-watch-wedge#081af9b9de0689b61e1a456cf296a4ad9e562b73"
 dependencies = [
  "blake2b_simd",
  "log",
@@ -1968,7 +1968,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-runtime-processor"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Freorg-boundary-duplicate-bundles#3a61c0ba608b7a710b16a3e397565adb42c9ba08"
+source = "git+https://github.com/kaspanet/vprogs?branch=fix%2Fsettlement-watch-wedge#081af9b9de0689b61e1a456cf296a4ad9e562b73"
 dependencies = [
  "k256",
  "risc0-zkvm",

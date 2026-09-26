@@ -30,6 +30,7 @@ use vprog_tictactoe_guest::{
     runtime::lock::{LockEnum, SchnorrLockView},
 };
 use vprogs_core_types::{AccessMetadata, ResourceId};
+use vprogs_l1_wallet::build::FeePolicy;
 use vprogs_zk_abi::withdrawal::StandardSpk;
 use vprogs_zk_backend_risc0_app_kit::{
     Bip340Signer, CarrierTxArgs, LanePayload, SchnorrSigPtrSigner, SignerKind, SignerSpec,
@@ -65,6 +66,9 @@ fn signed_carrier(
         subnetwork_id: subnet,
         tx_version: TX_VERSION_TOCCATA,
         params: &net.params,
+        // No estimate RPC exists on this side of the wasm boundary, so the carrier keeps its
+        // admission-floor pricing; a feerate parameter is the upgrade path.
+        fee_policy: FeePolicy::Floor,
         extra_outputs,
     };
     Ok(signed_lane_action_tx(args, &payload, &mut |req| identity.signer.sign_digest(req.digest)))

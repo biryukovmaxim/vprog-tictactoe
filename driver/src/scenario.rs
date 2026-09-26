@@ -421,6 +421,7 @@ async fn submit_action<C: RpcApi + ?Sized, S>(
 where
     S: Fn(vprogs_zk_backend_risc0_app_kit::SigRequest<'_>) -> [u8; 64],
 {
+    let fee_policy = ctx.wallet.fee_policy().await;
     vprogs_zk_backend_risc0_app_kit::fund_and_submit(
         label,
         ctx.wallet,
@@ -434,6 +435,7 @@ where
                 subnetwork_id: ctx.subnetwork_id,
                 tx_version: TX_VERSION_TOCCATA,
                 params: ctx.params,
+                fee_policy,
                 extra_outputs: vec![],
             };
             Some(signed_lane_action_tx(args, payload, &mut |req| sign(req)))
@@ -454,6 +456,7 @@ async fn submit_deposit<C: RpcApi + ?Sized>(
     deposit_amount: u64,
 ) -> Result<Hash, String> {
     let deposit_output = covenant_deposit_output(covenant_id, deposit_amount);
+    let fee_policy = ctx.wallet.fee_policy().await;
     vprogs_zk_backend_risc0_app_kit::fund_and_submit(
         label,
         ctx.wallet,
@@ -467,6 +470,7 @@ async fn submit_deposit<C: RpcApi + ?Sized>(
                 subnetwork_id: ctx.subnetwork_id,
                 tx_version: TX_VERSION_TOCCATA,
                 params: ctx.params,
+                fee_policy,
                 extra_outputs: vec![deposit_output.clone()],
             };
             Some(signed_deposit_tx(args, payload))
