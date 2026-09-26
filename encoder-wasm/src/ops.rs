@@ -45,6 +45,7 @@ use crate::{JsParams, UtxoCandidate};
 
 /// Builds one signed carrier over `payload`, funded by the single `utxo`, mirroring the driver's
 /// `CarrierTxArgs` composition (`TX_VERSION_TOCCATA`, extra outputs before change).
+#[allow(clippy::too_many_arguments)]
 fn signed_carrier(
     net: &JsParams,
     identity: &Identity,
@@ -53,6 +54,7 @@ fn signed_carrier(
     lane_subnet_hex: &str,
     payload: LanePayload,
     extra_outputs: Vec<TransactionOutput>,
+    feerate: Option<f64>,
 ) -> Result<Transaction, JsError> {
     let change =
         Address::try_from(change_address).map_err(|_| JsError::new("invalid change address"))?;
@@ -66,9 +68,11 @@ fn signed_carrier(
         subnetwork_id: subnet,
         tx_version: TX_VERSION_TOCCATA,
         params: &net.params,
-        // No estimate RPC exists on this side of the wasm boundary, so the carrier keeps its
-        // admission-floor pricing; a feerate parameter is the upgrade path.
-        fee_policy: FeePolicy::Floor,
+        // The caller owns the RPC connection: it passes the node's priority-bucket feerate
+        // (fetched via get_fee_estimate on its side of the wasm boundary) so the carrier
+        // prices at the estimate, while `None` keeps the admission-floor pricing for callers
+        // with no estimate available.
+        fee_policy: feerate.map_or(FeePolicy::Floor, FeePolicy::TargetFeerate),
         extra_outputs,
     };
     Ok(signed_lane_action_tx(args, &payload, &mut |req| identity.signer.sign_digest(req.digest)))
@@ -214,6 +218,7 @@ pub fn create_game_tx(
     mark_u8: u8,
     deposit_amount: u64,
     covenant_id_hex: &str,
+    feerate: Option<f64>,
 ) -> Result<Vec<u8>, JsError> {
     let identity = Identity::from_privkey_hex(privkey_hex)?;
     let mark = cell_from_u8(mark_u8)?;
@@ -264,6 +269,7 @@ pub fn create_game_tx(
         lane_subnet_hex,
         payload,
         extra_outputs,
+        feerate,
     )?;
     borsh_bytes(&tx)
 }
@@ -282,6 +288,7 @@ pub fn join_game_tx(
     game_id_hex: &str,
     deposit_amount: u64,
     covenant_id_hex: &str,
+    feerate: Option<f64>,
 ) -> Result<Vec<u8>, JsError> {
     let identity = Identity::from_privkey_hex(privkey_hex)?;
     let game_id = resource_id(game_id_hex)?;
@@ -324,6 +331,7 @@ pub fn join_game_tx(
         lane_subnet_hex,
         payload,
         extra_outputs,
+        feerate,
     )?;
     borsh_bytes(&tx)
 }
@@ -341,6 +349,7 @@ pub fn turn_tx(
     my_user_id_hex: &str,
     opponent_user_id_hex: &str,
     cell: u8,
+    feerate: Option<f64>,
 ) -> Result<Vec<u8>, JsError> {
     if cell > 8 {
         return Err(JsError::new("cell must be within 0..=8"));
@@ -358,8 +367,16 @@ pub fn turn_tx(
         .action(encode_turn_action(access.game_idx, access.first_user_idx, cell))
         .signer(schnorr_spec(access.first_user_idx));
 
-    let tx =
-        signed_carrier(net, &identity, utxo, change_address, lane_subnet_hex, payload, vec![])?;
+    let tx = signed_carrier(
+        net,
+        &identity,
+        utxo,
+        change_address,
+        lane_subnet_hex,
+        payload,
+        vec![],
+        feerate,
+    )?;
     borsh_bytes(&tx)
 }
 
@@ -377,6 +394,7 @@ pub fn transfer_tx(
     dest_exists: bool,
     amount: u64,
     dest_pubkey_hex: Option<String>,
+    feerate: Option<f64>,
 ) -> Result<Vec<u8>, JsError> {
     let identity = Identity::from_privkey_hex(privkey_hex)?;
     let dest_id = resource_id(dest_user_id_hex)?;
@@ -405,13 +423,22 @@ pub fn transfer_tx(
         .action(action)
         .signer(schnorr_spec(access.source_idx));
 
-    let tx =
-        signed_carrier(net, &identity, utxo, change_address, lane_subnet_hex, payload, vec![])?;
+    let tx = signed_carrier(
+        net,
+        &identity,
+        utxo,
+        change_address,
+        lane_subnet_hex,
+        payload,
+        vec![],
+        feerate,
+    )?;
     borsh_bytes(&tx)
 }
 
 /// Builds a signed `Withdraw` carrier exiting `amount` to the caller's own public key.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+#[allow(clippy::too_many_arguments)]
 pub fn withdraw_tx(
     privkey_hex: &str,
     net: &JsParams,
@@ -420,6 +447,7 @@ pub fn withdraw_tx(
     lane_subnet_hex: &str,
     config_id_hex: &str,
     amount: u64,
+    feerate: Option<f64>,
 ) -> Result<Vec<u8>, JsError> {
     let identity = Identity::from_privkey_hex(privkey_hex)?;
     let access = user_config_access(identity.user_id(), resource_id(config_id_hex)?);
@@ -430,8 +458,16 @@ pub fn withdraw_tx(
         .action(encode_withdraw_action(access.user_idx, access.config_idx, amount, &dest))
         .signer(schnorr_spec(access.user_idx));
 
-    let tx =
-        signed_carrier(net, &identity, utxo, change_address, lane_subnet_hex, payload, vec![])?;
+    let tx = signed_carrier(
+        net,
+        &identity,
+        utxo,
+        change_address,
+        lane_subnet_hex,
+        payload,
+        vec![],
+        feerate,
+    )?;
     borsh_bytes(&tx)
 }
 

@@ -124,6 +124,19 @@ export async function connectClient(): Promise<RpcClient> {
   return client;
 }
 
+/// The node's priority-bucket feerate (sompi/gram) the encoder prices carriers
+/// at (the same estimate `claimFee` prices claims with); `undefined` when the
+/// estimate call fails, degrading the encoder to admission-floor pricing.
+export async function priorityFeerate(client: RpcClient): Promise<number | undefined> {
+  try {
+    const { estimate } = await client.getFeeEstimate();
+    return estimate.priorityBucket.feerate;
+  } catch (e) {
+    console.warn('[feerate] estimate unavailable, pricing at the admission floor', e);
+    return undefined;
+  }
+}
+
 async function submitTx(client: RpcClient, bytes: Uint8Array): Promise<string> {
   const tx = new Transaction(txFromBorsh(bytes));
   // The id is computed locally, so this line names the carrier even when the

@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import { fetchAccount, type DaGame, type ExitLeaf, type ExitRoot } from './da';
 import type { Identity } from './KeyBar';
 import type { ActivityWitness } from './match';
-import { NETWORK, connectClient, type WalletUtxo } from './wallet';
+import { NETWORK, connectClient, priorityFeerate, type WalletUtxo } from './wallet';
 import type { RpcClient } from 'kaspa-wasm';
 import { UtxoCandidate, claim_tx, create_game_tx, join_game_tx, network_params, transfer_tx, turn_tx, withdraw_tx } from 'vprog-tictactoe-encoder-wasm';
 import { canAffordClaim, claimArgs, claimFee } from './claim';
@@ -114,6 +114,7 @@ export async function submitEntry(opts: {
   const utxo = new UtxoCandidate(picked.txid_hex, picked.index, picked.amount, picked.spk_hex, picked.spk_version);
 
   const net = network_params(NETWORK);
+  const feerate = await priorityFeerate(client);
   const bytes =
     entry.kind === 'create'
       ? create_game_tx(
@@ -129,8 +130,9 @@ export async function submitEntry(opts: {
           entry.mark ?? 1,
           deposit,
           covenantId,
+          feerate,
         )
-      : join_game_tx(identity.privkeyHex, net, utxo, identity.wallet.address, lane, CONFIG_ID_HEX, entry.gameId!, deposit, covenantId);
+      : join_game_tx(identity.privkeyHex, net, utxo, identity.wallet.address, lane, CONFIG_ID_HEX, entry.gameId!, deposit, covenantId, feerate);
 
   const txid = await identity.wallet.submitTx(client, bytes);
   onActivity(`${entry.kind} game`, txid);
@@ -160,6 +162,7 @@ export async function submitTurn(opts: {
   }
   const opponent = game.players[0] === identity.userIdHex ? game.players[1] : game.players[0];
   if (!opponent) throw new Error('waiting for the opponent to join');
+  const feerate = await priorityFeerate(client);
   const bytes = turn_tx(
     identity.privkeyHex,
     network_params(NETWORK),
@@ -170,6 +173,7 @@ export async function submitTurn(opts: {
     identity.userIdHex,
     opponent,
     cell,
+    feerate,
   );
   const txid = await identity.wallet.submitTx(client, bytes);
   onActivity(`turn ${cell}`, txid, { kind: 'board', gameId: game.id, board: game.board, cell });
@@ -206,6 +210,7 @@ export async function submitTransfer(opts: {
   }
   const utxo = new UtxoCandidate(picked.txid_hex, picked.index, picked.amount, picked.spk_hex, picked.spk_version);
 
+  const feerate = await priorityFeerate(client);
   const bytes = transfer_tx(
     identity.privkeyHex,
     network_params(NETWORK),
@@ -216,6 +221,7 @@ export async function submitTransfer(opts: {
     args.dest_exists,
     amount,
     args.dest_pubkey_hex ?? null,
+    feerate,
   );
   const txid = await identity.wallet.submitTx(client, bytes);
   onActivity('transfer', txid, { kind: 'balance', before: opts.balanceBefore });
@@ -246,7 +252,8 @@ export async function submitWithdraw(opts: {
   }
   const utxo = new UtxoCandidate(picked.txid_hex, picked.index, picked.amount, picked.spk_hex, picked.spk_version);
 
-  const bytes = withdraw_tx(identity.privkeyHex, network_params(NETWORK), utxo, identity.wallet.address, lane, CONFIG_ID_HEX, amount);
+  const feerate = await priorityFeerate(client);
+  const bytes = withdraw_tx(identity.privkeyHex, network_params(NETWORK), utxo, identity.wallet.address, lane, CONFIG_ID_HEX, amount, feerate);
   const txid = await identity.wallet.submitTx(client, bytes);
   onActivity('withdraw', txid, { kind: 'balance', before: opts.balanceBefore });
   return txid;

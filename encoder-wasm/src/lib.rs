@@ -243,6 +243,7 @@ mod tests {
             1,
             0,
             &hex32_str(&[0x77u8; 32]),
+            None,
         )
         .unwrap();
         let tx = decode_built(&bytes);
@@ -293,6 +294,7 @@ mod tests {
             1,
             deposit,
             &hex32_str(&covenant_id),
+            None,
         )
         .unwrap();
         let tx = decode_built(&bytes);
@@ -345,6 +347,7 @@ mod tests {
             &hex32_str(&game_id),
             0,
             &hex32_str(&covenant_id),
+            None,
         )
         .unwrap();
         let tx = decode_built(&bytes);
@@ -370,6 +373,7 @@ mod tests {
             &hex32_str(&game_id),
             deposit,
             &hex32_str(&covenant_id),
+            None,
         )
         .unwrap();
         let tx = decode_built(&bytes);
@@ -401,6 +405,7 @@ mod tests {
             &hex32_str(&my_user_id),
             &hex32_str(&opponent_user_id),
             4,
+            None,
         )
         .unwrap();
         let tx = decode_built(&bytes);
@@ -435,6 +440,7 @@ mod tests {
                 &hex32_str(&my_user_id),
                 &hex32_str(&opponent_user_id),
                 9,
+                None,
             )
             .is_err()
         );
@@ -461,6 +467,7 @@ mod tests {
             &hex32_str(&dest_user_id),
             true,
             1_000,
+            None,
             None,
         )
         .unwrap();
@@ -489,6 +496,7 @@ mod tests {
             false,
             1_000,
             Some(hex32_str(&dest_pubkey)),
+            None,
         )
         .unwrap();
         let tx = decode_built(&bytes);
@@ -514,6 +522,7 @@ mod tests {
                 false,
                 1_000,
                 None,
+                None,
             )
             .is_err()
         );
@@ -530,6 +539,7 @@ mod tests {
                 &hex32_str(&my_user_id),
                 true,
                 1_000,
+                None,
                 None,
             )
             .is_err()
@@ -553,6 +563,7 @@ mod tests {
             &lane_subnet_hex(),
             &hex32_str(&config_resource_id()),
             123_456,
+            None,
         )
         .unwrap();
         let tx = decode_built(&bytes);
@@ -571,6 +582,43 @@ mod tests {
         }
         assert_eq!(ix.signers.len(), 1);
         assert_eq!(access[ix.signers[0].0 as usize].resource_id, user_id);
+    }
+
+    #[test]
+    fn target_feerate_prices_above_the_floor() {
+        let signer = test_signer();
+        let net = test_net();
+        let address = test_address(&signer);
+        let utxo = test_utxo(&address);
+        let lock = LockEnum::Schnorr(SchnorrLockView { pubkey: &signer.pubkey() });
+        let my_user_id = derive_user_resource(&lock.id_hash());
+        let opponent_user_id = ResourceId::from([0x99u8; 32]);
+        let game_id = ResourceId::from([0x42u8; 32]);
+
+        // Same carrier over the same funding UTXO: the fee is the funded amount minus the
+        // outputs, so a target-priced fee strictly above the floor-priced one is observable
+        // in the change value alone.
+        let fee = |feerate: Option<f64>| {
+            let bytes = turn_tx(
+                &test_privkey_hex(),
+                &net,
+                &utxo,
+                &address.to_string(),
+                &lane_subnet_hex(),
+                &hex32_str(&game_id),
+                &hex32_str(&my_user_id),
+                &hex32_str(&opponent_user_id),
+                4,
+                feerate,
+            )
+            .unwrap();
+            let tx = decode_built(&bytes);
+            utxo.amount - tx.outputs.iter().map(|o| o.value).sum::<u64>()
+        };
+
+        let floor = fee(None);
+        let target = fee(Some(1_000.0));
+        assert!(target > floor, "target fee {target} must exceed the floor fee {floor}");
     }
 
     /// A no-op seq-commit accessor for engine runs against fabricated chains.
