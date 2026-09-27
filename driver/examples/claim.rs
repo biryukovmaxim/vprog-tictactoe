@@ -223,8 +223,22 @@ async fn main() {
     };
 
     // Build through the web encoder's `claim_tx` exactly like the frontend: probe at fee 0,
-    // price from the node's feerate estimation, rebuild with the real fee.
-    let delegate_utxos = delegates
+    // price from the node's feerate estimation, rebuild with the real fee. The live delegate
+    // pool holds hundreds of entries and every input adds mass, so fund the payout from a
+    // minimal largest-first subset; delegates are conserved exact, the change returns the
+    // excess to the pool.
+    let mut ranked = delegates.clone();
+    ranked.sort_by(|a, b| b.1.cmp(&a.1));
+    let mut funded: u64 = 0;
+    let selected: Vec<(TransactionOutpoint, u64)> = ranked
+        .into_iter()
+        .take_while(|(_, amount)| {
+            let enough = funded >= view.leaf_amount;
+            funded = funded.saturating_add(*amount);
+            !enough
+        })
+        .collect();
+    let delegate_utxos = selected
         .into_iter()
         .map(|(outpoint, amount)| vprog_tictactoe_encoder_wasm::UtxoCandidate {
             txid_hex: outpoint.transaction_id.to_string(),
