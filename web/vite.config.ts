@@ -12,6 +12,9 @@ export default defineConfig({
     exclude: ['kaspa-wasm', 'vprog-tictactoe-encoder-wasm'],
   },
   server: {
+    // Public deployments sit behind a reverse proxy that forwards an
+    // arbitrary Host header, which the dev server rejects by default.
+    allowedHosts: true,
     proxy: {
       // DA HTTP server (node crate, TT_DA_BIND default).
       '/api': 'http://127.0.0.1:9880',
