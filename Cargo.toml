@@ -25,8 +25,10 @@ resolver = "3"
   kaspa-wrpc-client         = { git = "https://github.com/kaspanet/rusty-kaspa", rev = "eb0a856d4e1ef9d884c5997bc43408091f5a5632" }
   kaspad                    = { git = "https://github.com/kaspanet/rusty-kaspa", rev = "eb0a856d4e1ef9d884c5997bc43408091f5a5632" }
 
-  # vprogs stack, pinned to the PR-stack head (fix/settlement-watch-state-neutral): the
-  # priority-bucket fee pricing on every funded build, the settler's chain-side
+  # vprogs stack, pinned to the PR-stack head (fix/exits-stranded-suffix): the
+  # unmatched-boundary suffix re-form, the 5s settler confirm tick, and the
+  # exit-leaf publication/pairing logs; the priority-bucket fee pricing on
+  # every funded build, the settler's chain-side
   # superseded-bundle resolution, and the observed-settlement tip served for
   # every recognized settlement; the reorg-unmapped-boundary compaction and
   # state-neutral duplicate settler skip; Read-declaration enforcement
@@ -36,21 +38,21 @@ resolver = "3"
   # runtime-processor, indexer hooks, and the exit index; the pp-finalization
   # window, canonical reads below the restore base, the restored read-only
   # state fix, the capped restored tip, and Read-declared write rejection.
-  vprogs-core-types                  = { git = "https://github.com/kaspanet/vprogs", branch = "fix/settlement-watch-state-neutral" }
-  vprogs-l1-types                    = { git = "https://github.com/kaspanet/vprogs", branch = "fix/settlement-watch-state-neutral" }
-  vprogs-l1-wallet                   = { git = "https://github.com/kaspanet/vprogs", branch = "fix/settlement-watch-state-neutral" }
-  vprogs-node-test-utils             = { git = "https://github.com/kaspanet/vprogs", branch = "fix/settlement-watch-state-neutral" }
-  vprogs-runner                      = { git = "https://github.com/kaspanet/vprogs", branch = "fix/settlement-watch-state-neutral" }
-  vprogs-scheduling-scheduler        = { git = "https://github.com/kaspanet/vprogs", branch = "fix/settlement-watch-state-neutral" }
-  vprogs-state-ptr-latest            = { git = "https://github.com/kaspanet/vprogs", branch = "fix/settlement-watch-state-neutral" }
-  vprogs-state-version               = { git = "https://github.com/kaspanet/vprogs", branch = "fix/settlement-watch-state-neutral" }
-  vprogs-storage-canonical-chain     = { git = "https://github.com/kaspanet/vprogs", branch = "fix/settlement-watch-state-neutral" }
-  vprogs-storage-rocksdb-store       = { git = "https://github.com/kaspanet/vprogs", branch = "fix/settlement-watch-state-neutral" }
-  vprogs-storage-types               = { git = "https://github.com/kaspanet/vprogs", branch = "fix/settlement-watch-state-neutral" }
-  vprogs-zk-abi                      = { git = "https://github.com/kaspanet/vprogs", branch = "fix/settlement-watch-state-neutral" }
-  vprogs-zk-backend-risc0-api        = { git = "https://github.com/kaspanet/vprogs", branch = "fix/settlement-watch-state-neutral" }
-  vprogs-zk-backend-risc0-app-kit    = { git = "https://github.com/kaspanet/vprogs", branch = "fix/settlement-watch-state-neutral" }
-  vprogs-zk-backend-risc0-test-suite = { git = "https://github.com/kaspanet/vprogs", branch = "fix/settlement-watch-state-neutral" }
+  vprogs-core-types                  = { git = "https://github.com/kaspanet/vprogs", branch = "fix/exits-stranded-suffix" }
+  vprogs-l1-types                    = { git = "https://github.com/kaspanet/vprogs", branch = "fix/exits-stranded-suffix" }
+  vprogs-l1-wallet                   = { git = "https://github.com/kaspanet/vprogs", branch = "fix/exits-stranded-suffix" }
+  vprogs-node-test-utils             = { git = "https://github.com/kaspanet/vprogs", branch = "fix/exits-stranded-suffix" }
+  vprogs-runner                      = { git = "https://github.com/kaspanet/vprogs", branch = "fix/exits-stranded-suffix" }
+  vprogs-scheduling-scheduler        = { git = "https://github.com/kaspanet/vprogs", branch = "fix/exits-stranded-suffix" }
+  vprogs-state-ptr-latest            = { git = "https://github.com/kaspanet/vprogs", branch = "fix/exits-stranded-suffix" }
+  vprogs-state-version               = { git = "https://github.com/kaspanet/vprogs", branch = "fix/exits-stranded-suffix" }
+  vprogs-storage-canonical-chain     = { git = "https://github.com/kaspanet/vprogs", branch = "fix/exits-stranded-suffix" }
+  vprogs-storage-rocksdb-store       = { git = "https://github.com/kaspanet/vprogs", branch = "fix/exits-stranded-suffix" }
+  vprogs-storage-types               = { git = "https://github.com/kaspanet/vprogs", branch = "fix/exits-stranded-suffix" }
+  vprogs-zk-abi                      = { git = "https://github.com/kaspanet/vprogs", branch = "fix/exits-stranded-suffix" }
+  vprogs-zk-backend-risc0-api        = { git = "https://github.com/kaspanet/vprogs", branch = "fix/exits-stranded-suffix" }
+  vprogs-zk-backend-risc0-app-kit    = { git = "https://github.com/kaspanet/vprogs", branch = "fix/exits-stranded-suffix" }
+  vprogs-zk-backend-risc0-test-suite = { git = "https://github.com/kaspanet/vprogs", branch = "fix/exits-stranded-suffix" }
 
   # Shared host deps.
   axum       = "0.8"
