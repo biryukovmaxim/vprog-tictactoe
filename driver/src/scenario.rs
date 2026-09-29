@@ -51,7 +51,8 @@ use vprogs_zk_backend_risc0_app_kit::{
 
 use crate::config::Config;
 
-/// Execution report returned by [`run`] containing the accepted transaction IDs.
+/// Execution report returned by [`run`] containing the L1-accepted transaction IDs (the guest
+/// may still reject a submitted action at execution time).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ScenarioReport {
     /// Transaction ID of the config `Init` carrier.
@@ -282,7 +283,7 @@ pub async fn run<C: RpcApi + ?Sized>(
         genesis_signer.sign_digest(req.digest)
     })
     .await?;
-    log::info!("Step 1 (Init) accepted: {init_txid}");
+    log::info!("Step 1 (Init) accepted by L1: {init_txid}");
     tokio::time::sleep(cfg.step_delay).await;
 
     // Step 2: Deposit Player A.
@@ -296,7 +297,7 @@ pub async fn run<C: RpcApi + ?Sized>(
         cfg.deposit_amount,
     )
     .await?;
-    log::info!("Step 2 (Deposit Player A) accepted: {deposit_a_txid}");
+    log::info!("Step 2 (Deposit Player A) accepted by L1: {deposit_a_txid}");
     tokio::time::sleep(cfg.step_delay).await;
 
     // Step 3: Deposit Player B.
@@ -310,7 +311,7 @@ pub async fn run<C: RpcApi + ?Sized>(
         cfg.deposit_amount,
     )
     .await?;
-    log::info!("Step 3 (Deposit Player B) accepted: {deposit_b_txid}");
+    log::info!("Step 3 (Deposit Player B) accepted by L1: {deposit_b_txid}");
     tokio::time::sleep(cfg.step_delay).await;
 
     // Step 4: CreateGame.
@@ -320,7 +321,7 @@ pub async fn run<C: RpcApi + ?Sized>(
     let create_game_txid =
         submit_action("create game", &ctx, &create_payload, |req| player_a.sign_digest(req.digest))
             .await?;
-    log::info!("Step 4 (CreateGame) accepted: {create_game_txid}");
+    log::info!("Step 4 (CreateGame) accepted by L1: {create_game_txid}");
     tokio::time::sleep(cfg.step_delay).await;
 
     // Step 5: JoinGame.
@@ -329,7 +330,7 @@ pub async fn run<C: RpcApi + ?Sized>(
     let join_game_txid =
         submit_action("join game", &ctx, &join_payload, |req| player_b.sign_digest(req.digest))
             .await?;
-    log::info!("Step 5 (JoinGame) accepted: {join_game_txid}");
+    log::info!("Step 5 (JoinGame) accepted by L1: {join_game_txid}");
     tokio::time::sleep(cfg.step_delay).await;
 
     // Step 5.5: Transfer A->B (skipped unless TTFLOW_TRANSFER_AMOUNT is set).
@@ -342,7 +343,7 @@ pub async fn run<C: RpcApi + ?Sized>(
             player_a.sign_digest(req.digest)
         })
         .await?;
-        log::info!("Step 5.5 (Transfer A->B) accepted: {txid}");
+        log::info!("Step 5.5 (Transfer A->B) accepted by L1: {txid}");
         tokio::time::sleep(cfg.step_delay).await;
         transfer_txid = Some(txid);
     }
@@ -354,7 +355,7 @@ pub async fn run<C: RpcApi + ?Sized>(
         player_a.sign_digest(req.digest)
     })
     .await?;
-    log::info!("Step 6 (Turn Player A) accepted: {turn_a_txid}");
+    log::info!("Step 6 (Turn Player A) accepted by L1: {turn_a_txid}");
     tokio::time::sleep(cfg.step_delay).await;
 
     // Step 7: Turn Player B (reply move + pre-commit triggering settlement).
@@ -364,7 +365,7 @@ pub async fn run<C: RpcApi + ?Sized>(
         player_b.sign_digest(req.digest)
     })
     .await?;
-    log::info!("Step 7 (Turn Player B) accepted: {turn_b_txid}");
+    log::info!("Step 7 (Turn Player B) accepted by L1: {turn_b_txid}");
     tokio::time::sleep(cfg.step_delay).await;
 
     // Step 8: Withdraw Winnings. One carrier drains the pot and the deposit remainder as two
@@ -391,7 +392,7 @@ pub async fn run<C: RpcApi + ?Sized>(
         player_a.sign_digest(req.digest)
     })
     .await?;
-    log::info!("Step 8 (Withdraw) accepted: {withdraw_txid}");
+    log::info!("Step 8 (Withdraw) accepted by L1: {withdraw_txid}");
 
     Ok(ScenarioReport {
         init_txid,
