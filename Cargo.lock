@@ -3371,9 +3371,9 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "jiff"
-version = "0.2.37"
+version = "0.2.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ab1baf72f08796de0260609515130699b890ac25f30e610ad894bc5856cafdb"
+checksum = "b2b005715dcbeb0089a3c0dab99f2ff1cc3b2525323552703d648585d342a383"
 dependencies = [
  "defmt",
  "jiff-core",
@@ -3398,9 +3398,9 @@ dependencies = [
 
 [[package]]
 name = "jiff-static"
-version = "0.2.37"
+version = "0.2.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "378268a1116ad67ae6228701118ac9f491d78fda38a40a1f1a9e1348de6f7212"
+checksum = "2cc9817253cf7c7ee4684451bd327e88d6f3658014e54a29198625590650695c"
 dependencies = [
  "jiff-core",
  "proc-macro2",
@@ -3410,9 +3410,9 @@ dependencies = [
 
 [[package]]
 name = "jiff-tzdb"
-version = "0.1.8"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "142bd39932ad231f10513df9ab62661fead8719872150b7ad02a2df79f4e141e"
+checksum = "fa8377070c6bae868759445e5a77f66d84f0b72f3a054bfb00e6d038b8282da7"
 
 [[package]]
 name = "jiff-tzdb-platform"
@@ -8678,7 +8678,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-atomics"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "arc-swap",
  "crossbeam-queue",
@@ -8692,7 +8692,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-codec"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "thiserror 2.0.21",
  "zerocopy",
@@ -8701,7 +8701,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-hashing"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "blake3",
  "sha2",
@@ -8710,7 +8710,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-macros"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -8720,7 +8720,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-merkle-tree"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "vprogs-core-hashing",
 ]
@@ -8728,7 +8728,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-smt"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "tap",
  "vprogs-core-codec",
@@ -8740,7 +8740,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-types"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "borsh",
  "rkyv",
@@ -8751,7 +8751,7 @@ dependencies = [
 [[package]]
 name = "vprogs-l1-bridge"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "arc-swap",
  "crossbeam-queue",
@@ -8778,7 +8778,7 @@ dependencies = [
 [[package]]
 name = "vprogs-l1-types"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "borsh",
  "kaspa-consensus-core",
@@ -8793,7 +8793,7 @@ dependencies = [
 [[package]]
 name = "vprogs-l1-utils"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "blake3",
 ]
@@ -8801,7 +8801,7 @@ dependencies = [
 [[package]]
 name = "vprogs-l1-wallet"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "kaspa-addresses",
  "kaspa-consensus-core",
@@ -8819,7 +8819,7 @@ dependencies = [
 [[package]]
 name = "vprogs-node-framework"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "log",
  "tap",
@@ -8839,7 +8839,7 @@ dependencies = [
 [[package]]
 name = "vprogs-node-test-utils"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "kaspa-addresses",
  "kaspa-consensus-core",
@@ -8870,7 +8870,7 @@ dependencies = [
 [[package]]
 name = "vprogs-runner"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "borsh",
  "clap",
@@ -8912,7 +8912,7 @@ dependencies = [
 [[package]]
 name = "vprogs-scheduling-execution-workers"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "crossbeam-deque",
  "crossbeam-queue",
@@ -8927,7 +8927,7 @@ dependencies = [
 [[package]]
 name = "vprogs-scheduling-scheduler"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "arc-swap",
  "borsh",
@@ -8959,7 +8959,7 @@ dependencies = [
 [[package]]
 name = "vprogs-state-batch-metadata"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "borsh",
  "vprogs-core-types",
@@ -8969,7 +8969,7 @@ dependencies = [
 [[package]]
 name = "vprogs-state-metadata"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "borsh",
  "vprogs-core-smt",
@@ -8980,7 +8980,7 @@ dependencies = [
 [[package]]
 name = "vprogs-state-proof-receipt"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "borsh",
  "vprogs-storage-types",
@@ -8990,7 +8990,7 @@ dependencies = [
 [[package]]
 name = "vprogs-state-ptr-latest"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "borsh",
  "vprogs-core-types",
@@ -9000,7 +9000,7 @@ dependencies = [
 [[package]]
 name = "vprogs-state-ptr-rollback"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "borsh",
  "vprogs-core-types",
@@ -9011,18 +9011,19 @@ dependencies = [
 [[package]]
 name = "vprogs-state-settlement-journal"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "borsh",
  "kaspa-hashes",
  "vprogs-l1-types",
+ "vprogs-state-metadata",
  "vprogs-storage-types",
 ]
 
 [[package]]
 name = "vprogs-state-version"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "borsh",
  "tap",
@@ -9036,7 +9037,7 @@ dependencies = [
 [[package]]
 name = "vprogs-storage-canonical-chain"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "arc-swap",
  "vprogs-core-atomics",
@@ -9046,7 +9047,7 @@ dependencies = [
 [[package]]
 name = "vprogs-storage-manager"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "crossbeam-queue",
  "crossbeam-utils",
@@ -9057,7 +9058,7 @@ dependencies = [
 [[package]]
 name = "vprogs-storage-rocksdb-store"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "num_cpus",
  "rocksdb",
@@ -9072,7 +9073,7 @@ dependencies = [
 [[package]]
 name = "vprogs-storage-types"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "borsh",
  "vprogs-core-smt",
@@ -9083,7 +9084,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-abi"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "borsh",
  "kaspa-consensus-core",
@@ -9107,7 +9108,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-aggregate-prover"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "arc-swap",
  "kaspa-hashes",
@@ -9132,7 +9133,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-api"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "ark-bn254 0.6.0",
  "ark-groth16 0.6.0",
@@ -9158,7 +9159,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-app-kit"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "kaspa-addresses",
  "kaspa-consensus-core",
@@ -9181,7 +9182,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-covenant"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "ark-bn254 0.6.0",
  "ark-groth16 0.6.0",
@@ -9200,7 +9201,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-runtime-processor"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "k256",
  "risc0-zkvm",
@@ -9216,7 +9217,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-settler"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "kaspa-addresses",
  "kaspa-consensus-core",
@@ -9241,7 +9242,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-test-suite"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "kaspa-addresses",
  "kaspa-consensus-core",
@@ -9275,7 +9276,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-batch-prover"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "kaspa-hashes",
  "kaspa-rpc-core",
@@ -9295,7 +9296,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-transaction-prover"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "borsh",
  "tap",
@@ -9311,7 +9312,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-vm"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "faster-hex",
  "log",

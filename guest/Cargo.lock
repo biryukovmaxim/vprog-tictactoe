@@ -1879,7 +1879,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-codec"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "thiserror",
  "zerocopy",
@@ -1888,7 +1888,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-hashing"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "blake3",
  "sha2",
@@ -1897,7 +1897,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-merkle-tree"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "vprogs-core-hashing",
 ]
@@ -1905,7 +1905,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-smt"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "tap",
  "vprogs-core-codec",
@@ -1917,7 +1917,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-types"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "borsh",
  "rkyv",
@@ -1928,7 +1928,7 @@ dependencies = [
 [[package]]
 name = "vprogs-l1-utils"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "blake3",
 ]
@@ -1936,7 +1936,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-abi"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "kaspa-hashes",
  "kaspa-seq-commit",
@@ -1954,7 +1954,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-api"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "blake2b_simd",
  "log",
@@ -1968,7 +1968,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-runtime-processor"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#e10e6debc3fba08028a387e17d0839c2d900af8b"
 dependencies = [
  "k256",
  "risc0-zkvm",
