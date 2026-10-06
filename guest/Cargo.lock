@@ -415,9 +415,9 @@ checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "cc"
-version = "1.4.7"
+version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54413ede23c2daf518f35156dfde027feb2374004d63bd497f983c8db9c0e313"
+checksum = "f74872d07caf508b30a21f6836e7d7016a2eaf7d9ff4f48deaa58cd8a0407630"
 dependencies = [
  "find-msvc-tools",
  "shlex",
@@ -728,9 +728,9 @@ dependencies = [
 
 [[package]]
 name = "find-msvc-tools"
-version = "0.1.13"
+version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef25905e51abafe4dcea6c15fec58c57b601cdbd0ee53d22ea1d3016c587d39b"
+checksum = "aedcfb3409746eddb02b9e19ebda1c3394f759a152e48ee875a0844d1b955484"
 
 [[package]]
 name = "fnv"
@@ -973,18 +973,18 @@ dependencies = [
 
 [[package]]
 name = "lazy_static"
-version = "1.5.0"
+version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
+checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
 dependencies = [
  "spin",
 ]
 
 [[package]]
 name = "libc"
-version = "0.2.189"
+version = "0.2.190"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
+checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
 
 [[package]]
 name = "libm"
@@ -1659,9 +1659,9 @@ checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 
 [[package]]
 name = "smallvec"
-version = "1.16.1"
+version = "1.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba467056f1b547ed52077911161fc86985becbc60e8e1857c8a144dab0def891"
+checksum = "f9395f0f0eee849a9b707b2f06bb92a6a422090e2123bb2ef8e87a0e61892a8e"
 dependencies = [
  "serde",
 ]
@@ -1729,18 +1729,18 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "thiserror"
-version = "2.0.20"
+version = "2.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec86235f5fcc2a73650310756d2ac5b138a5780bbbdfae3eeccec992c435ba4f"
+checksum = "09e52cb86a36cede5cb101bf8908837b3e4c6e5e59fe7fd85c23fb56200d189e"
 dependencies = [
  "thiserror-impl",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.20"
+version = "2.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc04cd3e1236dd4a98afca4569f2deb3f120e5422a4023be2cb683f8486292af"
+checksum = "fe5197923287db20a58125f0bc85c062f7f2c892de97b18c356f9efb14b28524"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1879,7 +1879,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-codec"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#5da27851d70751d0d943ee02c2e124e675162e6c"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
 dependencies = [
  "thiserror",
  "zerocopy",
@@ -1888,7 +1888,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-hashing"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#5da27851d70751d0d943ee02c2e124e675162e6c"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
 dependencies = [
  "blake3",
  "sha2",
@@ -1897,7 +1897,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-merkle-tree"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#5da27851d70751d0d943ee02c2e124e675162e6c"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
 dependencies = [
  "vprogs-core-hashing",
 ]
@@ -1905,7 +1905,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-smt"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#5da27851d70751d0d943ee02c2e124e675162e6c"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
 dependencies = [
  "tap",
  "vprogs-core-codec",
@@ -1917,7 +1917,7 @@ dependencies = [
 [[package]]
 name = "vprogs-core-types"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#5da27851d70751d0d943ee02c2e124e675162e6c"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
 dependencies = [
  "borsh",
  "rkyv",
@@ -1928,7 +1928,7 @@ dependencies = [
 [[package]]
 name = "vprogs-l1-utils"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#5da27851d70751d0d943ee02c2e124e675162e6c"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
 dependencies = [
  "blake3",
 ]
@@ -1936,7 +1936,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-abi"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#5da27851d70751d0d943ee02c2e124e675162e6c"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
 dependencies = [
  "kaspa-hashes",
  "kaspa-seq-commit",
@@ -1954,7 +1954,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-api"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#5da27851d70751d0d943ee02c2e124e675162e6c"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
 dependencies = [
  "blake2b_simd",
  "log",
@@ -1968,7 +1968,7 @@ dependencies = [
 [[package]]
 name = "vprogs-zk-backend-risc0-runtime-processor"
 version = "0.1.0"
-source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#5da27851d70751d0d943ee02c2e124e675162e6c"
+source = "git+https://github.com/kaspanet/vprogs?branch=release-candidate#7e7d1b798e65b03113b898c891a113cbe097b3a6"
 dependencies = [
  "k256",
  "risc0-zkvm",
@@ -2070,18 +2070,18 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "zerocopy"
-version = "0.8.57"
+version = "0.8.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d35102a9f36d089ccae9e4c6802bc118be4487b80aaffc0ab4e0cf5ce92d2873"
+checksum = "6400fc4bb7426f6faac3fb07566122bb18622e3022bd2c36426a92ed489b1dbe"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.57"
+version = "0.8.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "146c01f5ab44258da43cf276c74a2763db2ff3969c9c652c3f2de07041d0b2bc"
+checksum = "99c27cc7525bad4df59a45e073c45b2c2aa820efb588234cc23a547ec69a34db"
 dependencies = [
  "proc-macro2",
  "quote",
