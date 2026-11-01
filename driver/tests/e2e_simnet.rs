@@ -386,7 +386,7 @@ async fn test_e2e_simnet_game_flow() {
     for leaf in &record.leaves {
         acc.add_exit(leaf.to_standard_spk(), leaf.amount);
     }
-    let tree = PermissionTreeView::from_leaves(&record.leaves);
+    let tree = PermissionTreeView::from_leaves(&record.leaves.iter().cloned().map(Some).collect::<Vec<_>>());
     assert_eq!(tree.root(), acc.root(), "view root must equal the accumulator's padded root");
     assert_eq!(tree.root(), exit_root, "record must key on the raw padded root");
     assert_ne!(acc.finalize(), exit_root, "raw root must differ from the script-hash commitment");
@@ -465,7 +465,6 @@ async fn test_e2e_simnet_game_flow() {
         &covenant_id,
         &record,
         leaf_index,
-        tree.root_with_leaf(leaf_index, PermissionTreeAccumulator::hash_empty()),
         delegates,
         &collateral,
     )
@@ -637,10 +636,10 @@ async fn claim_fee<C: RpcApi + ?Sized>(client: &Arc<C>, probe: &Transaction) -> 
 
 /// Builds the full-leaf permission claim, returning it and its txid.
 ///
-/// The post-claim root is caller-supplied (the full-leaf fold empties the leaf slot), the
-/// delegate inputs fund the payout, and the collateral input funds a feerate-priced fee burned
-/// from its trailing change (signed with A's key, so the claim rides the mempool's ordinary
-/// submit path; no /inject).
+/// The builder derives the post-claim root itself (the full-leaf fold empties the leaf slot),
+/// the delegate inputs fund the payout, and the collateral input funds a feerate-priced fee
+/// burned from its trailing change (signed with A's key, so the claim rides the mempool's
+/// ordinary submit path; no /inject).
 #[allow(clippy::too_many_arguments)]
 async fn build_full_claim<C: RpcApi + ?Sized>(
     client: &Arc<C>,
@@ -648,12 +647,11 @@ async fn build_full_claim<C: RpcApi + ?Sized>(
     covenant_id: &[u8; 32],
     record: &ExitRecord,
     leaf_index: usize,
-    new_root: [u8; 32],
     delegates: Vec<(TransactionOutpoint, u64)>,
     collateral: &Collateral,
 ) -> (Transaction, Hash) {
     let leaf = &record.leaves[leaf_index];
-    let tree = PermissionTreeView::from_leaves(&record.leaves);
+    let tree = PermissionTreeView::from_leaves(&record.leaves.iter().cloned().map(Some).collect::<Vec<_>>());
     let build = |fee: u64| {
         let args = PermissionSpendArgs {
             covenant_id: *covenant_id,
@@ -670,8 +668,6 @@ async fn build_full_claim<C: RpcApi + ?Sized>(
             leaf_amount: leaf.amount,
             deduct: leaf.amount,
             siblings: tree.siblings(leaf_index),
-            new_root,
-            new_unclaimed: record.unclaimed - 1,
             delegate_inputs: delegates.clone(),
             collateral_input: (collateral.outpoint, collateral.amount),
             collateral_spk: collateral.spk.clone(),

@@ -446,7 +446,7 @@ mod tests {
             ExitLeaf::from_pair(StandardSpk::PubKey(&pk0), 50_000_000),
             ExitLeaf::from_pair(StandardSpk::PubKey(&pk1), 25_000_000),
         ];
-        let tree1 = PermissionTreeView::from_leaves(&leaves1);
+        let tree1 = PermissionTreeView::from_leaves(&crate::exit_index::fresh_leaves(&leaves1));
         // Key the advanced family by its continuation root: the fold with leaf 0 emptied.
         let key1 = tree1.root_with_leaf(0, PermissionTreeAccumulator::hash_empty());
         let mut acc = PermissionTreeAccumulator::new();
@@ -467,7 +467,7 @@ mod tests {
 
         let pk2 = [0x33u8; 32];
         let leaves2 = vec![ExitLeaf::from_pair(StandardSpk::PubKey(&pk2), 70_000_000)];
-        let tree2 = PermissionTreeView::from_leaves(&leaves2);
+        let tree2 = PermissionTreeView::from_leaves(&crate::exit_index::fresh_leaves(&leaves2));
         let key2 = tree2.root();
         let rec2 = ExitRecord {
             settlement_txid: [0xbb; 32],

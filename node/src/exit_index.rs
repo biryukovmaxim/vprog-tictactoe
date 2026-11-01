@@ -10,7 +10,7 @@ use std::{collections::HashMap, sync::RwLock};
 
 use kaspa_consensus_core::tx::TransactionOutpoint;
 use vprogs_l1_types::{PermissionSpend, SettlementInfo};
-use vprogs_runner::{ExitIndexer, ExitsForBundle};
+use vprogs_runner::{ExitIndexer, ExitLeaf, ExitsForBundle};
 use vprogs_storage_types::{Store, WriteBatch};
 use vprogs_zk_backend_risc0_api::PermissionTreeView;
 
@@ -66,6 +66,12 @@ impl TicTacToeExitIndexer {
     }
 }
 
+/// Fresh-bundle sparse form of `leaves` for [`PermissionTreeView::from_leaves`]: no leaf is
+/// claimed when a family record is keyed, so every leaf reads present.
+pub(crate) fn fresh_leaves(leaves: &[ExitLeaf]) -> Vec<Option<ExitLeaf>> {
+    leaves.iter().cloned().map(Some).collect()
+}
+
 /// Builds a fresh family record for `bundle` under `settlement`'s anchor, keyed by its raw padded
 /// root. The rent stays pinned to DEFAULT_PERMISSION_OUTPUT_VALUE until a per-covenant override
 /// exists.
@@ -81,7 +87,7 @@ fn record_for(bundle: &ExitsForBundle, settlement: &SettlementInfo) -> ([u8; 32]
     };
     // Key on the raw padded root (the redeem's old_root space), not the script-hash
     // commitment the runner publishes.
-    (PermissionTreeView::from_leaves(&rec.leaves).root(), rec)
+    (PermissionTreeView::from_leaves(&fresh_leaves(&rec.leaves)).root(), rec)
 }
 
 impl ExitIndexer for TicTacToeExitIndexer {
@@ -225,7 +231,9 @@ impl ExitIndexer for TicTacToeExitIndexer {
             .iter()
             .find(|(_, rec)| rec.leaves == *bundle.leaves)
             .map(|(key, _)| *key)
-            .unwrap_or_else(|| PermissionTreeView::from_leaves(&bundle.leaves).root());
+            .unwrap_or_else(|| {
+                PermissionTreeView::from_leaves(&fresh_leaves(&bundle.leaves)).root()
+            });
         delete_exit_record(wb, &key);
         self.records.write().expect("poisoned lock").remove(&key);
     }
@@ -297,7 +305,7 @@ mod tests {
         store.commit(wb);
 
         // The record keys on the raw padded root, not the script-hash commitment.
-        let tree = PermissionTreeView::from_leaves(&leaves);
+        let tree = PermissionTreeView::from_leaves(&fresh_leaves(&leaves));
         let root0 = tree.root();
         let expected_record = ExitRecord {
             settlement_txid: [0xcc; 32],
@@ -411,7 +419,7 @@ mod tests {
         let indexer = TicTacToeExitIndexer::default();
 
         let leaves = vec![ExitLeaf::from_pair(StandardSpk::PubKey(&[0x12; 32]), 50_000_000)];
-        let root = PermissionTreeView::from_leaves(&leaves).root();
+        let root = PermissionTreeView::from_leaves(&fresh_leaves(&leaves)).root();
         let rec = ExitRecord {
             settlement_txid: [0xcc; 32],
             outpoint_index: 1,
@@ -530,7 +538,7 @@ mod tests {
         indexer.on_exits_committed(&bundle, &settlement, &mut wb);
         store.commit(wb);
 
-        let tree = PermissionTreeView::from_leaves(&leaves);
+        let tree = PermissionTreeView::from_leaves(&fresh_leaves(&leaves));
         let empty = PermissionTreeAccumulator::hash_empty();
         let root0 = tree.root();
         let root1 = tree.root_with_leaf(0, empty);

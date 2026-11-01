@@ -789,7 +789,7 @@ mod tests {
         indexer.on_exits_committed(&bundle, &settlement, &mut wb);
         store.commit(wb);
 
-        let tree = PermissionTreeView::from_leaves(&leaves);
+        let tree = PermissionTreeView::from_leaves(&crate::exit_index::fresh_leaves(&leaves));
         let empty = PermissionTreeAccumulator::hash_empty();
         let root0 = tree.root();
         let root1 = tree.root_with_leaf(0, empty);

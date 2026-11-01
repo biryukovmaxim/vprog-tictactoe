@@ -476,6 +476,9 @@ pub fn withdraw_tx(
 /// funding `fee` (signed with `privkey_hex`, whose key must own the collateral UTXO). The fee
 /// burns from the trailing collateral change; delegates are conserved exact.
 ///
+/// The post-claim root and unclaimed count are derived by the underlying builder; `_new_root_hex`
+/// and `_new_unclaimed` are accepted for JS ABI compatibility and ignored.
+///
 /// Fee edge: `fee` must be strictly below the collateral amount (a zero change output is network
 /// dust), which the underlying builder validates.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
@@ -492,8 +495,8 @@ pub fn claim_tx(
     leaf_index: u32,
     leaf_spk_hex: &str,
     leaf_amount: u64,
-    new_root_hex: &str,
-    new_unclaimed: u64,
+    _new_root_hex: &str,
+    _new_unclaimed: u64,
     siblings_hex: Vec<String>,
     delegate_utxos: Vec<UtxoCandidate>,
     collateral: UtxoCandidate,
@@ -533,8 +536,6 @@ pub fn claim_tx(
         leaf_amount,
         deduct,
         siblings,
-        new_root: hex32(new_root_hex)?,
-        new_unclaimed,
         delegate_inputs,
         collateral_input: (
             TransactionOutpoint::new(collateral_txid, collateral.index),

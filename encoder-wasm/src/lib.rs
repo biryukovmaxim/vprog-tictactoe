@@ -714,8 +714,8 @@ mod tests {
     fn claim_tx_passes_script_engine() {
         let my_pk = [0x31u8; 32];
         let leaves = vec![
-            ExitLeaf::from_pair(StandardSpk::PubKey(&my_pk), 5_000),
-            ExitLeaf::from_pair(StandardSpk::PubKey(&[0x32u8; 32]), 6_000),
+            Some(ExitLeaf::from_pair(StandardSpk::PubKey(&my_pk), 5_000)),
+            Some(ExitLeaf::from_pair(StandardSpk::PubKey(&[0x32u8; 32]), 6_000)),
         ];
         let tree = PermissionTreeView::from_leaves(&leaves);
         let covenant_id = [0xFFu8; 32];
@@ -739,7 +739,7 @@ mod tests {
             2,
             tree.depth() as u32,
             0,
-            &faster_hex::hex_string(leaves[0].script_bytes()),
+            &faster_hex::hex_string(leaves[0].as_ref().unwrap().script_bytes()),
             5_000,
             &hex32_str(&tree.root_with_leaf(0, PermissionTreeAccumulator::hash_empty())),
             1,
@@ -786,8 +786,8 @@ mod tests {
     fn claim_tx_fee_reduces_collateral_change() {
         let my_pk = [0x31u8; 32];
         let leaves = vec![
-            ExitLeaf::from_pair(StandardSpk::PubKey(&my_pk), 5_000),
-            ExitLeaf::from_pair(StandardSpk::PubKey(&[0x32u8; 32]), 6_000),
+            Some(ExitLeaf::from_pair(StandardSpk::PubKey(&my_pk), 5_000)),
+            Some(ExitLeaf::from_pair(StandardSpk::PubKey(&[0x32u8; 32]), 6_000)),
         ];
         let tree = PermissionTreeView::from_leaves(&leaves);
         let covenant_id = [0xFFu8; 32];
@@ -810,7 +810,7 @@ mod tests {
             2,
             tree.depth() as u32,
             0,
-            &faster_hex::hex_string(leaves[0].script_bytes()),
+            &faster_hex::hex_string(leaves[0].as_ref().unwrap().script_bytes()),
             5_000,
             &hex32_str(&tree.root_with_leaf(0, PermissionTreeAccumulator::hash_empty())),
             1,
@@ -854,7 +854,7 @@ mod tests {
                     2,
                     tree.depth() as u32,
                     0,
-                    &faster_hex::hex_string(leaves[0].script_bytes()),
+                    &faster_hex::hex_string(leaves[0].as_ref().unwrap().script_bytes()),
                     5_000,
                     &hex32_str(&tree.root_with_leaf(0, PermissionTreeAccumulator::hash_empty())),
                     1,
