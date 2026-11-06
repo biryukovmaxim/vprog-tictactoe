@@ -386,7 +386,9 @@ async fn test_e2e_simnet_game_flow() {
     for leaf in &record.leaves {
         acc.add_exit(leaf.to_standard_spk(), leaf.amount);
     }
-    let tree = PermissionTreeView::from_leaves(&record.leaves.iter().cloned().map(Some).collect::<Vec<_>>());
+    let tree = PermissionTreeView::from_leaves(
+        &record.leaves.iter().cloned().map(Some).collect::<Vec<_>>(),
+    );
     assert_eq!(tree.root(), acc.root(), "view root must equal the accumulator's padded root");
     assert_eq!(tree.root(), exit_root, "record must key on the raw padded root");
     assert_ne!(acc.finalize(), exit_root, "raw root must differ from the script-hash commitment");
@@ -651,7 +653,9 @@ async fn build_full_claim<C: RpcApi + ?Sized>(
     collateral: &Collateral,
 ) -> (Transaction, Hash) {
     let leaf = &record.leaves[leaf_index];
-    let tree = PermissionTreeView::from_leaves(&record.leaves.iter().cloned().map(Some).collect::<Vec<_>>());
+    let tree = PermissionTreeView::from_leaves(
+        &record.leaves.iter().cloned().map(Some).collect::<Vec<_>>(),
+    );
     let build = |fee: u64| {
         let args = PermissionSpendArgs {
             covenant_id: *covenant_id,
